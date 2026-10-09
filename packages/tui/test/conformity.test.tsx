@@ -24,12 +24,14 @@ async function load(withBuiltin = true): Promise<Registry> {
 beforeEach(() => ((profilesDir = join(fixtures, "profiles")), (env = { PVX_PROFILE: "main" })));
 
 /** Every conformity command the host ran (the Logs tab passes by on the way), to prove that a refresh is one evaluation and nobody evaluates on its own. */
+let cur: ReturnType<typeof createSessionStore> | undefined;
 async function mount(registry: Registry, opts: { cols?: number; rows?: number } = {}) {
   const calls: string[] = [];
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => (argv[0] !== "logs" && calls.push(argv[0]!), runCapture({ env, isRoot: true, registry, makeLogger, profilesDir, version: "0.1.0", theme }, argv)),
   });
+  cur = store;
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" /> };
   h = await renderTui(
     <App root={root} logger={quiet()} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />,
@@ -37,23 +39,20 @@ async function mount(registry: Registry, opts: { cols?: number; rows?: number } 
   );
   return { t: h, store, calls };
 }
-/** Início, Módulos, the module tabs (Conformidade, Plano), then Logs and Comando. */
-const goto = async (t: TuiHarness, n: number, enter = true) => {
-  for (let i = 0; i < n; i++) await t.press("TAB");
-  if (enter) await t.press("ARROW_DOWN");
-};
-const CONF = 2;
-const PLANO = 3;
+/** Conformidade is a page, not a tab: pushed as a screen, as the Módulos list does on enter. */
+const open = async (t: TuiHarness) => (await cur!.run("#conformidade.conformidade"), await t.flush());
 const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
 
-test("the tabs come from the built-in module; without it they are gone and the CLI still works", async () => {
-  const { t } = await mount(await load());
-  expect(t.frame().split("\n")[0]).toMatch(/Módulos.*\s+Conformidade\s+Plano\s.*Demo\s+Diário\s+Logs\s+Comando/);
+test("the built-in module is a page, not a tab; without it the page is gone and the CLI still works", async () => {
+  const registry0 = await load();
+  const { t } = await mount(registry0);
+  expect(t.frame().split("\n")[0]).toMatch(/Início\s+Módulos.*\s+Demo\s+Logs\s+Comando/); // built-ins are not tabs; a module may opt in
   t.destroy();
 
   const bare = await load(false);
-  const m = await mount(bare);
-  expect(m.t.frame().split("\n")[0]).not.toMatch(/Conformidade|Plano/);
+  await mount(bare);
+  expect(bare.pages.has("conformidade.conformidade")).toBe(false);
+  expect(registry0.pages.has("conformidade.conformidade")).toBe(true);
   const out: string[] = [];
   const exit = await runCli({
     argv: ["conformidade"], env: { PVX_PROFILE: "main" }, isTTY: false, isRoot: false, registry: bare, makeLogger, profilesDir, version: "0.1.0", theme,
@@ -65,9 +64,25 @@ test("the tabs come from the built-in module; without it they are gone and the C
 
 test("Módulos marks the built-in module as official ◆", async () => {
   const { t } = await mount(await load());
-  await goto(t, 1);
+  await t.press("TAB");
+  await t.press("ARROW_DOWN");
   expect(t.frame()).toMatch(/conformidade ◆/);
   expect(t.frame()).not.toMatch(/cap-fixture ◆/);
+});
+
+test("Módulos: enter on a module lists its pages first (§); enter opens the page, esc returns to the same row", async () => {
+  const { t } = await mount(await load());
+  await t.press("TAB");
+  await t.press("ARROW_DOWN");
+  for (let i = 0; i < 20 && !/» conformidade/.test(t.frame()); i++) await t.press("ARROW_DOWN");
+  await t.press("RETURN");
+  expect(t.frame()).toMatch(/§ conformidade/);
+  await t.press("RETURN");
+  await t.flush();
+  expect(t.frame()).toContain("› [1] resultados");
+  await t.press("ESCAPE");
+  await t.flush();
+  expect(t.frame()).toMatch(/§ conformidade/); // back on the module's list, same item
 });
 
 test("Conformidade shows the cached results; r there and r in Início refresh the one cache", async () => {
@@ -76,7 +91,7 @@ test("Conformidade shows the cached results; r there and r in Início refresh th
   await t.flush();
   expect(t.frame()).toMatch(/1 de 5/);
   expect(calls.sort()).toEqual(["conformidade", "plano"]); // one refresh = both
-  await goto(t, CONF);
+  await open(t);
   expect(t.frame()).toContain("[✓] fine: em ordem");
   expect(t.frame()).toContain("[✗] cap-fixture.a: pendente  → cap-fixture fix-a");
   expect(t.frame()).toContain("[!] manual: sem fix");
@@ -88,28 +103,25 @@ test("Conformidade shows the cached results; r there and r in Início refresh th
   await t.press("r");
   await t.flush();
   expect(calls).toHaveLength(4);
-  await t.press("ESCAPE");
-  await t.press("TAB", { shift: true }); // ... back to Início, which reads the same cache
-  await t.press("TAB", { shift: true });
+  await t.press("ESCAPE"); // ... back to the tabs: Início reads the same cache
   expect(t.frame()).toMatch(/1 de 5/);
   expect(calls).toHaveLength(4);
 });
 
-test("the first visit to a module tab checks; Início sees the result without checking", async () => {
+test("the first visit to the page checks; Início sees the result without checking", async () => {
   const { t, calls } = await mount(await load());
   expect(t.frame()).toContain("não verificado");
-  await goto(t, CONF, false);
+  await open(t);
   await t.flush();
   expect(t.frame()).toContain("cap-fixture.a: pendente");
-  const labels = t.frame().split("\n")[0]!.split("pvx")[0]!.trim().split(/\s{2,}/);
-  await goto(t, labels.length - CONF, false); // the rest of the bar, then Início
+  await t.press("ESCAPE");
   expect(t.frame()).toMatch(/1 de 5/);
   expect(calls).toHaveLength(2);
 });
 
-test("Plano lists the steps in order and the manual items", async () => {
+test("the plan panel lists the steps in order and the manual items", async () => {
   const { t } = await mount(await load());
-  await goto(t, PLANO);
+  await open(t);
   await t.flush();
   const f = t.frame();
   expect(f).toContain("1. cap-fixture fix-a para cap-fixture.a");
@@ -121,7 +133,7 @@ test("Plano lists the steps in order and the manual items", async () => {
 
 test("apply: y runs through the session, s skips, n stops; the keys exist only while asking", async () => {
   const { t, store } = await mount(await load());
-  await goto(t, PLANO);
+  await open(t);
   await t.flush();
   expect(lastLine(t)).not.toContain("y aplica");
   await t.press("a");
@@ -135,7 +147,7 @@ test("apply: y runs through the session, s skips, n stops; the keys exist only w
   await t.waitForFrame((f) => f.includes("aplicar `cap-fixture fix-c`?"));
   await t.press("n");
   await t.waitForFrame((f) => f.includes("não executado"));
-  expect(t.frame()).toContain("1 passo(s) aplicado(s), 1 pulado(s); 1 não executado(s)");
+  expect(t.frame()).toContain("1 passo(s) aplicado(s), 1 pulado(s)");
   expect(store.blocks.map((b) => b.line)).toEqual(["cap-fixture fix-a"]); // skipped and stopped steps never ran
   expect(lastLine(t)).not.toContain("y aplica");
   expect(lastLine(t)).toContain("enter fecha");
@@ -145,14 +157,14 @@ test("apply: y runs through the session, s skips, n stops; the keys exist only w
 
 test("apply stops at the first error", async () => {
   const { t } = await mount(await load());
-  await goto(t, PLANO);
+  await open(t);
   await t.flush();
   await t.press("a");
   await t.press("y");
   await t.waitForFrame((f) => f.includes("fix-b`?"));
   await t.press("y"); // fix-b fails
   await t.waitForFrame((f) => f.includes("parou em"));
-  expect(t.frame()).toContain("parou em `cap-fixture fix-b` (exit 1); 1 passo(s) aplicado(s)");
+  expect(t.frame()).toContain("parou em `cap-fixture fix-b` (exit 1);");
   expect(t.frame()).not.toContain("fix-c`?");
 });
 
@@ -167,7 +179,7 @@ test("regression: the step list does not change while applying, even if the cach
   mkdirSync(profilesDir, { recursive: true });
   writeFileSync(join(profilesDir, "p.json"), JSON.stringify({ id: "main", title: "P", requires: ["flip.x", "cap-fixture.a", "cap-fixture.c"] }));
   const { t, store } = await mount(registry);
-  await goto(t, PLANO);
+  await open(t);
   await t.flush();
   await t.press("a");
   await t.press("y"); // `flip fix` runs: the live plan loses a step on the next check
@@ -192,7 +204,43 @@ test("with no applicable profile the tabs say so instead of failing", async () =
   env = {};
   const registry = await load();
   const { t } = await mount(registry);
-  await goto(t, CONF);
+  await open(t);
   await t.flush();
   expect(t.frame()).toContain("nenhum perfil aplicável");
+});
+
+test("layout: side by side at 120x40, stacked at 80x24; each panel and the footer stay on screen", async () => {
+  const wide = await mount(await load(), { cols: 120, rows: 40 });
+  await open(wide.t);
+  const row = wide.t.frame().split("\n").find((l) => l.includes("[1] resultados"))!;
+  expect(row).toContain("[2] plano"); // same line: two columns
+  expect(lastLine(wide.t)).toContain("r atualiza");
+  wide.t.destroy();
+  const small = await mount(await load(), { cols: 80, rows: 24 });
+  await open(small.t);
+  const lines = small.t.frame().split("\n");
+  const i1 = lines.findIndex((l) => l.includes("[1] resultados"));
+  const i2 = lines.findIndex((l) => l.includes("[2] plano"));
+  expect(i1).toBeGreaterThan(-1);
+  expect(i2).toBeGreaterThan(i1); // stacked
+  expect(lines.slice(0, i2).join("\n")).toContain("1 ok, 1 avisos, 3 erros");
+  expect(lines.slice(i2).join("\n")).toContain("1. cap-fixture fix-a");
+  expect(lastLine(small.t)).toContain("r atualiza");
+  for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
+});
+
+test("panels: ← → 1 2 move focus (● marks it) and nudge on an illegal move", async () => {
+  const { t } = await mount(await load());
+  await open(t);
+  expect(t.frame()).toContain("[1] resultados ●");
+  await t.press("ARROW_LEFT");
+  expect(lastLine(t)).toContain("nada aqui");
+  await t.press("ARROW_RIGHT");
+  expect(t.frame()).toContain("[2] plano ●");
+  await t.press("ARROW_RIGHT");
+  expect(lastLine(t)).toContain("nada aqui");
+  await t.press("1");
+  expect(t.frame()).toContain("[1] resultados ●");
+  await t.press("2");
+  expect(t.frame()).toContain("[2] plano ●");
 });

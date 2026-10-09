@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { EXIT } from "@pvx/sdk";
 import { fg } from "../ansi.ts";
-import { activeIgnores, auditLogin, currentUser, lastSeen, readSnapshot } from "../diary/index.ts";
+import { activeIgnores, auditLogin, currentUser, lastSeen, readSnapshot } from "../journal/index.ts";
 import type { CoreCommand } from "./core.ts";
 import type { CliIO } from "./run.ts";
 

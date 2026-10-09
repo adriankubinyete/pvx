@@ -126,7 +126,8 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
     if (item.module && !item.module.loaded && !item.errorOf) {
       return item.module.state === "aguardando-confianca" && deps ? review(item.id.slice(2)) : nudge("módulo não carregado");
     }
-    if (item.children) setPath([...path, item.id]);
+    if (item.page) void store.run(`#${item.page}`); // navigation: pushes the page; esc comes back to this row
+    else if (item.children) setPath([...path, item.id]);
     else if (item.errorOf) router.push({ id: "log", element: <LogScreen moduleId={item.errorOf} /> });
     else if (item.args?.length) setView({ kind: "form", item });
     else runLine(item.line!);

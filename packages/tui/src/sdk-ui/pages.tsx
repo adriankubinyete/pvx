@@ -14,7 +14,7 @@ import { HostCtx, RootPanelCtx, runOwn, useHost, usePages, type HostPage } from 
 /** Keys the host owns: a page cannot take them over. */
 const RESERVED = ["esc", "?", "ctrl+c", "ctrl+k"];
 const keysOf = (page: RegisteredPage) => (page.keys ?? []).filter((k) => !RESERVED.includes(k.keys));
-const rowOf = (scope: Scope, k: KeySpec) => ({ keys: clean(k.keys), label: clean(k.label), scope, footer: true });
+const rowOf = (scope: Scope, k: KeySpec) => ({ keys: clean(k.keys), label: clean(k.label), scope, footer: !k.help });
 
 /** The footer scope of a page. Registers the page's own keys in the shortcut table (footer and `?` read them from there). */
 export function pageScope(page: RegisteredPage): Scope {

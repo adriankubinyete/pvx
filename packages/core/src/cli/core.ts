@@ -7,8 +7,8 @@ import { createStore } from "../engine/store.ts";
 import { followLogs, readLogs } from "../logs/index.ts";
 import { applyPlan, buildPlan, evaluate, loadProfiles, selectProfile, type EvalResult } from "../plan/index.ts";
 import type { Entry } from "./help.ts";
-import { recordDrift, recordSnapshot, partitionIgnored } from "../diary/index.ts";
-import { DIARY_COMMANDS } from "./diary.ts";
+import { recordDrift, recordSnapshot, partitionIgnored } from "../journal/index.ts";
+import { IGNORE_COMMANDS } from "./ignorar.ts";
 import { catalogSearchCommand } from "../catalog/search-command.ts";
 import { BANNER_COMMAND } from "./banner.ts";
 import { listCommand, MODULES_COMMANDS } from "./modules.ts";
@@ -161,7 +161,7 @@ export const CORE: CoreCommand[] = [
     },
   },
   BANNER_COMMAND,
-  ...DIARY_COMMANDS,
+  ...IGNORE_COMMANDS,
   ...MODULES_COMMANDS,
   {
     key: "version",

@@ -232,7 +232,7 @@ export default (sdk: Sdk): ModuleDef => {
           tagArg,
           { name: "fixar", help: "Fixa na home", kind: "flag" },
           { name: "login", help: "Mostra no banner de login", kind: "flag" },
-          { name: "ref", help: "Liga a uma entrada do diário ou a uma capacidade", kind: "option" },
+          { name: "ref", help: "Liga a uma capacidade ou a outra nota", kind: "option" },
           { name: "apelido", help: "Nome exibido do autor (guardado em people.json)", kind: "option" },
         ],
         async run(ctx) {
@@ -309,7 +309,7 @@ export default (sdk: Sdk): ModuleDef => {
         },
       },
     },
-    pages: { notas: { title: "notas", render: () => <Notas />, tab: { label: "Notas", order: 3 }, role: "notes" } },
+    pages: { notas: { title: "notas", render: () => <Notas />, role: "notes" } },
     roles: { compose: "notas.compose", notesState: "notas.state", addNote: "nota add" },
   };
 };

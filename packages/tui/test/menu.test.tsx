@@ -109,8 +109,7 @@ test("a command with args opens the form and shows the result; a secret field st
 test("a core tab runs once on the first visit, then only on r; it leaves no block and no history", async () => {
   const { t, store } = await mount();
   await t.press("TAB"); // Módulos
-  await t.press("TAB"); // Diário
-  await t.press("TAB"); // Logs
+    await t.press("TAB"); // Logs
   await t.flush();
   expect(t.frame()).toContain("› logs");
   expect(t.frame()).toMatch(/verificado às \d\d:\d\d/);
@@ -130,7 +129,7 @@ test("a core tab runs once on the first visit, then only on r; it leaves no bloc
 test("switching tabs keeps focus on the bar (down goes in); the Comando draft survives a tab switch", async () => {
   const { t } = await mount();
   await t.press("ARROW_UP");
-  for (let i = 0; i < 4; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
+  for (let i = 0; i < 3; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
   expect(t.frame()).toContain("tab próxima aba");
   const inputRow = () => t.frame().split("\n").find((l) => l.includes("❯"))!;
   expect(inputRow()).not.toContain("▌");
@@ -188,18 +187,17 @@ test("Comando: esc focuses the last block, up on the first block focuses the bar
 
 test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", async () => {
   const { t } = await mount();
-  expect(t.frame()).toContain("› 1 conformidade");
+  expect(t.frame()).toContain("› [1] conformidade");
   await t.press("TAB");
   expect(t.frame()).toContain("› módulos");
-  await t.press("TAB"); // Diário
-  await t.press("TAB"); // Logs
+    await t.press("TAB"); // Logs
   await t.press("TAB");
   expect(t.frame()).toContain("tab completa"); // Comando
   await t.press("TAB", { shift: true });
   expect(t.frame()).toContain("› logs");
   await t.press("TAB"); // Comando
   await t.press("TAB"); // wraps to Início
-  expect(t.frame()).toContain("› 1 conformidade"); // the Início panel
+  expect(t.frame()).toContain("› [1] conformidade"); // the Início panel
 });
 
 test("tabs: up on the first row focuses the bar, right switches at once, down enters the first row", async () => {
@@ -213,8 +211,7 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
   expect(t.frame()).toMatch(/» /);
   expect(t.frame()).toContain("↑↓ move");
   await t.press("ARROW_UP");
-  await t.press("ARROW_RIGHT"); // Diário
-  await t.press("ARROW_RIGHT"); // Logs has nothing to select
+    await t.press("ARROW_RIGHT"); // Logs has nothing to select
   await t.press("ARROW_DOWN");
   expect(t.frame()).toContain("tab próxima aba");
 });
@@ -364,8 +361,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expectScope("modules"); // the Módulos list: a module row has its own footer
   expect(t.frame()).toMatch(/» /);
   await t.press("ARROW_UP");
-  await t.press("TAB"); // Diário
-  await t.press("TAB"); // Logs: nothing to select, enter does nothing
+    await t.press("TAB"); // Logs: nothing to select, enter does nothing
   await t.press("RETURN");
   expect(foot()).toContain("troca aba");
   expect(t.frame().split("\n")[1]).toContain("› logs");
@@ -373,7 +369,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› 1 conformidade ●─/); // row 0 is the bar
+  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› \[1\] conformidade ●─/); // row 0 is the bar
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos( · c catálogo)?─/);

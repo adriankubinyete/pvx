@@ -1,6 +1,6 @@
 import { EXIT } from "@pvx/sdk";
 import type { Logger, OutLine } from "@pvx/sdk";
-import { auditCommand, lineOf } from "../diary/audit.ts";
+import { auditCommand, lineOf } from "../journal/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
 import { createGranted } from "./permissions.ts";
 import { resolveCommand, type Registry } from "./registry.ts";

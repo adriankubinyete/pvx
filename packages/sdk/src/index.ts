@@ -205,7 +205,7 @@ export interface PageDef {
   keys?: KeySpec[];
   /** Also a tab in the tab bar, after the core tabs (sorted by `order`, then label). */
   tab?: boolean | { label: string; order?: number };
-  /** What the host may open without naming a module: the diary's `p` goes to the page with role `plan`, Início goes to `notes`. */
+  /** What the host may open without naming a module: the page with role `plan` is where the plan is shown, Início goes to `notes`. */
   role?: "plan" | "notes";
 }
 
@@ -213,6 +213,8 @@ export interface KeySpec {
   /** `a`, `space`, `enter`, `ctrl+x`, `L`. */
   keys: string;
   label: string;
+  /** Only in the `?` help, not in the footer. */
+  help?: boolean;
   run(): void;
 }
 
@@ -317,7 +319,9 @@ export interface SdkUi {
   useRef<T>(init: T): { current: T };
 
   /** Bordered box with a title. */
-  Panel: Component<Kids & { title?: string; tone?: Tone }>;
+  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean }>;
+  /** Children side by side, equal widths. Give each Panel `grow` so their borders match in height. */
+  Row: Component<Kids>;
   Text: Component<Kids & { tone?: Tone; bold?: boolean }>;
   Chip: Component<{ label: string; level?: Level }>;
   /** `value` 0..1; colored by level (above 85% error, above 70% warn). */
@@ -352,7 +356,9 @@ export interface SdkUi {
    * Adds a key to the page while the calling component is mounted. Call it in render: `handler` closes over the
    * component state. The key joins the footer and `?`. Reserved (ignored): esc, ?, ctrl+c, ctrl+k.
    */
-  useKey(keys: string, label: string, handler: () => void): void;
+  useKey(keys: string, label: string, handler: () => void, opts?: { help?: boolean }): void;
+  /** Shows the host's short notice ("nada aqui") for a key that has no effect. */
+  useNudge(): (msg?: string) => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
   /** Terminal size in cells: a page has no scroll, so a long list windows itself by it. */

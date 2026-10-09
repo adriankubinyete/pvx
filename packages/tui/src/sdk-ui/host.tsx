@@ -3,6 +3,7 @@ import { createStore, resolveCommand, tokenize, type Registry } from "@pvx/core"
 import type { CommandRun, Conformity, KeySpec, Logger, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
+import { useNudge as useHostNudge } from "../nudge.tsx";
 import { useLayout } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
 
@@ -92,11 +93,12 @@ function useRouter() {
 }
 
 /** Pages call it in render, so `handler` closes over the component state; the host registers it while mounted. */
-function useKey(keys: string, label: string, handler: () => void) {
+function useKey(keys: string, label: string, handler: () => void, opts?: { help?: boolean }) {
   const { addKey } = useHost();
   const latest = useRef(handler);
   latest.current = handler;
-  useEffect(() => addKey({ keys, label, run: () => latest.current() }), [addKey, keys, label]);
+  const help = opts?.help;
+  useEffect(() => addKey({ keys, label, help, run: () => latest.current() }), [addKey, keys, label, help]);
 }
 
 function useConformity(): Conformity {
@@ -116,6 +118,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useConformity" | "useTheme" | "useViewport"> = {
-  useCommand, useQuery, useStore, useRouter, useKey, useConformity, useViewport, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useConformity" | "useTheme" | "useViewport"> = {
+  useCommand, useQuery, useStore, useRouter, useKey, useNudge: useHostNudge, useConformity, useViewport, useTheme: useModuleTheme,
 };

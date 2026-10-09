@@ -31,6 +31,8 @@ export interface Item {
   errorOf?: string;
   /** Módulos root only: the module this row stands for, what the actions act on. */
   module?: { id: string; state: ModuleState; loaded: boolean; behind: number };
+  /** A module page (`<module>.<name>`): enter opens it as a pushed screen. */
+  page?: string;
   /** Catálogo rows only. */
   catalog?: CatalogEntry;
 }
@@ -97,7 +99,8 @@ export function buildRoot(registry: Registry, rows: readonly ModuleRow[] = [], p
       { text: STATE_TEXT[state], tone: STATE_TONE[state] },
       ...(loaded ? [{ text: ` · ${plural(entries.length)}` }] : row?.error ? [{ text: ` · ${clean(row.error)}` }] : []),
     ];
-    return { id: `m:${id}`, label: id, origin, module, ...withHelp(cells), ...(loaded ? { children: group(id, entries, 0) } : {}) };
+    const pages = [...registry.pages.values()].filter((p) => p.moduleId === id).map((p): Item => ({ id: `p:${p.key}`, label: clean(p.title), help: "página", page: p.key })).sort(byLabel);
+    return { id: `m:${id}`, label: id, origin, module, ...withHelp(cells), ...(loaded ? { children: [...pages, ...group(id, entries, 0)] } : {}) };
   });
 }
 

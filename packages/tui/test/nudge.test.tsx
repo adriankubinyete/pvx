@@ -35,7 +35,7 @@ async function gone(t: TuiHarness, msg: string) {
 
 test("↓ from the bar on a tab with nothing selectable nudges and the notice expires", async () => {
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); // Módulos, Diário, Logs
+  await t.press("TAB"); await t.press("TAB"); // Módulos, Logs
   expect(footer(t)).not.toContain("nada aqui");
   await t.press("ARROW_DOWN");
   await gone(t, "nada aqui");
@@ -53,17 +53,17 @@ test("↓ at the end of a list nudges; ↑ at the top goes to the bar without a 
 
 test("Início: ← with no panel on the left nudges; the panels are numbered in ←/→ order and 1/2 jump", async () => {
   const t = await mount();
-  expect(t.frame()).toContain("› 1 conformidade ●");
-  expect(t.frame()).toContain("› 2 atividade");
+  expect(t.frame()).toContain("› [1] conformidade ●");
+  expect(t.frame()).toContain("› [2] atividade");
   expect(t.frame()).not.toMatch(/› \d máquina/); // the non-navigable panel has no number
   await t.press("ARROW_LEFT");
   await gone(t, "nada aqui");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toContain("› 2 atividade ●");
+  expect(t.frame()).toContain("› [2] atividade ●");
   await t.press("1");
-  expect(t.frame()).toContain("› 1 conformidade ●");
+  expect(t.frame()).toContain("› [1] conformidade ●");
   await t.press("2");
-  expect(t.frame()).toContain("› 2 atividade ●");
+  expect(t.frame()).toContain("› [2] atividade ●");
 });
 
 test("`/` from the focused tab bar opens Comando", async () => {

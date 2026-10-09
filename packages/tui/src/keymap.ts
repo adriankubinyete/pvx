@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "diario" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "modwait" | "catalog" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "modwait" | "catalog" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -53,20 +53,12 @@ const base: readonly Shortcut[] = [
   { keys: "esc", label: "volta", scope: "files" },
   { keys: "↑↓", label: "move", scope: "home", footer: true },
   { keys: "←→", label: "painel", scope: "home", footer: true },
-  { keys: "1-3", label: "vai ao painel", scope: "home" },
+  { keys: "1-3", label: "painel", scope: "home" },
   { keys: "n", label: "nova nota", scope: "home" },
   { keys: "enter", label: "usa", scope: "home", footer: true },
   { keys: "r", label: "atualiza", scope: "home", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "home" },
   { keys: "tab", label: "abas", scope: "home" },
-  { keys: "↑↓", label: "move", scope: "diario", footer: true },
-  { keys: "←→", label: "filtro", scope: "diario", footer: true },
-  { keys: "n", label: "nota", scope: "diario", footer: true },
-  { keys: "r", label: "repete", scope: "diario", footer: true },
-  { keys: "p", label: "plano", scope: "diario", footer: true },
-  { keys: "u", label: "atualiza", scope: "diario" },
-  { keys: "ctrl+k", label: "palette", scope: "diario" },
-  { keys: "tab", label: "abas", scope: "diario" },
   { keys: "←→", label: "troca aba", scope: "tabs", footer: true },
   { keys: "↓/enter", label: "entra na aba", scope: "tabs", footer: true },
   { keys: "tab", label: "próxima aba", scope: "tabs", footer: true },
@@ -138,7 +130,7 @@ export const helpFor = (scope: Scope): Shortcut[] =>
 export const hintText = (scope: Scope, ...keys: string[]) =>
   keys.map((k) => { const s = shortcuts.find((r) => r.scope === scope && r.keys === k)!; return `${s.keys} ${s.label}`; }).join(" · ");
 
-const NAMES: Record<string, string> = { esc: "escape", enter: "return", "↑": "up", "↓": "down" };
+const NAMES: Record<string, string> = { esc: "escape", enter: "return", "↑": "up", "↓": "down", "←": "left", "→": "right" };
 
 /**
  * True if the key event matches `spec` (`[ctrl+|shift+]name`).

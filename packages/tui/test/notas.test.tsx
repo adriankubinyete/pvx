@@ -25,11 +25,13 @@ const write = (e: object) => (mkdirSync(pvxHome(), { recursive: true }), appendF
 const note = (id: string, author: string, text: string, extra: object = {}) => write({ id, ev: "add", author, text, ...extra });
 const pin = (id: string, author = "carlos") => write({ id, ev: "pin", author });
 
+let cur: ReturnType<typeof createSessionStore> | undefined;
 async function mount(opts: { cols?: number; rows?: number; root?: boolean } = {}) {
   const store = createSessionStore({
     registry, makeLogger, isRoot: opts.root ?? true, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: "", version: "0.1.0", theme }, argv),
   });
+  cur = store;
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" /> };
   h = await renderTui(
     <App root={root} logger={quiet()} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />,
@@ -39,10 +41,9 @@ async function mount(opts: { cols?: number; rows?: number; root?: boolean } = {}
   await h.flush();
   return { t: h, store };
 }
-/** Início, Módulos, Conformidade, Plano, Notas: four tabs to the right, then down into it. */
+/** Notas is a page, not a tab: opened as a pushed screen (what the Módulos list does on enter). */
 const goNotas = async (t: TuiHarness) => {
-  for (let i = 0; i < 4; i++) await t.press("TAB");
-  await t.press("ARROW_DOWN");
+  await cur!.run("#nota.notas");
   await t.flush();
 };
 
@@ -55,7 +56,7 @@ test("Início shows the notes panel only when the slot has data: pinned notes an
   note("b2b2b2", "carlos", "solta, nao fixada");
   const m = await mount();
   const f = m.t.frame();
-  expect(f).toContain("› 3 notas");
+  expect(f).toContain("› [3] notas");
   expect(f).toContain("2 novas");
   expect(f).toContain("carlos: token trocado: feito relogin");
   expect(f).not.toContain("solta, nao fixada");
@@ -67,11 +68,11 @@ test("80x24: the notes panel fits in one column and each fixed line stays alone 
   const { t } = await mount({ cols: 80, rows: 24 });
   const lines = t.frame().split("\n");
   expect(lines[0]).toMatch(/^\s*Início\s+Módulos/);
-  expect(lines.filter((l) => l.includes("› 3 notas"))).toHaveLength(1);
+  expect(lines.filter((l) => l.includes("› [3] notas"))).toHaveLength(1);
   expect(lines.some((l) => l.includes("carlos: token trocado"))).toBe(true);
   expect(lines.filter((l) => l.trim()).at(-1)).toContain("? ajuda"); // the footer line is intact
   await t.press("3");
-  expect(t.frame()).toContain("› 3 notas ●");
+  expect(t.frame()).toContain("› [3] notas ●");
 });
 
 test("a note with ANSI shows as inert text in the Notas page and in Início", async () => {
@@ -151,7 +152,7 @@ test("a save without root shows `rode com sudo` and stays in the composer with t
   expect(t.frame()).toContain("nova nota");
 });
 
-test("`n` on Início opens the composer on the Notas tab; the editable display name goes with --apelido", async () => {
+test("`n` on Início opens the composer on the Notas page; the editable display name goes with --apelido", async () => {
   const { t } = await mount();
   await t.press("n");
   expect(t.frame()).toContain("nova nota");

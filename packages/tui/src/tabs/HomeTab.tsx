@@ -143,7 +143,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
   const notesPage = pageWithRole(registry, "notes");
   const compose = registry.roles.get("compose")?.name;
   const hasNotes = Boolean(notesPage && compose);
-  const goNotes = () => notesPage && tabs?.goto(`page:${notesPage.key}`);
+  const goNotes = () => notesPage && void store.run(`#${notesPage.key}`); // a pushed page, not a tab
 
   useKeys((k) => {
     if (!focused) return;
@@ -185,7 +185,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
   const [cf, ce] = meter(pct, 10, g);
   const worst = attention.some((p) => p.level === "error") ? c.error : c.warn;
   const conformidade = (
-    <Panel title={`${PANELS.indexOf("conformidade") + 1} conformidade`} focused={focused && nav.home.panel === "conformidade"}>
+    <Panel title={`[${PANELS.indexOf("conformidade") + 1}] conformidade`} focused={focused && nav.home.panel === "conformidade"}>
       <text wrapMode="none" flexShrink={0}>
         {profile ? <span fg={c.accent}>{`perfil ${profile}`}</span> : <span fg={c.dim}>sem perfil</span>}
       </text>
@@ -206,7 +206,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     </Panel>
   );
   const notas = (
-    <Panel title={`${PANELS.indexOf("notas") + 1} notas`} focused={focused && nav.home.panel === "notas"} height={Math.min(rows.notas.length, 3) + 2}>
+    <Panel title={`[${PANELS.indexOf("notas") + 1}] notas`} focused={focused && nav.home.panel === "notas"} height={Math.min(rows.notas.length, 3) + 2}>
       <Rows rows={rows.notas} sel={cur("notas")?.id} focused={focused && nav.home.panel === "notas"} w={cols - 6} onPick={() => goNotes()} />
     </Panel>
   );
@@ -224,7 +224,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     </Panel>
   );
   const atividade = (
-    <Panel title={`${PANELS.indexOf("atividade") + 1} atividade`} focused={focused && nav.home.panel === "atividade"}>
+    <Panel title={`[${PANELS.indexOf("atividade") + 1}] atividade`} focused={focused && nav.home.panel === "atividade"}>
       {rows.atividade.length ? null : <text fg={c.dim} flexShrink={0}>nada executado ainda</text>}
       <Rows rows={rows.atividade} sel={cur("atividade")?.id} focused={focused && nav.home.panel === "atividade"} w={cols - 6} onPick={(r) => (select("atividade", r.id), use(r))} />
     </Panel>

@@ -2,10 +2,11 @@
 /** @jsx h */
 /** @jsxFrag Fragment */
 // Written like any usermodule: only `import type` from the SDK, everything else comes from `sdk.ui`.
-// The engine (profiles, evaluation, plan ordering) stays in the host; this module owns the screens.
-import type { Conformity, ConformityStep, Sdk, StepAnswer, StepOutcome } from "@pvx/sdk";
+// The engine (profiles, evaluation, plan ordering) stays in the host; this module owns the screen:
+// results (main) and plan (secondary) as two numbered panels, side by side from 100 columns, stacked below.
+import type { Conformity, ConformityStep, Sdk, StepAnswer, StepOutcome, Tone } from "@pvx/sdk";
 
-/** What the Plano screen remembers while a plan is applied. `steps` is the frozen list on screen. */
+/** What the plan panel remembers while a plan is applied. `steps` is the frozen list on screen. */
 interface Run {
   steps: ConformityStep[];
   decided: Record<string, "yes" | "skip">;
@@ -15,41 +16,45 @@ interface Run {
   outcomes?: StepOutcome[];
 }
 
+interface Line {
+  text: string;
+  tone?: Tone;
+}
+
+/** Rows the page frame, the footer, the tab bar (if the page is a tab) and the header line take from the terminal height. */
+const CHROME = 6;
+const WIDE = 100;
+
+/** The page has no scroll: `items` are clipped to `max` lines with a "+N" line, and `tail` always shows. */
+const clip = (items: Line[], max: number, tail: Line[] = []): Line[] => {
+  const room = Math.max(1, max - tail.length);
+  const shown = items.length > room ? [...items.slice(0, room - 1), { text: `… +${items.length - room + 1} mais`, tone: "dim" as Tone }] : items;
+  return [...shown, ...tail];
+};
+
 export default (sdk: Sdk) => {
-  const { h, Fragment, Panel, Text, useState, useEffect, useConformity, useKey, useTheme } = sdk.ui;
+  const { h, Fragment, Panel, Row, Text, useState, useEffect, useConformity, useKey, useNudge, useTheme, useViewport } = sdk.ui;
 
   const hhmm = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
-  /** The first visit checks; `r` checks again. Both read and fill the host cache the Início panel shows. */
-  function useChecked(): Conformity {
-    const c = useConformity();
-    useEffect(() => {
-      if (!c.checkedAt) c.refresh();
-    }, []);
-    useKey("r", "atualiza", c.refresh);
-    return c;
+  const Lines = ({ lines }: { lines: Line[] }) => <>{lines.map((l, i) => <Text key={i} tone={l.tone}>{l.text}</Text>)}</>;
+
+  function Key({ keys, label, run }: { keys: string; label: string; run: () => void }) {
+    useKey(keys, label, run);
+    return null;
   }
 
-  function Header({ c }: { c: Conformity }) {
-    return <Text tone="dim">{c.running ? "verificando…" : c.checkedAt ? `verificado às ${hhmm(c.checkedAt)}` : "não verificado"}</Text>;
-  }
-
-  function Resultados() {
-    const c = useChecked();
+  function Resultados({ c, max }: { c: Conformity; max: number }) {
     const { g } = useTheme();
     const mark = { ok: g.ok!, warn: g.warnTag!, error: g.error! };
     const n = (l: string) => c.results.filter((r) => r.level === l).length;
-    return (
-      <Panel>
-        <Header c={c} />
-        {c.message ? <Text tone="dim">{c.message}</Text> : null}
-        {c.profile ? <Text tone="accent">{`perfil ${c.profile}`}</Text> : null}
-        {c.results.map((r, i) => (
-          <Text key={i} tone={r.level}>{`[${mark[r.level]}] ${r.text}${r.fix ? `  → ${r.fix}` : ""}`}</Text>
-        ))}
-        {c.results.length ? <Text tone="dim">{`${n("ok")} ok, ${n("warn")} avisos, ${n("error")} erros`}</Text> : null}
-      </Panel>
-    );
+    const items: Line[] = [
+      ...(c.message ? [{ text: c.message, tone: "dim" as Tone }] : []),
+      ...(c.profile ? [{ text: `perfil ${c.profile}`, tone: "accent" as Tone }] : []),
+      ...c.results.map((r) => ({ text: `[${mark[r.level]}] ${r.text}${r.fix ? `  → ${r.fix}` : ""}`, tone: r.level as Tone })),
+    ];
+    const tail: Line[] = c.results.length ? [{ text: `${n("ok")} ok, ${n("warn")} avisos, ${n("error")} erros`, tone: "dim" }] : [];
+    return <Lines lines={clip(items, max, tail)} />;
   }
 
   const tags = (s: ConformityStep) => {
@@ -57,28 +62,21 @@ export default (sdk: Sdk) => {
     return t ? ` (${t})` : "";
   };
 
-  function Key({ keys, label, run }: { keys: string; label: string; run: () => void }) {
-    useKey(keys, label, run);
-    return null;
-  }
-
-  function Passos({ c, onApply }: { c: Conformity; onApply: () => void }) {
+  function Passos({ c, max }: { c: Conformity; max: number }) {
     const { steps, manual } = c.plan;
-    return (
-      <>
-        {steps.length ? <Key keys="a" label="aplica" run={onApply} /> : null}
-        {c.message ? <Text tone="dim">{c.message}</Text> : null}
-        {steps.map((s, i) => <Text key={s.cmd}>{`${i + 1}. ${s.cmd}${tags(s)} para ${s.for.join(", ")}`}</Text>)}
-        {manual.map((m) => <Text key={m} tone="warn">{`manual: ${m}`}</Text>)}
-        {c.checkedAt && !c.message && !steps.length && !manual.length ? <Text tone="ok">nada a fazer</Text> : null}
-      </>
-    );
+    const items: Line[] = [
+      ...(c.message ? [{ text: c.message, tone: "dim" as Tone }] : []),
+      ...steps.map((s, i) => ({ text: `${i + 1}. ${s.cmd}${tags(s)} para ${s.for.join(", ")}` })),
+      ...manual.map((m) => ({ text: `manual: ${m}`, tone: "warn" as Tone })),
+      ...(c.checkedAt && !c.message && !steps.length && !manual.length ? [{ text: "nada a fazer", tone: "ok" as Tone }] : []),
+    ];
+    return <Lines lines={clip(items, max)} />;
   }
 
-  function Aplicando({ run, onClose }: { run: Run; onClose: () => void }) {
+  function Aplicando({ run, max, onClose }: { run: Run; max: number; onClose: () => void }) {
     const { g } = useTheme();
     const { asking, outcomes } = run;
-    const mark = (s: ConformityStep): [string, "ok" | "error" | "dim" | "info" | "accent"] => {
+    const mark = (s: ConformityStep): [string, Tone] => {
       if (outcomes) {
         const o = outcomes.find((x) => x.step.cmd === s.cmd);
         return !o ? [g.inactive!, "dim"] : o.status === "ok" ? [g.ok!, "ok"] : o.status === "error" ? [g.error!, "error"] : ["-", "dim"];
@@ -90,15 +88,18 @@ export default (sdk: Sdk) => {
     };
     const failed = outcomes?.find((o) => o.status === "error");
     const done = outcomes?.filter((o) => o.status === "ok").length ?? 0;
+    const tail: Line[] = [
+      ...(asking ? [{ text: `aplicar \`${asking.cmd}\`${asking.optIn ? " (opt-in)" : ""}?  y aplica · s pula · n para`, tone: "info" as Tone }] : []),
+      ...(!outcomes && !asking ? [{ text: "aplicando…", tone: "dim" as Tone }] : []),
+      ...(failed ? [{ text: `parou em \`${failed.step.cmd}\` (exit ${failed.code}); ${done} passo(s) aplicado(s)`, tone: "error" as Tone }] : []),
+      ...(outcomes && !failed ? [{ text: `${done} passo(s) aplicado(s), ${outcomes.length - done} pulado(s); ${run.steps.length - outcomes.length} não executado(s)`, tone: "ok" as Tone }] : []),
+    ];
+    const items: Line[] = run.steps.map((s, i) => ({ text: `${mark(s)[0]} ${i + 1}. ${s.cmd}`, tone: mark(s)[1] }));
     return (
       <>
         {asking && run.answer ? <Ask answer={run.answer} /> : null}
         {outcomes ? <Key keys="enter" label="fecha" run={onClose} /> : null}
-        {run.steps.map((s, i) => <Text key={s.cmd} tone={mark(s)[1]}>{`${mark(s)[0]} ${i + 1}. ${s.cmd}`}</Text>)}
-        {asking ? <Text tone="info" bold>{`aplicar \`${asking.cmd}\`${asking.optIn ? " (opt-in)" : ""}?  y aplica · s pula · n para`}</Text> : null}
-        {!outcomes && !asking ? <Text tone="dim">aplicando…</Text> : null}
-        {failed ? <Text tone="error">{`parou em \`${failed.step.cmd}\` (exit ${failed.code}); ${done} passo(s) aplicado(s)`}</Text> : null}
-        {outcomes && !failed ? <Text tone="ok">{`${done} passo(s) aplicado(s), ${outcomes.length - done} pulado(s); ${run.steps.length - outcomes.length} não executado(s)`}</Text> : null}
+        <Lines lines={clip(items, max, tail)} />
       </>
     );
   }
@@ -113,12 +114,27 @@ export default (sdk: Sdk) => {
     );
   }
 
-  function Plano() {
-    const c = useChecked();
+  function Conformidade() {
+    const c = useConformity();
+    const { g } = useTheme();
+    const { cols, rows } = useViewport();
+    const nudge = useNudge();
+    const [panel, setPanel] = useState<1 | 2>(1);
     const [run, setRun] = useState<Run | null>(null);
+    // The first visit checks; `r` checks again. Both read and fill the host cache the Início panel shows.
+    useEffect(() => {
+      if (!c.checkedAt) c.refresh();
+    }, []);
+    useKey("r", "atualiza", c.refresh);
+    useKey("←", "painel", () => (panel === 1 ? nudge("nada aqui") : setPanel(1)));
+    useKey("→", "painel", () => (panel === 2 ? nudge("nada aqui") : setPanel(2)), { help: true });
+    useKey("1", "resultados", () => setPanel(1), { help: true });
+    useKey("2", "plano", () => setPanel(2), { help: true });
+
     const patch = (p: Partial<Run>) => setRun((r) => (r ? { ...r, ...p } : r));
     const start = () => {
       if (c.running || run) return;
+      setPanel(2);
       setRun({ steps: c.plan.steps.map((s) => ({ ...s })), decided: {} }); // the screen keeps this copy, whatever the cache does meanwhile
       const ask = (step: ConformityStep) =>
         new Promise<StepAnswer>((resolve) =>
@@ -132,18 +148,29 @@ export default (sdk: Sdk) => {
         );
       void c.apply(ask).then((outcomes) => (patch({ outcomes }), c.refresh()));
     };
+
+    // Inner lines of each panel: wide gives both the full height, narrow splits it (results first).
+    const body = Math.max(4, rows - CHROME - 1);
+    const wide = cols >= WIDE;
+    const inner = wide ? [body - 2, body - 2] : [Math.floor(body / 2) - 2, Math.ceil(body / 2) - 2];
+    const frame = (n: 1 | 2, title: string, children: unknown) => (
+      <Panel key={n} title={`[${n}] ${title}${panel === n ? ` ${g.active}` : ""}`} tone={panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
+    );
+    const header = c.running ? "verificando…" : c.checkedAt ? `verificado às ${hhmm(c.checkedAt)}` : "não verificado";
+    const plan = run ? <Aplicando run={run} max={inner[1]!} onClose={() => setRun(null)} /> : <Passos c={c} max={inner[1]!} />;
+    const panels = [frame(1, "resultados", <Resultados c={c} max={inner[0]!} />), frame(2, "plano", plan)];
     return (
       <Panel>
-        <Header c={c} />
-        {run ? <Aplicando run={run} onClose={() => setRun(null)} /> : <Passos c={c} onApply={start} />}
+        {c.plan.steps.length > 0 && !run ? <Key keys="a" label="aplica" run={start} /> : null}
+        <Text tone="dim">{header}</Text>
+        {wide ? <Row>{panels}</Row> : panels}
       </Panel>
     );
   }
 
   return {
     pages: {
-      conformidade: { title: "conformidade", render: () => <Resultados />, tab: { label: "Conformidade", order: 1 } },
-      plano: { title: "plano", render: () => <Plano />, tab: { label: "Plano", order: 2 }, role: "plan" as const },
+      conformidade: { title: "conformidade", render: () => <Conformidade />, role: "plan" as const },
     },
   };
 };

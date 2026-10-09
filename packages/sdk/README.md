@@ -188,11 +188,11 @@ Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança
 
 - `render()` devolve JSX e roda dentro do componente da página: pode chamar hooks. Se lançar, o host registra o erro, volta e avisa; o resto não é afetado.
 - Abre-se por `#<módulo>.<nome>` (ou `#<nome>`, se for único), na palette (`ctrl+k`, escopo `#`) ou no campo de comando; ou por um comando com `page`.
-- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`. Reservadas (ignoradas): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
+- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`, `←`, `→`. Um quarto argumento `{ help: true }` põe a tecla só no `?`. `useNudge()(msg)` mostra o aviso curto do host para uma tecla sem efeito. `Row` põe filhos lado a lado e `Panel grow` iguala a altura de painéis irmãos. Reservadas (ignoradas): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
 - `keys` em `PageDef` (`{ keys, label, run }[]`) continua valendo para teclas que não precisam do estado do componente; entram na mesma tabela de atalhos.
 - **Moldura.** O host desenha a borda da página e o título `› <title>`. Um `Panel` na raiz da página é só o conteúdo (sem borda e sem título): assim a página mostra uma moldura só. Para seções dentro da página, ponha `Panel` dentro de outro `Panel`: os internos têm borda e título.
 
-**Aba.** `tab: true` ou `tab: { label, order }` põe a página também na barra de abas, depois das abas do núcleo, ordenada por `order` e depois por rótulo. A aba visitada continua montada enquanto a tela de abas existe.
+**Aba (opcional; módulos não são obrigados a expor aba).** Sem `tab`, a página aparece na lista do módulo em Módulos (marca `§`) e abre como tela empilhada; `esc` volta. Com `tab: true` ou `tab: { label, order }` põe a página também na barra de abas, depois das abas do núcleo, ordenada por `order` e depois por rótulo. A aba visitada continua montada enquanto a tela de abas existe.
 
 <!-- test -->
 ```tsx
@@ -300,11 +300,11 @@ O host não cita módulo pelo nome (nem `nota`, nem `conformidade`). Quando prec
 
 | Papel | Onde se declara | O que o host faz com ele |
 | --- | --- | --- |
-| `role: "plan"` | `PageDef.role` | O `p` do Diário abre a aba dessa página (precisa de `tab`). |
-| `role: "notes"` | `PageDef.role` | O Início abre essa página no `n` e no painel de notas. |
+| `role: "plan"` | `PageDef.role` | A página do plano: hoje a página do módulo `conformidade`, com os painéis resultados e plano. O host a abre como tela empilhada, sem nomear o módulo. |
+| `role: "notes"` | `PageDef.role` | O Início abre essa página (tela empilhada) no `n` e no painel de notas. |
 | `roles.compose` | `ModuleDef.roles` | Nome de uma consulta: o `n` do Início a chama para abrir o editor de nota. |
 | `roles.notesState` | `ModuleDef.roles` | Nome de uma consulta que devolve as notas dobradas (`{ author, at, text, pinned, login?, resolved }[]`): o banner de login lê as fixadas por ela. |
-| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, aceita `--tag`, `--ref` e o texto): `conformidade ignorar` grava o motivo com ele e o `n` do Diário o põe no rascunho. |
+| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, aceita `--tag`, `--ref` e o texto): `conformidade ignorar` grava o motivo com ele. |
 
 Cada papel tem um dono só: um segundo módulo que o declare é recusado ("conflito"). Sem dono, a função some em silêncio (sem notas, o `n` do Início não faz nada).
 
@@ -320,7 +320,7 @@ const factory: ModuleFactory = (sdk) => ({
     "notas.compose": () => undefined,
     "notas.state": () => [],
   },
-  pages: { notas: { title: "notas", render: () => <sdk.ui.Text>notas</sdk.ui.Text>, tab: true, role: "notes" } },
+  pages: { notas: { title: "notas", render: () => <sdk.ui.Text>notas</sdk.ui.Text>, role: "notes" } },
   roles: { compose: "notas.compose", notesState: "notas.state", addNote: "doc add" },
 });
 export default factory;

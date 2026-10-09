@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { pageWithRole, type Pending, type Registry } from "@pvx/core";
+import { type Pending, type Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { createMenuNav, Menu, type MenuNav } from "../menu/Menu.tsx";
@@ -15,11 +15,11 @@ import { useTheme } from "../theme-context.tsx";
 import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { fitBar } from "./bar.ts";
-import { createDiaryNav, DiaryTab, type DiaryNav } from "./DiaryTab.tsx";
+import { Clock, clockWidth, pickForm } from "./clock.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 
-const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", diario: "Diário", logs: "Logs", comando: "Comando" };
+const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", logs: "Logs", comando: "Comando" };
 /** Tabs that show a core command's output (the id is also the command). */
 const CORE: readonly TabId[] = ["logs"];
 
@@ -33,7 +33,6 @@ export interface TabsNav {
   /** Módulos: the module menu. */
   menu: MenuNav;
   home: HomeNav;
-  diary: DiaryNav;
   /** Last result of each core command tab (Logs): memory only, for the TUI session. */
   core: CoreCache;
   /** Comando input draft: memory only (a secret never goes in the line; it goes through the modal). */
@@ -41,7 +40,7 @@ export interface TabsNav {
   /** Modules with commits upstream (background check, memory only). */
   updates: Pending[];
 }
-export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), diary: createDiaryNav(), core: {}, draft: "", updates: [] });
+export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), core: {}, draft: "", updates: [] });
 
 function Tab({ label, errors, behind, active, focused, onPick }: { label: string; errors: number; behind: number; active: boolean; focused: boolean; onPick: () => void }) {
   const { c, g } = useTheme();
@@ -66,13 +65,17 @@ interface BarTab {
   behind: number;
 }
 
-function TabBar({ nav, tabs, active, version, onPick }: { nav: TabsNav; tabs: BarTab[]; active: TabId; version: string; onPick: (id: TabId) => void }) {
+function TabBar({ nav, tabs, active, version, now, onPick }: { nav: TabsNav; tabs: BarTab[]; active: TabId; version: string; now: () => number; onPick: (id: TabId) => void }) {
   const { c, g } = useTheme();
   const { cols } = useLayout();
   const tag = `pvx ${version} `;
   const widths = tabs.map((t) => [...t.label].length + 2 + (t.errors ? ` ${g.error}${t.errors}`.length : 0) + (t.behind ? ` ↓${t.behind}`.length : 0));
-  const { from, to } = fitBar(widths, tabs.findIndex((t) => t.id === active), nav.barFrom, cols - 2 - tag.length);
+  // The tabs fit around the shortest clock (HH:MM) and the version; the clock then takes the richest form that fits in what is left.
+  const reserve = tag.length + clockWidth("short") + 3;
+  const { from, to } = fitBar(widths, tabs.findIndex((t) => t.id === active), nav.barFrom, cols - 2 - reserve);
   nav.barFrom = from;
+  const used = (from > 0 ? 1 : 0) + (to < tabs.length ? 1 : 0) + widths.slice(from, to).reduce((a, b) => a + b, 0);
+  const form = pickForm(cols - 2 - used - tag.length - 3);
   return (
     <box height={1} flexShrink={0} overflow="hidden" flexDirection="row" justifyContent="space-between">
       <box flexDirection="row" flexShrink={0}>
@@ -82,7 +85,10 @@ function TabBar({ nav, tabs, active, version, onPick }: { nav: TabsNav; tabs: Ba
         ))}
         {to < tabs.length ? <text fg={c.dim} flexShrink={0}>{g.moreRight}</text> : null}
       </box>
-      <text fg={c.dim} wrapMode="none" flexShrink={0}>{tag}</text>
+      <box flexDirection="row" flexShrink={0}>
+        <Clock form={form} now={now} />
+        <text fg={c.dim} wrapMode="none" flexShrink={0}>{tag}</text>
+      </box>
     </box>
   );
 }
@@ -92,7 +98,7 @@ function TabBar({ nav, tabs, active, version, onPick }: { nav: TabsNav; tabs: Ba
  * for completing); with the bar focused, left/right switch and down enters the tab. The tab handler is `base`, so
  * content that consumes a key (a form's `tab`) wins.
  */
-export function Tabs({ store, registry, nav, version, profile, modules }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null; modules?: ModulesDeps }) {
+export function Tabs({ store, registry, nav, version, profile, modules, now = Date.now }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null; modules?: ModulesDeps; now?: () => number }) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const update = (p: Partial<TabsNav>) => (Object.assign(nav, p), bump());
   const nudge = useNudge();
@@ -113,12 +119,12 @@ export function Tabs({ store, registry, nav, version, profile, modules }: { stor
   const visited = useRef(new Set<TabId>());
   if (pageTab) visited.current.add(active);
   // A tab with nothing to select never holds focus.
-  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id === "diario" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
+  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
   const step = (d: number) => {
     const id = ids[(ids.indexOf(active) + d + ids.length) % ids.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
   };
-  useScreenScope(nav.bar ? "tabs" : pageTab ? pageScope(pageTab.page) : active === "comando" ? "session" : active === "inicio" ? "home" : active === "diario" ? "diario" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
+  useScreenScope(nav.bar ? "tabs" : pageTab ? pageScope(pageTab.page) : active === "comando" ? "session" : active === "inicio" ? "home" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
   useKeys((k) => {
     if (matchKey(k, "tab")) return step(1), true;
     if (matchKey(k, "shift+tab")) return step(-1), true;
@@ -140,10 +146,9 @@ export function Tabs({ store, registry, nav, version, profile, modules }: { stor
     <ModulesProvider value={modules ?? null}>
     <TabsProvider value={api}>
       <box flexGrow={1} minHeight={0} flexDirection="column">
-        <TabBar nav={nav} tabs={bar} active={active} version={version} onPick={(id) => update({ active: id, bar: true })} />
+        <TabBar nav={nav} tabs={bar} active={active} version={version} now={now} onPick={(id) => update({ active: id, bar: true })} />
         <box flexGrow={1} minHeight={0} flexDirection="column">
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} /> : null}
-          {active === "diario" ? <DiaryTab nav={nav} planTab={modTabs.find((t) => t.page.key === pageWithRole(registry, "plan")?.key)?.id} addNote={registry.roles.get("addNote")?.name} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}

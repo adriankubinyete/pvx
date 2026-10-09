@@ -4,7 +4,7 @@ export const MAX_BYTES = 8192;
 export type EventKind = "add" | "edit" | "pin" | "unpin" | "resolve";
 const KINDS: readonly string[] = ["add", "edit", "pin", "unpin", "resolve"];
 
-/** One line of notes.jsonl. The contract with the diary: DECISIONS.md, "Fase 6". */
+/** One line of notes.jsonl. Format: DECISIONS.md, "Fase 6". */
 export interface NoteEvent {
   v: 1;
   id: string;

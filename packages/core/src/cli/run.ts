@@ -1,6 +1,6 @@
 import { EXIT, type Logger, type OutLine } from "@pvx/sdk";
 import { fg, setColorEnabled } from "../ansi.ts";
-import { auditCommand, lineOf, type DiaryEntry } from "../diary/index.ts";
+import { auditCommand, lineOf } from "../journal/index.ts";
 import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
@@ -51,8 +51,6 @@ export interface CoreLine extends OutLine {
   step?: PlanStep;
   /** `modules` listing only: the row, with its `state` (JSON mode only shows it). */
   module?: ModuleRow;
-  /** `diario` only: the entry this line shows (JSON mode only shows it). */
-  entry?: DiaryEntry;
   /** `conformidade` only: ISO instant until which this pending item is ignored. */
   ignored?: string;
 }
@@ -93,7 +91,7 @@ export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}), ...(l.entry ? { entry: l.entry } : {}), ...(l.ignored ? { ignored: l.ignored } : {}) }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}), ...(l.ignored ? { ignored: l.ignored } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;

@@ -72,7 +72,7 @@ test("a core command with args shows its form", async () => {
   expect(t.frame()).toContain("$ pvx logs");
 });
 
-test("opening a page entry switches to its tab", async () => {
+test("opening a page entry pushes it as a screen (the page is not a tab)", async () => {
   const { t } = await mount(await fresh());
   await t.press("k", { ctrl: true });
   await t.type("#conformidade.conformidade");
@@ -80,6 +80,6 @@ test("opening a page entry switches to its tab", async () => {
   await t.flush();
   expect(t.frame()).not.toContain("nada encontrado");
   expect(t.frame()).not.toContain("favoritos"); // palette closed
-  expect(t.frame()).toMatch(/› conformidade/); // the tab pane (a pushed screen would hide the tab bar)
-  expect(t.frame()).toContain("Início");
+  expect(t.frame()).toMatch(/› conformidade/);
+  expect(t.frame()).not.toContain("Início"); // a pushed screen hides the tab bar
 });

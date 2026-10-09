@@ -7,4 +7,4 @@ export * from "./cli/index.ts";
 export * from "./host/machine.ts";
 export * from "./modules/index.ts";
 export * from "./catalog/index.ts";
-export * from "./diary/index.ts";
+export * from "./journal/index.ts";

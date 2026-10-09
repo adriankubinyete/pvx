@@ -1,5 +1,5 @@
 import { EXIT, type ArgSpec } from "@pvx/sdk";
-import { addIgnore, diary, KINDS, lineOf, parseSince, type DiaryEntry, type Kind } from "../diary/index.ts";
+import { addIgnore, lineOf } from "../journal/index.ts";
 import { parseArgs } from "../engine/args.ts";
 import { execute } from "../engine/execute.ts";
 import { resolveCommand } from "../engine/registry.ts";
@@ -12,20 +12,7 @@ const ignorarArgs: ArgSpec[] = [
   { name: "capacidade", help: "Id da capacidade pendente", kind: "positional", required: true },
   { name: "motivo", help: "Por que ignorar (vira nota ligada à capacidade)", kind: "option", required: true },
 ];
-const diarioArgs: ArgSpec[] = [
-  { name: "desde", help: "Janela: 24h, 7d ou data ISO", kind: "option" },
-  { name: "tipo", help: `Tipos, separados por vírgula: ${KINDS.join(", ")}`, kind: "option", values: [...KINDS] },
-  { name: "busca", help: "Texto no registro ou no autor", kind: "option" },
-];
-
-const when = (at: string) => {
-  const d = new Date(at);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
-};
-export const entryText = (e: DiaryEntry) => `${when(e.at)}  ${e.kind.padEnd(6)} ${(e.user ?? "").padEnd(10)} ${e.text}${e.kind === "cmd" && e.data.exit ? ` (exit ${e.data.exit})` : ""}`;
-
-export const DIARY_COMMANDS: CoreCommand[] = [
+export const IGNORE_COMMANDS: CoreCommand[] = [
   {
     key: "conformidade ignorar",
     help: "Ignora uma pendência por 24 h, com motivo (vira nota)",
@@ -50,28 +37,6 @@ export const DIARY_COMMANDS: CoreCommand[] = [
         if (!r.ok) o.line({ kind: "warning", text: `a nota não foi criada (${r.lines.find((l) => l.kind === "error")?.text ?? `exit ${r.exit}`}); o motivo ficou no registro de ignorados` });
         else o.line({ kind: "info", text: `nota criada: ${lineOf(addNote)} --ref cap:${id}` });
       }
-      return EXIT.OK;
-    },
-  },
-  {
-    key: "diario",
-    help: "Mostra o diário da central: notas, comandos, conformidade, logins e módulos, do mais novo ao mais velho",
-    args: diarioArgs,
-    async run({ io, o, rest }) {
-      const p = await parseArgs(diarioArgs, rest, { env: io.env });
-      if (!p.ok) return usageError(o, p.message);
-      const kinds = p.args.tipo ? String(p.args.tipo).split(",").map((k) => k.trim()).filter(Boolean) : undefined;
-      const bad = kinds?.find((k) => !(KINDS as readonly string[]).includes(k));
-      if (bad) return usageError(o, `tipo desconhecido: \`${bad}\` (${KINDS.join(", ")})`);
-      let since: number | undefined;
-      try {
-        since = p.args.desde ? parseSince(String(p.args.desde)) : undefined;
-      } catch (e) {
-        return usageError(o, (e as Error).message);
-      }
-      const entries = diary.query({ since, kinds: kinds as Kind[] | undefined, text: p.args.busca ? String(p.args.busca) : undefined });
-      if (!entries.length) o.line({ kind: "info", text: "nada no diário para esse filtro" });
-      for (const e of entries) o.line({ kind: "plain", text: entryText(e), entry: e });
       return EXIT.OK;
     },
   },

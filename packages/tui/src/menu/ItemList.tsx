@@ -35,6 +35,7 @@ const Row = memo(function Row({ item, selected, helpW, onHover, onPick }: RowPro
         <text>
           <span fg={c.accent}>{selected ? `${g.cursor} ` : "  "}</span>
           {item.errorOf ? <span fg={c.error}>{`${g.error} `}</span> : null}
+          {item.page ? <span fg={c.dim}>{`${g.page} `}</span> : null}
           <span fg={item.errorOf ? c.error : c.text}>{cut(item.label, LABEL_W - 6)}</span>
           {item.destructive ? <span fg={c.error}>{" !"}</span> : null}
           {origin ? <span fg={origin[1]}>{` ${origin[0]}`}</span> : null}
