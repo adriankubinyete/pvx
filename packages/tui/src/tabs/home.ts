@@ -1,3 +1,5 @@
+import type { SlotHub } from "@pvx/core";
+import type { SlotId } from "@pvx/sdk";
 import type { Glyphs } from "../theme.ts";
 import type { Block } from "../session/store.ts";
 import type { CoreResult } from "./CoreTab.tsx";
@@ -37,15 +39,17 @@ export interface Conformity {
   ok: number;
   total: number;
   pending: Pending[];
+  /** Titles of the items that are ok. */
+  okItems: string[];
 }
 
 /** Reads the `conformidade` output: `perfil: X`, one line per capability, then the summary. No `perfil:` line means no result to show. */
 export function parseConformity(r: CoreResult): Conformity {
   if (!r.lines.some((l) => l.kind === "info" && l.text.startsWith("perfil: ")))
-    return { message: r.lines[0]?.text ?? "sem resultado", ok: 0, total: 0, pending: [] };
+    return { message: r.lines[0]?.text ?? "sem resultado", ok: 0, total: 0, pending: [], okItems: [] };
   const items = r.lines.filter((l) => l.kind === "success" || l.kind === "warning" || l.kind === "error");
   const pending = items.filter((l) => l.kind !== "success").map((l): Pending => ({ id: l.text, level: l.kind === "error" ? "error" : "warn", text: l.text, fix: l.fix }));
-  return { ok: items.length - pending.length, total: items.length, pending };
+  return { ok: items.length - pending.length, total: items.length, pending, okItems: items.filter((l) => l.kind === "success").map((l) => l.text) };
 }
 
 export interface Activity {
@@ -66,3 +70,17 @@ export function activity(history: readonly string[], blocks: readonly Block[], f
   const recents = [...new Set([...history].reverse())].filter((l) => !favorites.includes(l)).slice(0, max);
   return [...favorites.slice(0, max).map((l) => mk(l, true)), ...recents.map((l) => mk(l, false))];
 }
+
+type Att = { level: Level; title: string; fix?: string };
+type Chip = { label: string; level: Level; detail?: string };
+
+/** What the host puts in the slots from the cached `conformidade` result (the profile's capabilities). */
+export function syncHost(hub: SlotHub, done?: Conformity) {
+  const has = done && !done.message;
+  hub.setHost("home.attention", has ? done.pending.map((p): Att => ({ level: p.level, title: p.text, fix: p.fix })) : undefined);
+  hub.setHost("home.configured", has ? done.okItems.map((title): Att => ({ level: "ok", title })) : undefined);
+  hub.setHost("home.summary", has ? `${done.ok} de ${done.total}` : undefined);
+}
+
+export const slotItems = <T,>(hub: SlotHub, slot: SlotId): T[] => (hub.read(slot) as T[] | undefined) ?? [];
+export type { Att, Chip };

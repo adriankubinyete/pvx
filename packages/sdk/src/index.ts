@@ -54,6 +54,12 @@ export interface CommandCtx {
   log: Logger;
   store: Store;
   query: QueryFn;
+  slots: SlotsApi;
+}
+
+/** Read-only view of the home slots: the last collected data, never re-evaluated. `undefined` until something fills it. */
+export interface SlotsApi {
+  read(slot: SlotId): SlotData | undefined;
 }
 
 export interface Out {
@@ -138,7 +144,10 @@ export interface KeySpec {
 
 export type Level = "ok" | "warn" | "error";
 
-/** Home slots (Fase 3B fills them). The data shape of each slot is fixed by the core. */
+/**
+ * Home slots. The data shape of each slot is fixed by the core; a widget that returns another shape is removed as broken.
+ * Lower `priority` comes first. `home.panel` is reserved: accepted but not rendered yet (free `render()` is deferred).
+ */
 export type SlotId = "home.chips" | "home.attention" | "home.configured" | "home.summary" | "home.notes" | "home.panel";
 
 export type SlotData =

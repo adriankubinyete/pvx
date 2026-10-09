@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from "react";
 import { hostname } from "node:os";
-import { primaryIp, readMachine } from "@pvx/core";
+import { primaryIp, readMachine, type SlotHub } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
 import { loadFavorites } from "../palette/favorites.ts";
 import { clean } from "../palette/search.ts";
+import { usePages } from "../sdk-ui/host.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
 import { hhmm, refreshCore } from "./CoreTab.tsx";
-import { activity, fmtUptime, levelOf, meter, parseConformity, relTime } from "./home.ts";
+import { activity, fmtUptime, levelOf, meter, parseConformity, relTime, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
 const PANELS = ["conformidade", "atividade"] as const;
@@ -71,7 +72,7 @@ function Rows({ rows, sel, focused, w, onPick }: { rows: Row[]; sel?: string; fo
 }
 
 /** The Início tab: a dashboard. Machine, conformidade (pending items) and activity; enter on an item puts its command in the Comando input. */
-export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsNav; profile?: string | null }) {
+export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav: TabsNav; profile?: string | null; slots: SlotHub }) {
   const { c, g } = useTheme();
   const { cols, narrow } = useLayout();
   const tabs = useTabs();
@@ -86,16 +87,32 @@ export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsN
     const t = setInterval(() => (setM(readMachine()), setReadAt(Date.now()), setNow(Date.now())), 5000);
     return () => clearInterval(t);
   }, []);
+  // The slot hub's single scheduler runs while Início is mounted; its changes re-render here.
+  const makeLogger = usePages()?.makeLogger;
+  useEffect(() => {
+    const off = slots.subscribe(bump);
+    const stop = slots.start(makeLogger?.("core") ?? { debug() {}, info() {}, warn() {}, error() {} });
+    return () => (off(), stop());
+  }, [slots]);
   const favorites = useMemo(() => loadFavorites(), []);
   const ip = useMemo(primaryIp, []);
 
   const color = { ok: c.accent, warn: c.warn, error: c.error };
   const cache = nav.core.conformidade;
   const done = typeof cache === "object" ? parseConformity(cache) : undefined;
+  syncHost(slots, done); // the profile's items go through the same slots the modules use
+  const mark = (l: Att["level"]): [string, string] => (l === "error" ? [g.error, c.error] : l === "warn" ? [g.warn, c.warn] : [g.ok, c.dim]);
+  const attention = slotItems<Att>(slots, "home.attention");
+  const brokenRow = (id: string): Row => ({ id: `broken:${id}`, mark: mark("warn"), text: `widget quebrou: ${id}` });
+  const chips = slotItems<Chip>(slots, "home.chips");
+  const brokenChips = slots.broken("home.chips");
   const rows: Record<HomePanel, Row[]> = {
-    conformidade: (done?.pending ?? []).map((p) => ({
-      id: p.id, mark: p.level === "error" ? [g.error, c.error] : [g.warn, c.warn], text: p.text, use: p.fix,
-    })),
+    conformidade: [
+      ...attention.map((a): Row => ({ id: a.title, mark: mark(a.level), text: a.title, use: a.fix })),
+      ...slots.broken("home.attention").map(brokenRow),
+      ...slotItems<Att>(slots, "home.configured").map((a): Row => ({ id: `ok:${a.title}`, mark: mark("ok"), text: a.title })),
+      ...slots.broken("home.configured").map(brokenRow),
+    ],
     atividade: activity(history, blocks, favorites).map((a) => ({
       id: a.id,
       mark: a.favorite ? [g.favorite, c.warn] : a.status === "error" ? [g.error, c.error] : a.status === "warn" ? [g.warn, c.warn] : a.status === "ok" ? [g.ok, c.accent] : [" ", c.dim],
@@ -111,7 +128,7 @@ export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsN
     nav.draft = r.use;
     tabs?.goto("comando");
   };
-  const refresh = () => refreshCore(store, nav.core, "conformidade", bump);
+  const refresh = () => (refreshCore(store, nav.core, "conformidade", bump), void slots.refresh());
 
   useKeys((k) => {
     if (!focused) return;
@@ -147,7 +164,7 @@ export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsN
   const total = done?.total ?? 0;
   const pct = total ? (done!.ok / total) * 100 : 0;
   const [cf, ce] = meter(pct, 10, g);
-  const worst = done?.pending.some((p) => p.level === "error") ? c.error : c.warn;
+  const worst = attention.some((p) => p.level === "error") ? c.error : c.warn;
   const conformidade = (
     <Panel title="conformidade" focused={focused && nav.home.panel === "conformidade"}>
       <text wrapMode="none" flexShrink={0}>
@@ -159,8 +176,8 @@ export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsN
         : (
           <>
             <text wrapMode="none" flexShrink={0}>
-              <span fg={c.text}>{`${done.ok} de ${total}  `}</span>
-              <span fg={done.pending.length ? worst : c.accent}>{cf}</span>
+              <span fg={c.text}>{`${slots.read("home.summary")}  `}</span>
+              <span fg={attention.length ? worst : c.accent}>{cf}</span>
               <span fg={c.dim}>{ce}</span>
             </text>
             <text fg={c.dim} wrapMode="none" flexShrink={0}>{`verificado às ${hhmm((cache as { at: number }).at)} · ${hintText("home", "r")}`}</text>
@@ -190,8 +207,20 @@ export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsN
   );
 
   // Top row: máquina | conformidade; atividade below, full width. Narrow: one column. The areas share the height; each panel clips.
+  const chipLine = chips.length || brokenChips.length ? (
+    <text wrapMode="none" flexShrink={0} height={1} paddingX={1}>
+      {chips.map((ch) => (
+        <span key={ch.label}>
+          <span fg={color[ch.level]}>{`${ch.level === "ok" ? g.ok : ch.level === "warn" ? g.warn : g.error} ${ch.label}`}</span>
+          <span fg={c.dim}>{ch.detail ? ` ${ch.detail}  ` : "  "}</span>
+        </span>
+      ))}
+      {brokenChips.map((id) => <span key={id} fg={c.warn}>{`${g.warn} widget quebrou: ${id}  `}</span>)}
+    </text>
+  ) : null;
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column">
+      {chipLine}
       {narrow ? (
         <>{maquina}{conformidade}{atividade}</>
       ) : (

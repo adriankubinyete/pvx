@@ -41,6 +41,10 @@
     {
       "kind": "success",
       "text": "ui-demo 1.0.0 carregado"
+    },
+    {
+      "kind": "success",
+      "text": "widget-demo 1.0.0 carregado"
     }
   ]
 }

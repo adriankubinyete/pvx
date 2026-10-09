@@ -119,7 +119,7 @@ export function Tabs({ store, registry, nav, version, profile }: { store: Sessio
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} tabs={bar} active={active} version={version} onPick={(id) => update({ active: id, bar: true })} />
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} /> : null}
+          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} slots={registry.slots} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}

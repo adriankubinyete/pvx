@@ -1,3 +1,4 @@
+import { createSlotHub, type SlotHub, type SlotOpts } from "./slots.ts";
 import type { CapabilityDef, CommandDef, Manifest, ModuleDef, PageDef, QueryFn } from "@pvx/sdk";
 
 export interface LoadError {
@@ -17,6 +18,8 @@ export interface Registry {
   /** Key = "<module>.<name>". */
   pages: Map<string, RegisteredPage>;
   modules: Map<string, Manifest>;
+  /** Widgets of every module, collected per home slot. */
+  slots: SlotHub;
   errors: LoadError[];
   /** Refuses the whole module (nothing registered) on id, command or query conflict. */
   register(manifest: Manifest, def: ModuleDef): void;
@@ -24,13 +27,14 @@ export interface Registry {
   query: QueryFn;
 }
 
-export function createRegistry(): Registry {
+export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
   const r: Registry = {
     commands: new Map(),
     queries: new Map(),
     capabilities: [],
     pages: new Map(),
     modules: new Map(),
+    slots: createSlotHub(opts.slots),
     errors: [],
     register(manifest, def) {
       const id = manifest.id;
@@ -48,6 +52,7 @@ export function createRegistry(): Registry {
       for (const [key, c] of cmds) r.commands.set(key, { ...c, moduleId: id });
       for (const [name, fn] of Object.entries(def.queries ?? {})) r.queries.set(name, { moduleId: id, fn });
       for (const c of def.capabilities ?? []) r.capabilities.push({ ...c, moduleId: id });
+      for (const [name, w] of Object.entries(def.widgets ?? {})) r.slots.add(id, name, w);
       for (const [name, p] of Object.entries(def.pages ?? {})) r.pages.set(`${id}.${name}`, { ...p, key: `${id}.${name}`, moduleId: id, name });
     },
     addError(id, error) {

@@ -50,6 +50,7 @@ export async function execute(registry: Registry, input: string | string[], opts
       log,
       store: createStore(cmd.moduleId),
       query: registry.query,
+      slots: registry.slots,
     });
   } catch (e) {
     log.error(`exceção em ${key}: ${(e as Error).stack ?? e}`);
