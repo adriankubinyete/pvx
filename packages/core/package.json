@@ -1,1 +1,1 @@
-{"name":"@pvx/core","version":"0.0.0","private":true,"type":"module","main":"src/index.ts"}
+{"name":"@pvx/core","version":"0.0.0","private":true,"type":"module","main":"src/index.ts","dependencies":{"@pvx/sdk":"workspace:*"}}

@@ -18,10 +18,18 @@
     "apps/pvx": {
       "name": "pvx",
       "version": "0.0.0",
+      "dependencies": {
+        "@pvx/core": "workspace:*",
+        "@pvx/sdk": "workspace:*",
+        "@pvx/tui": "workspace:*",
+      },
     },
     "packages/core": {
       "name": "@pvx/core",
       "version": "0.0.0",
+      "dependencies": {
+        "@pvx/sdk": "workspace:*",
+      },
     },
     "packages/sdk": {
       "name": "@pvx/sdk",
@@ -34,6 +42,10 @@
     "packages/tui": {
       "name": "@pvx/tui",
       "version": "0.0.0",
+      "dependencies": {
+        "@pvx/core": "workspace:*",
+        "@pvx/sdk": "workspace:*",
+      },
     },
   },
   "packages": {
