@@ -1,18 +1,13 @@
 import { createCliRenderer } from "@opentui/core";
-import { createRoot, useKeyboard, useRenderer } from "@opentui/react";
+import { createRoot } from "@opentui/react";
+import { createLogger, logsDir } from "@pvx/core";
+import { App } from "@pvx/tui";
 
-function App() {
-  const renderer = useRenderer();
-  useKeyboard((k) => {
-    if (k.name === "q" || (k.ctrl && k.name === "c")) renderer.destroy();
-  });
-  return <text>pvx.next — TUI na Fase 2 (q sai)</text>;
-}
-
-/** Stub until Fase 2. Resolves after the renderer is destroyed. */
+/** Opens the TUI. Resolves after the renderer is destroyed. */
 export async function openTui(): Promise<void> {
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const closed = new Promise<void>((resolve) => renderer.once("destroy", resolve));
-  createRoot(renderer).render(<App />);
+  const root = { id: "inicio", element: <text>sessão e palette chegam nas próximas etapas</text> };
+  createRoot(renderer).render(<App root={root} logger={createLogger(logsDir(), "core")} onExit={() => renderer.destroy()} />);
   await closed;
 }
