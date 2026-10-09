@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from "react";
 import { hostname } from "node:os";
-import { primaryIp, readMachine, type SlotHub } from "@pvx/core";
+import { primaryIp, readMachine, type Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
@@ -16,8 +16,10 @@ import { conformityOf } from "./conformity.ts";
 import { activity, fmtUptime, levelOf, meter, parseConformity, relTime, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
-const PANELS = ["conformidade", "atividade"] as const;
-export type HomePanel = (typeof PANELS)[number];
+const BASE_PANELS = ["conformidade", "atividade"] as const;
+export type HomePanel = (typeof BASE_PANELS)[number] | "notas";
+/** The one place the host names the notes module: `n` on Início opens its composer (query, then its tab). */
+const NOTES = { tab: "page:nota.notas", compose: "notas.compose" } as const;
 /** Which panel has the cursor and the selected row of each; lives in `TabsNav` (the tab unmounts on a switch). */
 export interface HomeNav {
   panel: HomePanel;
@@ -74,7 +76,8 @@ function Rows({ rows, sel, focused, w, onPick }: { rows: Row[]; sel?: string; fo
 }
 
 /** The Início tab: a dashboard. Machine, conformidade (pending items) and activity; enter on an item puts its command in the Comando input. */
-export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav: TabsNav; profile?: string | null; slots: SlotHub }) {
+export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; nav: TabsNav; profile?: string | null; registry: Registry }) {
+  const slots = registry.slots;
   const { c, g } = useTheme();
   const { cols, narrow } = useLayout();
   const tabs = useTabs();
@@ -117,7 +120,9 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
       ...slots.broken("home.attention").map(brokenRow),
       ...slotItems<Att>(slots, "home.configured").map((a): Row => ({ id: `ok:${a.title}`, mark: mark("ok"), text: a.title })),
       ...slots.broken("home.configured").map(brokenRow),
+      ...(done?.ignored ?? []).map((t): Row => ({ id: `ig:${t}`, mark: [g.inactive, c.dim], text: t })),
     ],
+    notas: slotItems<string>(slots, "home.notes").map((t, i): Row => ({ id: `note:${i}`, mark: [" ", c.dim], text: clean(t) })),
     atividade: activity(history, blocks, favorites).map((a) => ({
       id: a.id,
       mark: a.favorite ? [g.favorite, c.warn] : a.status === "error" ? [g.error, c.error] : a.status === "warn" ? [g.warn, c.warn] : a.status === "ok" ? [g.ok, c.accent] : [" ", c.dim],
@@ -126,6 +131,8 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
       use: a.line,
     })),
   };
+  // The notes panel exists only while the slot has data; it is the 3rd navigable panel.
+  const PANELS: readonly HomePanel[] = rows.notas.length ? [...BASE_PANELS, "notas"] : BASE_PANELS;
   const cur = (p: HomePanel) => rows[p].find((r) => r.id === nav.home.sel[p]) ?? rows[p][0];
   const select = (p: HomePanel, id: string) => (nav.home.sel[p] = id, bump());
   const use = (r?: Row) => {
@@ -134,10 +141,12 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
     tabs?.goto("comando");
   };
   const refresh = () => (conf.refresh(), void slots.refresh());
+  const hasNotes = registry.pages.has("nota.notas") && registry.queries.has(NOTES.compose);
+  const goNotes = () => tabs?.goto(NOTES.tab);
 
   useKeys((k) => {
     if (!focused) return;
-    const p = nav.home.panel;
+    const p = PANELS.includes(nav.home.panel) ? nav.home.panel : PANELS[0]!; // the notes panel can go away
     if (k.name === "left" || k.name === "right") {
       const next = PANELS[PANELS.indexOf(p) + (k.name === "left" ? -1 : 1)];
       return next ? (nav.home.panel = next, bump()) : nudge("nada aqui"), true;
@@ -151,7 +160,8 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
     }
     const n = PANELS[Number(k.sequence) - 1];
     if (n && !k.ctrl) return nav.home.panel = n, bump(), true;
-    if (matchKey(k, "enter")) return use(cur(p)), true;
+    if (matchKey(k, "enter")) return p === "notas" ? goNotes() : use(cur(p)), true;
+    if (matchKey(k, "n") && hasNotes) return void registry.query(NOTES.compose), goNotes(), true;
     if (matchKey(k, "r")) return refresh(), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
   });
@@ -194,6 +204,11 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
       <Rows rows={rows.conformidade} sel={cur("conformidade")?.id} focused={focused && nav.home.panel === "conformidade"} w={confW - 4} onPick={(r) => (select("conformidade", r.id), use(r))} />
     </Panel>
   );
+  const notas = (
+    <Panel title={`${PANELS.indexOf("notas") + 1} notas`} focused={focused && nav.home.panel === "notas"} height={Math.min(rows.notas.length, 3) + 2}>
+      <Rows rows={rows.notas} sel={cur("notas")?.id} focused={focused && nav.home.panel === "notas"} w={cols - 6} onPick={() => goNotes()} />
+    </Panel>
+  );
   const maquina = (
     <Panel title="máquina" focused={false} width={narrow ? undefined : SIDE_W} height={narrow ? 8 : undefined}>
       <text wrapMode="none" flexShrink={0}>
@@ -230,11 +245,12 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
     <box flexGrow={1} minHeight={0} flexDirection="column">
       {chipLine}
       {narrow ? (
-        <>{maquina}{conformidade}{atividade}</>
+        <>{maquina}{conformidade}{atividade}{rows.notas.length ? notas : null}</>
       ) : (
         <>
           <box flexGrow={1} flexBasis={0} minHeight={8} flexDirection="row">{maquina}{conformidade}</box>
           <box flexGrow={1} flexBasis={0} minHeight={6} flexDirection="column">{atividade}</box>
+          {rows.notas.length ? notas : null}
         </>
       )}
     </box>

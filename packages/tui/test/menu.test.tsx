@@ -109,6 +109,7 @@ test("a command with args opens the form and shows the result; a secret field st
 test("a core tab runs once on the first visit, then only on r; it leaves no block and no history", async () => {
   const { t, store } = await mount();
   await t.press("TAB"); // Módulos
+  await t.press("TAB"); // Diário
   await t.press("TAB"); // Logs
   await t.flush();
   expect(t.frame()).toContain("› logs");
@@ -129,7 +130,7 @@ test("a core tab runs once on the first visit, then only on r; it leaves no bloc
 test("switching tabs keeps focus on the bar (down goes in); the Comando draft survives a tab switch", async () => {
   const { t } = await mount();
   await t.press("ARROW_UP");
-  for (let i = 0; i < 3; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
+  for (let i = 0; i < 4; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
   expect(t.frame()).toContain("tab próxima aba");
   const inputRow = () => t.frame().split("\n").find((l) => l.includes("❯"))!;
   expect(inputRow()).not.toContain("▌");
@@ -190,6 +191,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   expect(t.frame()).toContain("› 1 conformidade");
   await t.press("TAB");
   expect(t.frame()).toContain("› módulos");
+  await t.press("TAB"); // Diário
   await t.press("TAB"); // Logs
   await t.press("TAB");
   expect(t.frame()).toContain("tab completa"); // Comando
@@ -211,6 +213,7 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
   expect(t.frame()).toMatch(/» /);
   expect(t.frame()).toContain("↑↓ move");
   await t.press("ARROW_UP");
+  await t.press("ARROW_RIGHT"); // Diário
   await t.press("ARROW_RIGHT"); // Logs has nothing to select
   await t.press("ARROW_DOWN");
   expect(t.frame()).toContain("tab próxima aba");
@@ -361,6 +364,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expectScope("modules"); // the Módulos list: a module row has its own footer
   expect(t.frame()).toMatch(/» /);
   await t.press("ARROW_UP");
+  await t.press("TAB"); // Diário
   await t.press("TAB"); // Logs: nothing to select, enter does nothing
   await t.press("RETURN");
   expect(foot()).toContain("troca aba");

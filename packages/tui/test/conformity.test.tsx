@@ -48,7 +48,7 @@ const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()
 
 test("the tabs come from the built-in module; without it they are gone and the CLI still works", async () => {
   const { t } = await mount(await load());
-  expect(t.frame().split("\n")[0]).toMatch(/Módulos.*\s+Conformidade\s+Plano\s+Demo\s+Logs\s+Comando/);
+  expect(t.frame().split("\n")[0]).toMatch(/Módulos.*\s+Conformidade\s+Plano\s.*Demo\s+Diário\s+Logs\s+Comando/);
   t.destroy();
 
   const bare = await load(false);
@@ -101,7 +101,8 @@ test("the first visit to a module tab checks; Início sees the result without ch
   await goto(t, CONF, false);
   await t.flush();
   expect(t.frame()).toContain("cap-fixture.a: pendente");
-  await goto(t, 5, false); // Plano, Demo, Logs, Comando, Início
+  const labels = t.frame().split("\n")[0]!.split("pvx")[0]!.trim().split(/\s{2,}/);
+  await goto(t, labels.length - CONF, false); // the rest of the bar, then Início
   expect(t.frame()).toMatch(/1 de 5/);
   expect(calls).toHaveLength(2);
 });

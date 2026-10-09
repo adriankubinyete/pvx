@@ -1,10 +1,13 @@
-import { existsSync, mkdirSync, readdirSync, realpathSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import type { CommandCtx, Logger, Manifest } from "@pvx/sdk";
-import { moduleStateDir } from "./paths.ts";
+import { moduleStateDir, pvxHome } from "./paths.ts";
 
 type Perms = NonNullable<Manifest["permissions"]>;
 type Granted = Pick<CommandCtx, "exec" | "net" | "fs">;
+
+/** `$PVX_HOME` in a manifest path stands for the central's data directory (read when checked, so a test home applies). */
+const expand = (e: string) => e.replaceAll("$PVX_HOME", pvxHome());
 
 /** realpath of the nearest existing ancestor + the rest: a symlink cannot walk a path out of its prefix. */
 function real(p: string): string {
@@ -34,13 +37,13 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
     }
     throw new Error(m);
   };
-  const fsRules = [
+  const fsRules = () => [
     { prefix: real(moduleStateDir(id)), write: true },
-    ...(perms?.fs ?? []).map((e) => ({ prefix: real(e.replace(/^rw:/, "")), write: e.startsWith("rw:") })),
+    ...(perms?.fs ?? []).map((e) => ({ prefix: real(expand(e.replace(/^rw:/, ""))), write: e.startsWith("rw:") })),
   ];
   const path = (p: string, write: boolean) => {
-    const r = real(p);
-    if (!fsRules.some((x) => inside(r, x.prefix) && (x.write || !write))) deny(`fs ${write ? "escrita" : "leitura"} em ${p} (manifest: fs ${perms?.fs?.join(", ") || "nada"})`);
+    const r = real(expand(p));
+    if (!fsRules().some((x) => inside(r, x.prefix) && (x.write || !write))) deny(`fs ${write ? "escrita" : "leitura"} em ${p} (manifest: fs ${perms?.fs?.join(", ") || "nada"})`);
     return r;
   };
   return {
@@ -80,6 +83,16 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
       },
       exists: async (p) => existsSync(path(p, false)),
       list: async (p) => readdirSync(path(p, false)).sort(),
+      async append(p, text) {
+        const r = path(p, true);
+        mkdirSync(dirname(r), { recursive: true });
+        const fd = openSync(r, "a", 0o644); // O_APPEND: the kernel places each write at the end, so lines from two processes never mix
+        try {
+          writeSync(fd, text); // one call: the whole event or nothing
+        } finally {
+          closeSync(fd);
+        }
+      },
     },
   };
 }

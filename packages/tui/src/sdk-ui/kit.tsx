@@ -83,12 +83,14 @@ export function Table({ columns, rows }: Props<"Table">) {
 
 export function List({ items, selected }: Props<"List">) {
   const { c, g } = useTheme();
+  const marks = items.some((it) => it.mark);
   return (
     <box flexDirection="column" flexShrink={0}>
       {items.map((it) => (
         <box key={it.id} flexShrink={0} backgroundColor={it.id === selected ? c.selected : undefined}>
           <text wrapMode="none">
             <span fg={c.accent}>{it.id === selected ? `${g.cursor} ` : "  "}</span>
+            {marks ? <span fg={it.mark ? tone(c, it.mark.tone) : c.dim}>{it.mark ? `${clean(it.mark.text)} ` : "  "}</span> : null}
             <span fg={tone(c, it.tone)}>{clean(it.label)}</span>
             <span fg={c.dim}>{it.detail ? `  ${clean(it.detail)}` : ""}</span>
           </text>

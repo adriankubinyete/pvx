@@ -7,6 +7,8 @@ import { createStore } from "../engine/store.ts";
 import { followLogs, readLogs } from "../logs/index.ts";
 import { applyPlan, buildPlan, evaluate, loadProfiles, selectProfile, type EvalResult } from "../plan/index.ts";
 import type { Entry } from "./help.ts";
+import { recordDrift, partitionIgnored } from "../diary/index.ts";
+import { DIARY_COMMANDS } from "./diary.ts";
 import { catalogSearchCommand } from "../catalog/search-command.ts";
 import { listCommand, MODULES_COMMANDS } from "./modules.ts";
 import type { CliIO, Output } from "./run.ts";
@@ -25,6 +27,7 @@ export interface CoreCommand extends Entry {
 }
 
 const level = { ok: "success", warn: "warning", error: "error" } as const;
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const NO_PROFILE = "nenhum perfil aplicável (PVX_PROFILE força um)";
 
 /** Runs `fn` with the evaluated profile; a bad PVX_PROFILE is a usage error, no profile is a warning. */
@@ -47,6 +50,7 @@ async function profileResults(io: CliIO): Promise<{ title: string; results: Eval
     const m = caps.get(c.id)!.moduleId;
     return { log: io.makeLogger(m), store: createStore(m), query: io.registry.query };
   });
+  recordDrift(results); // every evaluation (CLI or TUI refresh) appends the level changes
   return { title: profile.title, results };
 }
 
@@ -91,10 +95,17 @@ export const CORE: CoreCommand[] = [
       if (!p.ok) return usageError(o, p.message);
       return withProfile(io, o, (r) => {
         o.line({ kind: "info", text: `perfil: ${r.title}` });
-        for (const x of r.results) o.line({ kind: level[x.level], text: `${x.title}: ${x.text}`, fix: x.level === "ok" ? undefined : x.fix });
-        const n = (l: string) => r.results.filter((x) => x.level === l).length;
-        o.line({ kind: "info", text: `${n("ok")} ok, ${n("warn")} avisos, ${n("error")} erros` });
-        return p.args.strict && n("ok") < r.results.length ? EXIT.ERROR : EXIT.OK;
+        const { ignored } = partitionIgnored(r.results);
+        const skip = new Set(ignored.map((x) => x.id));
+        for (const x of r.results) {
+          const ig = ignored.find((i) => i.id === x.id);
+          if (ig) o.line({ kind: "info", text: `${x.title}: ${x.text} (ignorado até ${hhmm(ig.until)})`, ignored: ig.until });
+          else o.line({ kind: level[x.level], text: `${x.title}: ${x.text}`, fix: x.level === "ok" ? undefined : x.fix });
+        }
+        const live = r.results.filter((x) => !skip.has(x.id));
+        const n = (l: string) => live.filter((x) => x.level === l).length;
+        o.line({ kind: "info", text: `${n("ok")} ok, ${n("warn")} avisos, ${n("error")} erros${ignored.length ? `, ${ignored.length} ignorado(s)` : ""}` });
+        return p.args.strict && n("ok") < live.length ? EXIT.ERROR : EXIT.OK;
       });
     },
   },
@@ -103,12 +114,14 @@ export const CORE: CoreCommand[] = [
     help: "Mostra os passos que levam a central ao perfil",
     run: ({ io, o }) =>
       withProfile(io, o, (r) => {
-        const { steps, manual } = buildPlan(r.results);
+        const { live, ignored } = partitionIgnored(r.results);
+        const { steps, manual } = buildPlan(live);
         steps.forEach((s, i) => {
           const tags = [s.implicit && `implícito: ${s.reason}`, s.optIn && "opt-in"].filter(Boolean).join("; ");
           o.line({ kind: "plain", text: `${i + 1}. ${s.cmd}${tags ? ` (${tags})` : ""} para ${s.for.join(", ")}`, step: s });
         });
         for (const m of manual) o.line({ kind: "warning", text: `manual: ${m.title}: ${m.text}` });
+        for (const x of ignored) o.line({ kind: "info", text: `ignorado até ${hhmm(x.until)}: ${x.title}` });
         if (!steps.length && !manual.length) o.line({ kind: "success", text: "nada a fazer" });
         return EXIT.OK;
       }),
@@ -120,7 +133,7 @@ export const CORE: CoreCommand[] = [
     async run({ io, o, yes }) {
       if (!yes && !(io.isTTY && io.ask)) return usageError(o, "fora de um terminal, `plano apply` exige --yes");
       return withProfile(io, o, async (r) => {
-        const plan = buildPlan(r.results);
+        const plan = buildPlan(partitionIgnored(r.results).live);
         const confirm = yes
           ? undefined
           : async (s: { cmd: string }) => {
@@ -145,6 +158,7 @@ export const CORE: CoreCommand[] = [
       });
     },
   },
+  ...DIARY_COMMANDS,
   ...MODULES_COMMANDS,
   {
     key: "version",

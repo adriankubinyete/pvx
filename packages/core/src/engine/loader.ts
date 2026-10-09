@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { basename, join, sep } from "node:path";
+import { join, sep } from "node:path";
 import type { BuiltinModule, Logger, Manifest, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
 import { readManifest } from "./manifest.ts";
+import { createGranted } from "./permissions.ts";
 import { usermodulesDir } from "./paths.ts";
 import type { Registry } from "./registry.ts";
 
@@ -26,11 +27,17 @@ export interface LoadOpts {
   canImport?: (dir: string, manifest: Manifest) => boolean | Promise<boolean>;
 }
 
+/** What a factory gets: the module's own logger and a `fs` bound to its manifest permissions. */
+const sdkFor = (manifest: Manifest, opts: LoadOpts): Sdk => {
+  const log = opts.makeLogger(manifest.id);
+  return { version: 1, log, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
+};
+
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */
 export async function loadModules(registry: Registry, opts: LoadOpts): Promise<void> {
   for (const { manifest, factory } of opts.builtin ?? []) {
     try {
-      registry.register(manifest, factory({ version: 1, log: opts.makeLogger(manifest.id), ui: opts.ui ?? unavailableUi }));
+      registry.register(manifest, factory(sdkFor(manifest, opts)));
       registry.official.add(manifest.id);
     } catch (e) {
       registry.addError(manifest.id, (e as Error).message);
@@ -57,7 +64,6 @@ export function evictModule(dir: string): void {
 
 /** Manifest, gate, import, register. Throws on failure; a skipped module (`applies`, gate) returns quietly. `replace` swaps a registered module. */
 export async function loadOne(registry: Registry, dir: string, opts: LoadOpts, replace = false): Promise<void> {
-  const id = basename(dir);
   const manifest = readManifest(dir, opts.hostVersion);
   if (!manifest) return;
   if (!(await (opts.canImport ?? (() => true))(dir, manifest))) return;
@@ -71,6 +77,5 @@ export async function loadOne(registry: Registry, dir: string, opts: LoadOpts, r
   if (!entry.startsWith(base + sep)) throw new Error(`entry "${manifest.entry}" fora do diretório do módulo`);
   const factory = (await import(entry)).default as ModuleFactory | undefined;
   if (typeof factory !== "function") throw new Error("entry não exporta uma função por padrão (export default)");
-  const sdk: Sdk = { version: 1, log: opts.makeLogger(id), ui: opts.ui ?? unavailableUi };
-  registry.register(manifest, factory(sdk), { replace });
+  registry.register(manifest, factory(sdkFor(manifest, opts)), { replace });
 }

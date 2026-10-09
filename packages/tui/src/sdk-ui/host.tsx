@@ -3,6 +3,7 @@ import { createStore, resolveCommand, tokenize, type Registry } from "@pvx/core"
 import type { CommandRun, Conformity, KeySpec, Logger, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
+import { useLayout } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
 
 /** What the page hooks need from the host. Provided once by `App` (`pages` prop). */
@@ -33,12 +34,15 @@ export function useHost(): HostPage {
   return h;
 }
 
+/** One argument as the tokenizer reads it back: double quotes, with `\\` and `\"` escaped. */
+const quoteArg = (a: string) => (/^[\w.:/=@%+,-]+$/.test(a) ? a : `"${a.replace(/[\\"]/g, "\\$&")}"`);
+
 /** Runs one line of this module through the session and reads back what it printed. Throws if the line is another module's command. */
-export async function runOwn(h: HostPage, line: string, secrets?: Record<string, string>): Promise<CommandRun> {
+export async function runOwn(h: HostPage, line: string, secrets?: Record<string, string>, stdin?: string): Promise<CommandRun> {
   const { session, registry } = h.deps;
   const found = resolveCommand(registry, tokenize(line));
   if (found && found.cmd.moduleId !== h.moduleId) throw new Error(`uma página só roda comandos do próprio módulo: "${found.key}" é de "${found.cmd.moduleId}"`);
-  const p = session.run(line, { secrets });
+  const p = session.run(line, { secrets, stdin });
   const id = session.getSnapshot().blocks.at(-1)?.id; // run adds its block synchronously
   const { exit } = await p;
   return { exit, lines: session.getSnapshot().blocks.find((b) => b.id === id)?.lines ?? [] };
@@ -47,10 +51,10 @@ export async function runOwn(h: HostPage, line: string, secrets?: Record<string,
 function useCommand(line: string) {
   const h = useHost();
   const [state, setState] = useState<{ running: boolean; lastResult?: CommandRun }>({ running: false });
-  const run = useCallback(async () => {
+  const run = useCallback(async (opts?: { args?: string[]; stdin?: string }) => {
     setState((s) => ({ ...s, running: true }));
     try {
-      const lastResult = await runOwn(h, line);
+      const lastResult = await runOwn(h, [line, ...(opts?.args ?? []).map(quoteArg)].join(" "), undefined, opts?.stdin);
       setState({ running: false, lastResult });
       return lastResult;
     } catch (e) {
@@ -102,11 +106,16 @@ function useConformity(): Conformity {
   return useMemo(() => ({ ...conformityView(snap), refresh: store.refresh, apply: store.apply }), [snap, store]);
 }
 
+function useViewport() {
+  const { cols, rows } = useLayout();
+  return { cols, rows };
+}
+
 function useModuleTheme() {
   const { c, g } = useTheme();
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useConformity" | "useTheme"> = {
-  useCommand, useQuery, useStore, useRouter, useKey, useConformity, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useConformity" | "useTheme" | "useViewport"> = {
+  useCommand, useQuery, useStore, useRouter, useKey, useConformity, useViewport, useTheme: useModuleTheme,
 };

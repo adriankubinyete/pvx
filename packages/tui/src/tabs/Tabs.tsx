@@ -15,10 +15,11 @@ import { useTheme } from "../theme-context.tsx";
 import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { fitBar } from "./bar.ts";
+import { createDiaryNav, DiaryTab, PLAN_TAB, type DiaryNav } from "./DiaryTab.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 
-const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", logs: "Logs", comando: "Comando" };
+const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", diario: "Diário", logs: "Logs", comando: "Comando" };
 /** Tabs that show a core command's output (the id is also the command). */
 const CORE: readonly TabId[] = ["logs"];
 
@@ -32,6 +33,7 @@ export interface TabsNav {
   /** Módulos: the module menu. */
   menu: MenuNav;
   home: HomeNav;
+  diary: DiaryNav;
   /** Last result of each core command tab (Logs): memory only, for the TUI session. */
   core: CoreCache;
   /** Comando input draft: memory only (a secret never goes in the line; it goes through the modal). */
@@ -39,7 +41,7 @@ export interface TabsNav {
   /** Modules with commits upstream (background check, memory only). */
   updates: Pending[];
 }
-export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), core: {}, draft: "", updates: [] });
+export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), diary: createDiaryNav(), core: {}, draft: "", updates: [] });
 
 function Tab({ label, errors, behind, active, focused, onPick }: { label: string; errors: number; behind: number; active: boolean; focused: boolean; onPick: () => void }) {
   const { c, g } = useTheme();
@@ -111,12 +113,12 @@ export function Tabs({ store, registry, nav, version, profile, modules }: { stor
   const visited = useRef(new Set<TabId>());
   if (pageTab) visited.current.add(active);
   // A tab with nothing to select never holds focus.
-  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
+  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id === "diario" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
   const step = (d: number) => {
     const id = ids[(ids.indexOf(active) + d + ids.length) % ids.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
   };
-  useScreenScope(nav.bar ? "tabs" : pageTab ? pageScope(pageTab.page) : active === "comando" ? "session" : active === "inicio" ? "home" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
+  useScreenScope(nav.bar ? "tabs" : pageTab ? pageScope(pageTab.page) : active === "comando" ? "session" : active === "inicio" ? "home" : active === "diario" ? "diario" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
   useKeys((k) => {
     if (matchKey(k, "tab")) return step(1), true;
     if (matchKey(k, "shift+tab")) return step(-1), true;
@@ -140,7 +142,8 @@ export function Tabs({ store, registry, nav, version, profile, modules }: { stor
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} tabs={bar} active={active} version={version} onPick={(id) => update({ active: id, bar: true })} />
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} slots={registry.slots} /> : null}
+          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} /> : null}
+          {active === "diario" ? <DiaryTab nav={nav} planTab={modTabs.some((t) => t.id === PLAN_TAB)} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}

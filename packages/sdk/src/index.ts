@@ -9,6 +9,7 @@ export interface Manifest {
   /** Host semver range. */
   pvx?: string;
   applies?: { file?: string };
+  /** `fs` entries may start with `$PVX_HOME`, expanded by the host. */
   permissions?: { exec?: string[]; net?: string[]; fs?: string[] };
   contributes?: { commands?: string[]; pages?: string[]; widgets?: string[]; capabilities?: string[] };
   /** Modules this one queries via ctx.query. */
@@ -40,6 +41,8 @@ export interface CommandDef {
   destructive?: boolean;
   /** Name of one of this module's pages: opened after the command runs ok. */
   page?: string;
+  /** Only reads: runs without root (the host's strict-root rule skips it). Never set it on a command that mutates central data. */
+  readonly?: boolean;
   run(ctx: CommandCtx): void | Promise<void>;
 }
 
@@ -52,6 +55,10 @@ export interface ArgSpec {
   secret?: boolean;
   /** Completion candidates. */
   values?: string[];
+  /** Positional only, free text: when missing and stdin is not a TTY, the value is read from stdin (`echo txt | pvx nota add`); extra words on the line are joined into it. */
+  stdin?: boolean;
+  /** Option only: may be given several times; the module receives the values joined by a comma. */
+  repeat?: boolean;
 }
 
 export interface CommandCtx {
@@ -99,6 +106,8 @@ export interface ModuleFs {
   write(path: string, data: string): Promise<void>;
   exists(path: string): Promise<boolean>;
   list(path: string): Promise<string[]>;
+  /** One write call with O_APPEND (file mode 0644 when created): concurrent appenders never interleave a line. Needs `rw:`. */
+  append(path: string, text: string): Promise<void>;
 }
 
 /** Read-only view of the home slots: the last collected data, never re-evaluated. `undefined` until something fills it. */
@@ -165,6 +174,8 @@ export interface Sdk {
   version: 1;
   log: Logger;
   ui: SdkUi;
+  /** Same permission rules as `ctx.fs`, for code that has no command context (queries, widgets). */
+  fs: ModuleFs;
 }
 
 // ---- Pages and widgets (UI) ----
@@ -187,6 +198,14 @@ export interface KeySpec {
 }
 
 export type Level = "ok" | "warn" | "error";
+
+export interface FieldSpec {
+  id: string;
+  label: string;
+  kind: "area" | "line" | "toggle";
+  /** Rows of an `area` (default 5). */
+  rows?: number;
+}
 
 /**
  * Home slots. The data shape of each slot is fixed by the core; a widget that returns another shape is removed as broken.
@@ -286,14 +305,24 @@ export interface SdkUi {
   Meter: Component<{ value: number; width?: number; label?: string }>;
   KeyHint: Component<{ keys: string; label: string }>;
   Table: Component<{ columns: string[]; rows: string[][] }>;
-  /** Display list; `selected` is an item id. */
-  List: Component<{ items: { id: string; label: string; detail?: string; tone?: Tone }[]; selected?: string }>;
+  /** Display list; `selected` is an item id. `mark` is a short colored prefix (an unread dot). */
+  List: Component<{ items: { id: string; label: string; detail?: string; tone?: Tone; mark?: { text: string; tone: Tone } }[]; selected?: string }>;
   /** Form of one of the module's commands (generated from its ArgSpec). enter runs it; esc cancels. */
   Form: Component<{ command: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
   Spacer: Component<{ size?: number }>;
+  /**
+   * An editable form: `area` (multiline), `line` (one line) and `toggle` (space marks) fields. It owns the keyboard
+   * while mounted: tab/shift+tab move between fields, ctrl+s calls `onSubmit` with every value, esc calls `onCancel`.
+   */
+  Fields: Component<{
+    fields: FieldSpec[];
+    initial?: Record<string, string | boolean>;
+    onSubmit: (values: Record<string, string | boolean>) => void;
+    onCancel: () => void;
+  }>;
 
   /** Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. */
-  useCommand(line: string): { run(): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
+  useCommand(line: string): { run(opts?: { args?: string[]; stdin?: string }): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
   /** Calls `ctx.query`-style: `useQuery("module.name", ...args)`. Re-runs when name or args change. */
   useQuery<T = unknown>(name: string, ...args: unknown[]): { data?: T; error?: string; loading: boolean };
   /** This module's own store (one state.json). */
@@ -307,6 +336,8 @@ export interface SdkUi {
   useKey(keys: string, label: string, handler: () => void): void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
+  /** Terminal size in cells: a page has no scroll, so a long list windows itself by it. */
+  useViewport(): { cols: number; rows: number };
   /** Color tokens (`c`) and glyphs (`g`) of the active theme. */
   useTheme(): { c: Readonly<Record<string, string>>; g: Readonly<Record<string, string>> };
 }

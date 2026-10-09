@@ -35,7 +35,7 @@ async function gone(t: TuiHarness, msg: string) {
 
 test("↓ from the bar on a tab with nothing selectable nudges and the notice expires", async () => {
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); // Módulos, Logs
+  await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); // Módulos, Diário, Logs
   expect(footer(t)).not.toContain("nada aqui");
   await t.press("ARROW_DOWN");
   await gone(t, "nada aqui");

@@ -1,5 +1,6 @@
 import { lstatSync, realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { auditModule } from "../diary/audit.ts";
 import { logsDir, pvxHome } from "../engine/paths.ts";
 import { createLogger } from "../logs/index.ts";
 import { readJson, writeJsonAtomic } from "./trust.ts";
@@ -15,11 +16,12 @@ export const msg = (e: unknown) => (e as Error).message ?? String(e);
 export const matchSha = (head: string, given: string) => given.length >= 7 && head.startsWith(given.toLowerCase());
 export const isLink = (dir: string) => lstatSync(dir).isSymbolicLink();
 
-/** The single call point of the diário (Fase 6): approve, revoke, remove, enable, disable, link, update all go through here to core.log. */
+/** The single call point of the diário: approve, revoke, remove, enable, disable, link, update go to core.log and to audit.jsonl (`module`). */
 export function audit(m: string): void {
   try {
     createLogger(logsDir(), "core").info(m);
   } catch {}
+  auditModule(m);
 }
 
 // ---- modules.json: `disabled` ids and the `dev` links (the only way a symlink loads)

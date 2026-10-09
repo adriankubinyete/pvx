@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
-import { execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
+import { auditCommand, execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
 
 export const MAX_BLOCKS = 500;
 const MAX_HISTORY = 500;
@@ -33,7 +33,7 @@ export interface SessionApi {
   readonly blocks: readonly Block[];
   readonly history: readonly string[];
   /** Never rejects: a throw becomes an error block. `!!` runs the last history entry. */
-  run(line: string, opts?: { secrets?: Record<string, string> }): Promise<{ exit: number }>;
+  run(line: string, opts?: { secrets?: Record<string, string>; stdin?: string }): Promise<{ exit: number }>;
   /** Runs a core command on the side: no block, no history (the core tabs). Same root rule as `run`. */
   capture(line: string): Promise<{ exit: number; lines: CoreLine[] }>;
   /** Re-runs a block; a secret is asked again through the modal. */
@@ -112,7 +112,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
       set({ pending: [...state.pending, { ...q, id } as Pending] });
     });
 
-  async function run(raw: string, ro: { secrets?: Record<string, string> } = {}): Promise<{ exit: number }> {
+  async function run(raw: string, ro: { secrets?: Record<string, string>; stdin?: string } = {}): Promise<{ exit: number }> {
     let line = raw.trim();
     if (line === "!!") line = lastRaw ?? state.history.at(-1) ?? "";
     if (!line) return { exit: 0 };
@@ -148,7 +148,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
               makeLogger,
               confirmed,
               env: ro.secrets ? { ...process.env, ...secretEnv(ro.secrets) } : undefined,
-              readStdin: async () => "",
+              readStdin: async () => ro.stdin ?? "",
               promptSecret: (name) => ask<string | undefined>({ kind: "secret", name }),
             });
         ({ exit, lines } = r);
@@ -177,7 +177,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     try {
       if (!isRoot) r = { exit: 1, lines: [{ kind: "error", text: rootMessage() }] };
       else if (o.confirm && !(await ask<boolean>({ kind: "confirm", cmd: line }))) r = { exit: 1, lines: [{ kind: "warning", text: "cancelado" }] };
-      else r = await fn();
+      else (r = await fn()), auditCommand({ line, exit: r.exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // only what actually ran
     } catch (e) {
       r = { exit: 1, lines: [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }] };
     }

@@ -1,5 +1,6 @@
 import { EXIT, type Logger, type OutLine } from "@pvx/sdk";
 import { fg, setColorEnabled } from "../ansi.ts";
+import { auditCommand, lineOf, type DiaryEntry } from "../diary/index.ts";
 import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
@@ -50,6 +51,10 @@ export interface CoreLine extends OutLine {
   step?: PlanStep;
   /** `modules` listing only: the row, with its `state` (JSON mode only shows it). */
   module?: ModuleRow;
+  /** `diario` only: the entry this line shows (JSON mode only shows it). */
+  entry?: DiaryEntry;
+  /** `conformidade` only: ISO instant until which this pending item is ignored. */
+  ignored?: string;
 }
 
 export interface Output {
@@ -68,10 +73,12 @@ export function formatLine(l: OutLine, theme: Palette): string {
 
 const findCore = (argv: string[]) => [...CORE].reverse().find((c) => c.key.split(" ").every((w, i) => argv[i] === w));
 
-/** Strict root, one rule for the CLI and the TUI: every module command needs uid 0; core commands only if they write (`root`). */
+/** Strict root, one rule for the CLI and the TUI: every module command needs uid 0 unless it is `readonly`; core commands only if they write (`root`). */
 export const requiresRoot = (registry: Registry, argv: string[]): boolean => {
   const core = findCore(argv);
-  return core ? Boolean(core.root) : Boolean(resolveCommand(registry, argv));
+  if (core) return Boolean(core.root);
+  const found = resolveCommand(registry, argv);
+  return Boolean(found) && !found!.cmd.readonly;
 };
 export const rootMessage = () => `grava em ${pvxHome()}: rode com sudo`;
 
@@ -86,7 +93,7 @@ export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}) }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}), ...(l.entry ? { entry: l.entry } : {}), ...(l.ignored ? { ignored: l.ignored } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;
@@ -132,7 +139,10 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
     if (!io.isRoot && requiresRoot(io.registry, argv)) return fail(EXIT.ERROR, rootMessage());
     const core = findCore(argv);
     if (core) {
-      return o.finish(await core.run({ io, o, rest: argv.slice(core.key.split(" ").length), json, yes }));
+      const t0 = Date.now();
+      const exit = await core.run({ io, o, rest: argv.slice(core.key.split(" ").length), json, yes });
+      auditCommand({ line: lineOf(argv), exit, ms: Date.now() - t0, destructive: false }, { mutation: core.root }); // `root` = writes PVX_HOME
+      return o.finish(exit);
     }
 
     const found = resolveCommand(io.registry, argv);
@@ -146,7 +156,7 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
       makeLogger: io.makeLogger,
       confirmed,
       env: io.env,
-      readStdin: io.readStdin,
+      readStdin: io.isTTY ? undefined : io.readStdin,
       promptSecret: io.isTTY ? io.askSecret : undefined,
     });
     res.lines.forEach((l) => o.line(l));

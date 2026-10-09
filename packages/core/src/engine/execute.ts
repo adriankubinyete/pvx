@@ -1,5 +1,6 @@
 import { EXIT } from "@pvx/sdk";
 import type { Logger, OutLine } from "@pvx/sdk";
+import { auditCommand, lineOf } from "../diary/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
 import { createGranted } from "./permissions.ts";
 import { resolveCommand, type Registry } from "./registry.ts";
@@ -43,6 +44,7 @@ export async function execute(registry: Registry, input: string | string[], opts
   const log = opts.makeLogger(cmd.moduleId);
   log.info(`run ${key} ${JSON.stringify(masked)}`);
   const lines: OutLine[] = [];
+  const t0 = Date.now();
   const add = (kind: OutLine["kind"]) => (text: string) => void lines.push({ kind, text });
   try {
     await cmd.run({
@@ -59,5 +61,7 @@ export async function execute(registry: Registry, input: string | string[], opts
     lines.push({ kind: "error", text: `erro interno no comando: ${(e as Error).message ?? e}` });
   }
   const failed = lines.some((l) => l.kind === "error");
+  // Masked by construction: `parseArgs` refuses a secret in argv (it comes from stdin, env or the prompt), so the line has none.
+  auditCommand({ line: lineOf(argv), exit: failed ? EXIT.ERROR : EXIT.OK, ms: Date.now() - t0, destructive: Boolean(cmd.destructive) });
   return { ok: !failed, exit: failed ? EXIT.ERROR : EXIT.OK, lines, masked };
 }

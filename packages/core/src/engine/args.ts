@@ -7,6 +7,7 @@ export type ParseResult =
 
 export interface ParseOpts {
   env?: Record<string, string | undefined>;
+  /** Without it a `stdin` positional is never read (a TTY has nothing to pipe). Secrets fall back to the real stdin. */
   readStdin?: () => Promise<string>;
   /** CLI hook (TTY only). Returning undefined means "no secret". */
   promptSecret?: (name: string) => Promise<string | undefined>;
@@ -26,6 +27,12 @@ export async function parseArgs(specs: ArgSpec[] = [], argv: string[], opts: Par
     const a = argv[i]!;
     if (!a.startsWith("--") || a === "--") {
       const spec = positionals[pi++];
+      const rest = positionals.at(-1);
+      // The free-text positional (`stdin`) takes the remaining words, so `nota add texto sem aspas` works.
+      if (!spec && rest?.stdin && typeof args[rest.name] === "string") {
+        args[rest.name] += ` ${a}`;
+        continue;
+      }
       // A secret typed as a positional lands here: never echo the value back.
       if (!spec) return fail(`argumento inesperado${specs.some((s) => s.secret) ? "" : `: \`${a}\``}`);
       args[spec.name] = a;
@@ -46,12 +53,21 @@ export async function parseArgs(specs: ArgSpec[] = [], argv: string[], opts: Par
       return fail(`segredo \`--${name}\` não vai por argumento; use \`--${name}-stdin\` ou ${envName(name)}`);
     }
     if (spec.kind === "flag") args[name] = true;
-    else if (eq >= 0) args[name] = a.slice(eq + 1);
-    else if (i + 1 < argv.length) args[name] = argv[++i];
-    else return fail(`falta o valor de \`--${name}\``);
+    else {
+      let v: string;
+      if (eq >= 0) v = a.slice(eq + 1);
+      else if (i + 1 < argv.length) v = argv[++i]!;
+      else return fail(`falta o valor de \`--${name}\``);
+      const prev = args[name];
+      args[name] = spec.repeat && typeof prev === "string" ? `${prev},${v}` : v;
+    }
   }
   const secrets = new Set<string>();
   for (const s of specs) {
+    if (s.stdin && s.kind === "positional" && !args[s.name] && opts.readStdin) {
+      const v = (await opts.readStdin()).replace(/\r?\n$/, "");
+      if (v) args[s.name] = v;
+    }
     if (s.secret) {
       secrets.add(s.name);
       let v: string | undefined;
@@ -59,7 +75,7 @@ export async function parseArgs(specs: ArgSpec[] = [], argv: string[], opts: Par
       else v = env[envName(s.name)] ?? (await opts.promptSecret?.(s.name));
       if (v) args[s.name] = v;
     }
-    if (s.required && args[s.name] === undefined) {
+    if (s.required && (args[s.name] === undefined || (s.stdin && args[s.name] === ""))) {
       const shown = s.kind === "positional" ? `<${s.name}>` : `--${s.name}`;
       return fail(`falta o argumento \`${shown}\``, s.secret ? s.name : undefined);
     }

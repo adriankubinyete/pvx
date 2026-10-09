@@ -303,6 +303,11 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão), e devolve `{ code, stdout, stderr }`. |
 | `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. |
 | `ctx.fs.read / write / exists / list` | O caminho (resolvido, com symlinks) fica sob um prefixo de `permissions.fs`. O prefixo `rw:` libera escrita; sem ele, só leitura. O diretório de estado do próprio módulo é sempre permitido. |
+| `ctx.fs.append(path, texto)` | Mesma regra de `rw:`. Uma única chamada de escrita com `O_APPEND` (arquivo criado com modo 0644): dois processos acrescentando linhas ao mesmo arquivo nunca as misturam. |
+
+`$PVX_HOME` vale em `permissions.fs` e nos caminhos de `ctx.fs` (o host o expande). Fora de um comando (consultas, widgets) use `sdk.fs`, que segue as mesmas regras.
+
+Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário com `area`, `line` e `toggle`; `ctrl+s` envia, `esc` cancela), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
 
 <!-- test -->
 ```ts

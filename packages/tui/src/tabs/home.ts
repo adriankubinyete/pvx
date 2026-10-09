@@ -41,15 +41,18 @@ export interface Conformity {
   pending: Pending[];
   /** Titles of the items that are ok. */
   okItems: string[];
+  /** Pending items someone ignored for 24 h (text already says "ignorado até HH:MM"). */
+  ignored: string[];
 }
 
 /** Reads the `conformidade` output: `perfil: X`, one line per capability, then the summary. No `perfil:` line means no result to show. */
 export function parseConformity(r: CoreResult): Conformity {
   if (!r.lines.some((l) => l.kind === "info" && l.text.startsWith("perfil: ")))
-    return { message: r.lines[0]?.text ?? "sem resultado", ok: 0, total: 0, pending: [], okItems: [] };
+    return { message: r.lines[0]?.text ?? "sem resultado", ok: 0, total: 0, pending: [], okItems: [], ignored: [] };
   const items = r.lines.filter((l) => l.kind === "success" || l.kind === "warning" || l.kind === "error");
   const pending = items.filter((l) => l.kind !== "success").map((l): Pending => ({ id: l.text, level: l.kind === "error" ? "error" : "warn", text: l.text, fix: l.fix }));
-  return { ok: items.length - pending.length, total: items.length, pending, okItems: items.filter((l) => l.kind === "success").map((l) => l.text) };
+  const ignored = r.lines.filter((l) => l.ignored).map((l) => l.text);
+  return { ok: items.length - pending.length, total: items.length + ignored.length, pending, okItems: items.filter((l) => l.kind === "success").map((l) => l.text), ignored };
 }
 
 export interface Activity {

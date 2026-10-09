@@ -21,7 +21,9 @@ const LEVEL = { success: "ok", warning: "warn", error: "error" } as const;
 
 /** The module-facing view of a snapshot (everything but `refresh` and `apply`). */
 export function conformityView({ conformidade, plano, running }: ConformitySnap): Omit<Conformity, "refresh" | "apply"> {
-  const results = (conformidade?.lines ?? []).flatMap((l): ConformityResult[] => (l.kind in LEVEL ? [{ level: LEVEL[l.kind as keyof typeof LEVEL], text: l.text, fix: l.fix }] : []));
+  // An ignored item is a warning without a fix: its text already says "ignorado até HH:MM".
+  const results = (conformidade?.lines ?? []).flatMap((l): ConformityResult[] =>
+    l.ignored ? [{ level: "warn", text: l.text }] : l.kind in LEVEL ? [{ level: LEVEL[l.kind as keyof typeof LEVEL], text: l.text, fix: l.fix }] : []);
   const profile = conformidade?.lines.find((l) => l.kind === "info" && l.text.startsWith("perfil: "))?.text.slice("perfil: ".length);
   // Without a profile the only line is the command's own warning: it is the message, not a result.
   const message = conformidade && !profile ? conformidade.lines[0]?.text ?? "sem resultado" : undefined;
