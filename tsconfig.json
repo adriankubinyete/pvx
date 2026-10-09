@@ -18,5 +18,5 @@
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true
   },
-  "include": ["packages", "apps", "spikes", "test"]
+  "include": ["packages", "apps", "test"]
 }
