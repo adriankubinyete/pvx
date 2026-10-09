@@ -219,7 +219,7 @@ test("layout at 80x24 and 120x40: last block, input and footer stay visible", as
     expect(lines.filter((l) => l.trim()).at(-1)).toContain("ctrl+k palette");
     await t.press("ESCAPE");
     await t.press("?");
-    expect(t.frame()).toContain("ctrl+j"); // the last row of the longest column
+    expect(t.frame()).toContain("o rodapé mostra"); // the last row of the help
     expect(t.frame()).toContain("esc fecha");
     await t.press("ESCAPE");
     await t.press("k", { ctrl: true });

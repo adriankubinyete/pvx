@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadTuiState, tuiStatePath } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { App, footerFor, glyphs, matchKey, shortcuts, ThemeProvider, useKeys, useRouter, useTheme, type Screen } from "../src/index.ts";
+import { App, footerFor, glyphs, helpFor, matchKey, shortcuts, ThemeProvider, useKeys, useRouter, useTheme, type Screen } from "../src/index.ts";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -49,15 +49,16 @@ test("esc pops one level; ctrl+c exits through onExit", async () => {
   expect(exited).toBe(1);
 });
 
-test("? help lists every shortcut, owns the keyboard, and covers the footer", async () => {
+test("? help lists its scope's rows and the global ones, owns the keyboard, and covers the footer", async () => {
   const t = await mount();
   await t.press("p");
   const footer = t.frame();
   for (const s of footerFor("session")) expect(footer).toContain(`${s.keys} ${s.label}`);
   await t.press("?");
   const help = t.frame();
-  for (const s of shortcuts) expect(help).toContain(s.keys), expect(help).toContain(s.label);
-  expect(shortcuts.filter((s) => s.footer).every((s) => help.includes(s.keys))).toBe(true);
+  for (const s of helpFor("session")) expect(help).toContain(s.keys), expect(help).toContain(s.label);
+  expect(help).not.toContain("↓/enter"); // tabs rows belong to another scope
+  for (const scope of new Set(shortcuts.map((s) => s.scope))) for (const s of footerFor(scope)) expect(helpFor(scope)).toContain(s);
   await t.press("ESCAPE"); // closes help only: the modal owned the key, so no pop
   expect(t.frame()).toContain("tela filha");
   expect(t.frame()).not.toContain("esc fecha");

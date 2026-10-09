@@ -1,4 +1,4 @@
-import { footerFor, shortcuts, type Scope, type Shortcut } from "./keymap.ts";
+import { footerFor, helpFor, type Scope, type Shortcut } from "./keymap.ts";
 import { useKeys } from "./keys.tsx";
 import { useTheme } from "./theme-context.tsx";
 
@@ -25,36 +25,21 @@ export function Footer({ scope }: { scope: Scope }) {
   );
 }
 
-const titles: Record<Scope, string> = { global: "geral", menu: "módulos", home: "início", tabs: "abas", session: "sessão", block: "", palette: "palette", form: "formulário", result: "resultado", log: "log", search: "busca", modal: "pergunta" };
-
-/** Two columns, so every scope fits in 80x24 (the block rows sit under "sessão", with no title of their own). */
-const columns: Scope[][] = [["session", "block", "menu", "form", "result", "log"], ["palette", "global", "home", "tabs", "search", "modal"]];
-
-/** The `?` overlay: every shortcut in the table, by scope. A modal: it owns the keyboard. */
-export function HelpOverlay({ onClose }: { onClose: () => void }) {
+/** The `?` overlay: every row of the footer's current scope plus the global ones (a short list, so it always fits 80x24). A modal: it owns the keyboard. */
+export function HelpOverlay({ scope, onClose }: { scope: Scope; onClose: () => void }) {
   const { c, box, g } = useTheme();
   useKeys((k) => {
     if (k.name === "escape" || k.sequence === "?" || k.name === "q") onClose();
   }, { modal: true });
   return (
     <box position="absolute" top={0} left={2} zIndex={10} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)} title={`${g.active} ajuda · esc fecha`}>
-      <box flexDirection="row" gap={2} flexShrink={0}>
-        {columns.map((col) => (
-          <box key={col[0]} flexDirection="column" flexShrink={0}>
-            {col.map((scope) => (
-              <box key={scope} flexDirection="column" flexShrink={0}>
-                {titles[scope] ? <text fg={c.dim}>{titles[scope]}</text> : null}
-                {shortcuts.filter((s) => s.scope === scope).map((s) => (
-                  <text key={s.keys}>
-                    <span fg={c.accent}><b>{s.keys.padEnd(11)}</b></span>
-                    <span fg={c.text}>{s.label}</span>
-                  </text>
-                ))}
-              </box>
-            ))}
-          </box>
-        ))}
-      </box>
+      {helpFor(scope).map((s) => (
+        <text key={s.scope + s.keys}>
+          <span fg={c.accent}><b>{s.keys.padEnd(11)}</b></span>
+          <span fg={c.text}>{s.label}</span>
+        </text>
+      ))}
+      <text fg={c.dim}>o rodapé mostra só as teclas principais</text>
     </box>
   );
 }

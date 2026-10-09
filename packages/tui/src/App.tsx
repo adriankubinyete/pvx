@@ -38,7 +38,7 @@ function Frame({ palette }: Pick<AppProps, "palette">) {
       {n ? <text fg={n.color} flexShrink={0}>{`${n.marker} ${notice}`}</text> : null}
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <ScreenOutlet />
-        {help ? <HelpOverlay onClose={() => setHelp(false)} /> : null}
+        {help ? <HelpOverlay scope={scope} onClose={() => setHelp(false)} /> : null}
         {palette ? <PaletteHost {...palette} /> : null}
       </box>
       <Footer scope={scope} />

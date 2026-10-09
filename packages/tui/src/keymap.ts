@@ -8,7 +8,7 @@ export interface Shortcut {
   keys: string;
   label: string;
   scope: Scope;
-  /** Shown in the footer line (while its scope is active). Always listed in the `?` help. */
+  /** Shown in the footer line (while its scope is active). Rows without it still show in the `?` help for their scope. */
   footer?: boolean;
   /** Shown in the action row under the focused block. */
   hint?: boolean;
@@ -68,6 +68,10 @@ export const shortcuts: readonly Shortcut[] = [...new Map([...base, ...paletteSh
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] =>
   [...shortcuts.filter((s) => s.footer && s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.footer && s.scope === "global")];
+
+/** Help rows: all rows of the scope (footer or not), then the global ones. */
+export const helpFor = (scope: Scope): Shortcut[] =>
+  [...shortcuts.filter((s) => s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.scope === "global")];
 
 /** Inline hint text from table rows: `hintText("session", "tab", "enter")` -> `tab completa · enter roda`. */
 export const hintText = (scope: Scope, ...keys: string[]) =>

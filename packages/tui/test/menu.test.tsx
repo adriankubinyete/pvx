@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { App, buildRoot, createSessionStore, createTabsNav, footerFor, itemsAt, Tabs, theme } from "../src/index.ts";
+import { App, buildRoot, createSessionStore, createTabsNav, footerFor, helpFor, itemsAt, KeyRouter, Tabs, theme, ThemeProvider, type Scope } from "../src/index.ts";
+import { HelpOverlay } from "../src/Shortcuts.tsx";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -378,4 +379,54 @@ test("every tab content and pushed screen uses the same title convention", async
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos─/);
+});
+
+/** The help is fully visible at 80x24: title, first row, last row (the hint), and no row cut by the frame. */
+const seeHelp = (t: TuiHarness, scope: Scope) => {
+  const f = t.frame();
+  const lines = f.split("\n");
+  expect(f, scope).toContain("ajuda · esc fecha");
+  expect(f, scope).toContain("o rodapé mostra só as teclas principais");
+  for (const s of helpFor(scope)) expect(f, `${scope} ${s.keys}`).toContain(s.label);
+  expect(lines.some((l) => l.includes("╰")), scope).toBe(true); // bottom border is on screen
+  for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
+};
+
+test("? help fits 80x24 from every main context and esc returns to the same focus", async () => {
+  const m = await mount({ cols: 80, rows: 24, modules: true });
+  const t = m.t;
+  const check = async (scope: Scope, footerKey: string) => {
+    const before = t.frame();
+    await t.press("?");
+    seeHelp(t, scope);
+    await t.press("ESCAPE");
+    await t.flush();
+    expect(t.frame()).not.toContain("ajuda · esc fecha");
+    expect(t.frame(), scope).toBe(before);
+    expect(t.frame().split("\n").filter((l) => l.trim()).at(-1)).toContain(footerKey);
+  };
+  await check("menu", "tab abas"); // Módulos list
+  await t.press("ARROW_UP"); // first row -> bar
+  await check("tabs", "↓/enter entra na aba");
+  await t.press("TAB", { shift: true });
+  await check("tabs", "↓/enter entra na aba"); // bar on Início
+  await t.press("ARROW_DOWN");
+  await check("home", "r atualiza");
+  await t.type("/demo greet ana"); // `/` goes to Comando
+  await t.press("RETURN");
+  await t.flush();
+  await t.press("ESCAPE"); // empty input -> last block
+  await check("block", "r repetir");
+});
+
+/**
+ * A focused text field (form field, Comando input, palette query) types `?` instead of opening help,
+ * so those scopes are checked by rendering the overlay itself.
+ */
+test("help overlay of the text-input scopes fits 80x24", async () => {
+  for (const scope of ["home", "menu", "form", "session", "palette", "block", "tabs"] as const) {
+    h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><HelpOverlay scope={scope} onClose={() => {}} /></KeyRouter></ThemeProvider>, { cols: 80, rows: 24 });
+    seeHelp(h, scope);
+    h.destroy();
+  }
 });
