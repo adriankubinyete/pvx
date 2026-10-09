@@ -35,8 +35,8 @@ async function mount(opts: { cols?: number; rows?: number; registry?: Registry }
   return h;
 }
 const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
-/** Tabs from Início to the module tab `Demo` (the 7th), bar focused. */
-const toDemo = async (t: TuiHarness) => { for (let i = 0; i < 6; i++) await t.press("TAB"); };
+/** Tabs from Início to the module tab `Demo` (the 5th), bar focused. */
+const toDemo = async (t: TuiHarness) => { for (let i = 0; i < 4; i++) await t.press("TAB"); };
 
 test("a page opens from the palette # scope; its useState updates on its key; the key is in the footer and in ?", async () => {
   const t = await mount();
@@ -58,7 +58,7 @@ test("a page opens from the palette # scope; its useState updates on its key; th
 
 test("#name works from the Comando input when the name is unique; an unknown page is an error block", async () => {
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); // Comando
+  await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); // Comando
   await t.press("ARROW_DOWN");
   await t.type("#counter");
   await t.press("RETURN");
@@ -72,7 +72,7 @@ test("#name works from the Comando input when the name is unique; an unknown pag
 
 test("a command with `page` opens it after running, and the page runs its module's command through the session", async () => {
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); await t.press("TAB");
+  await t.press("TAB"); await t.press("TAB"); await t.press("TAB");
   await t.press("ARROW_DOWN");
   await t.type("ui-demo status");
   await t.press("RETURN");
@@ -138,7 +138,7 @@ test("a module tab that throws shows the error inline and the tab bar keeps work
   const t = await mount({ registry: reg });
   const err = console.error;
   console.error = () => {};
-  for (let i = 0; i < 6; i++) await t.press("TAB");
+  for (let i = 0; i < 4; i++) await t.press("TAB");
   console.error = err;
   expect(t.frame()).toContain('página "P" falhou: tab quebrou');
   expect(logs.join("\n")).toContain("tab quebrou");
@@ -199,7 +199,7 @@ test("the tab bar overflows at 80 columns with a › and scrolls with ←/→", 
 
 test("esc from a focused block goes up to the tab bar (input -> blocks -> bar); down past the last block returns to the input", async () => {
   const t = await mount();
-  for (let i = 0; i < 5; i++) await t.press("TAB"); // Comando
+  for (let i = 0; i < 3; i++) await t.press("TAB"); // Comando
   await t.press("ARROW_DOWN");
   await t.type("#nope");
   await t.press("RETURN");
@@ -212,4 +212,50 @@ test("esc from a focused block goes up to the tab bar (input -> blocks -> bar); 
   await t.press("ESCAPE"); // block -> bar
   expect(t.frame()).not.toContain("» #nope");
   expect(lastLine(t)).toContain("↓/enter entra na aba");
+});
+
+const openCounter = async (t: TuiHarness) => {
+  await t.press("k", { ctrl: true });
+  await t.type("#ui-demo.counter");
+  await t.press("RETURN");
+};
+
+test("useKey: a reserved key is ignored; PageDef.keys still works and a throwing key goes to the module log", async () => {
+  const t = await mount();
+  await openCounter(t);
+  expect(lastLine(t)).toContain("x falha"); // static key and useKey keys share the footer
+  expect(lastLine(t)).toContain("space soma 1");
+  expect(lastLine(t)).not.toContain("nunca"); // `esc` registered by useKey: reserved
+  await t.press("x");
+  expect(logs.join("\n")).toContain('tecla "x" da página "ui-demo.counter" falhou: Error: tecla quebrou');
+  expect(t.frame()).toContain("n = 0"); // still on the page
+  await t.press("ESCAPE"); // the host's esc, not the page's: pops
+  expect(t.frame()).toContain("Início");
+});
+
+test("useKey rows are removed when the page closes: a second visit shows each key once", async () => {
+  const t = await mount();
+  await openCounter(t);
+  await t.press("?");
+  expect(t.frame()).toContain("soma 1");
+  expect(t.frame()).not.toContain("nunca");
+  await t.press("ESCAPE");
+  await t.press("ESCAPE");
+  await openCounter(t); // a fresh mount: no duplicated rows
+  expect(lastLine(t).match(/soma 1/g)).toHaveLength(1);
+});
+
+test("a pushed page shows one border: the host frame, titled › name; the root Panel adds none", async () => {
+  const t = await mount();
+  await openCounter(t);
+  const f = t.frame();
+  expect(f.split("\n").filter((l) => l.includes("╭"))).toHaveLength(1);
+  expect(f.split("\n").filter((l) => l.includes("╰"))).toHaveLength(1);
+  expect(f).toContain("› Contador");
+  expect(f).not.toContain("› contador"); // the Panel's own title is gone
+  expect(f).toContain("n = 0");
+  await t.press("ESCAPE");
+  await toDemo(t); // the same rule in a page tab
+  await t.press("ARROW_DOWN");
+  expect(t.frame().split("\n").filter((l) => l.includes("╭"))).toHaveLength(1);
 });

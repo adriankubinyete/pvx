@@ -1,12 +1,13 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createStore, resolveCommand, tokenize, type Registry } from "@pvx/core";
-import type { CommandRun, Logger, SdkUi } from "@pvx/sdk";
+import type { CommandRun, Conformity, KeySpec, Logger, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
+import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useTheme } from "../theme-context.tsx";
 
 /** What the page hooks need from the host. Provided once by `App` (`pages` prop). */
 export interface PageDeps {
-  session: Pick<SessionApi, "run" | "subscribe" | "getSnapshot" | "onPage" | "answer">;
+  session: Pick<SessionApi, "run" | "capture" | "subscribe" | "getSnapshot" | "onPage" | "answer">;
   registry: Registry;
   makeLogger: (name: string) => Logger;
 }
@@ -19,8 +20,12 @@ export interface HostPage {
   deps: PageDeps;
   push(name: string): void;
   pop(): void;
+  /** Adds a key to the page (`useKey`); returns the remover. Reserved keys are ignored. */
+  addKey(spec: KeySpec): () => void;
 }
 export const HostCtx = createContext<HostPage | null>(null);
+/** True at the page root: a `Panel` there is the page's own frame (the host's border and title), not a second border. */
+export const RootPanelCtx = createContext(false);
 
 export function useHost(): HostPage {
   const h = useContext(HostCtx);
@@ -82,11 +87,26 @@ function useRouter() {
   return { push, pop };
 }
 
+/** Pages call it in render, so `handler` closes over the component state; the host registers it while mounted. */
+function useKey(keys: string, label: string, handler: () => void) {
+  const { addKey } = useHost();
+  const latest = useRef(handler);
+  latest.current = handler;
+  useEffect(() => addKey({ keys, label, run: () => latest.current() }), [addKey, keys, label]);
+}
+
+function useConformity(): Conformity {
+  const { deps } = useHost();
+  const store = conformityOf(deps.session);
+  const snap = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  return useMemo(() => ({ ...conformityView(snap), refresh: store.refresh, apply: store.apply }), [snap, store]);
+}
+
 function useModuleTheme() {
   const { c, g } = useTheme();
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useTheme"> = {
-  useCommand, useQuery, useStore, useRouter, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useConformity" | "useTheme"> = {
+  useCommand, useQuery, useStore, useRouter, useKey, useConformity, useTheme: useModuleTheme,
 };

@@ -1,4 +1,5 @@
-import { footerFor, helpFor, type Scope, type Shortcut } from "./keymap.ts";
+import { useSyncExternalStore } from "react";
+import { footerFor, helpFor, rowsRev, subscribeRows, type Scope, type Shortcut } from "./keymap.ts";
 import { useKeys } from "./keys.tsx";
 import { useTheme } from "./theme-context.tsx";
 
@@ -18,6 +19,7 @@ function Keys({ list, gap }: { list: Shortcut[]; gap: string }) {
 
 /** Footer shortcut line for the active scope, rendered from the shortcut table. */
 export function Footer({ scope }: { scope: Scope }) {
+  useSyncExternalStore(subscribeRows, rowsRev); // a page's `useKey` rows come and go
   return (
     <box height={1} flexShrink={0}>
       <Keys list={footerFor(scope)} gap="   " />
@@ -28,6 +30,7 @@ export function Footer({ scope }: { scope: Scope }) {
 /** The `?` overlay: every row of the footer's current scope plus the global ones (a short list, so it always fits 80x24). A modal: it owns the keyboard. */
 export function HelpOverlay({ scope, onClose }: { scope: Scope; onClose: () => void }) {
   const { c, box, g } = useTheme();
+  useSyncExternalStore(subscribeRows, rowsRev);
   useKeys((k) => {
     if (k.name === "escape" || k.sequence === "?" || k.name === "q") onClose();
   }, { modal: true });

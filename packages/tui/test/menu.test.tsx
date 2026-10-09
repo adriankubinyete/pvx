@@ -109,9 +109,9 @@ test("a command with args opens the form and shows the result; a secret field st
 test("a core tab runs once on the first visit, then only on r; it leaves no block and no history", async () => {
   const { t, store } = await mount();
   await t.press("TAB"); // Módulos
-  await t.press("TAB"); // Conformidade
+  await t.press("TAB"); // Logs
   await t.flush();
-  expect(t.frame()).toContain("› conformidade");
+  expect(t.frame()).toContain("› logs");
   expect(t.frame()).toMatch(/verificado às \d\d:\d\d/);
   expect(store.history).toEqual([]);
   expect(store.blocks).toEqual([]);
@@ -129,7 +129,7 @@ test("a core tab runs once on the first visit, then only on r; it leaves no bloc
 test("switching tabs keeps focus on the bar (down goes in); the Comando draft survives a tab switch", async () => {
   const { t } = await mount();
   await t.press("ARROW_UP");
-  for (let i = 0; i < 5; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
+  for (let i = 0; i < 3; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
   expect(t.frame()).toContain("tab próxima aba");
   const inputRow = () => t.frame().split("\n").find((l) => l.includes("❯"))!;
   expect(inputRow()).not.toContain("▌");
@@ -190,20 +190,14 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   expect(t.frame()).toContain("› conformidade");
   await t.press("TAB");
   expect(t.frame()).toContain("› módulos");
-  await t.press("TAB");
-  await t.press("TAB");
-  await t.press("TAB");
+  await t.press("TAB"); // Logs
   await t.press("TAB");
   expect(t.frame()).toContain("tab completa"); // Comando
   await t.press("TAB", { shift: true });
   expect(t.frame()).toContain("› logs");
-  await t.press("TAB"); // wraps from Comando
-  await t.press("TAB", { shift: true });
-  await t.press("TAB", { shift: true });
-  await t.press("TAB", { shift: true });
-  await t.press("TAB", { shift: true });
-  await t.press("TAB", { shift: true });
-  expect(t.frame()).toContain("› conformidade");
+  await t.press("TAB"); // Comando
+  await t.press("TAB"); // wraps to Início
+  expect(t.frame()).toContain("› conformidade"); // the Início panel
 });
 
 test("tabs: up on the first row focuses the bar, right switches at once, down enters the first row", async () => {
@@ -217,7 +211,7 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
   expect(t.frame()).toMatch(/» /);
   expect(t.frame()).toContain("↑↓ move");
   await t.press("ARROW_UP");
-  await t.press("ARROW_RIGHT"); // Conformidade has nothing to select
+  await t.press("ARROW_RIGHT"); // Logs has nothing to select
   await t.press("ARROW_DOWN");
   expect(t.frame()).toContain("tab próxima aba");
 });
@@ -259,7 +253,7 @@ test("tabs: Módulos shows the load error count and the bar fits 80 columns", as
   expect(n).toBeGreaterThan(1);
   const bar = t.frame().split("\n")[0]!;
   expect(bar).toContain(`Módulos ✗${n}`);
-  for (const l of ["Início", "Conformidade", "Plano", "Logs", "Comando"]) expect(bar).toContain(l);
+  for (const l of ["Início", "Logs", "Comando"]) expect(bar).toContain(l);
   expect(bar.length).toBeLessThanOrEqual(80);
   expect(bar).toContain("0.1.0"); // host and version fit on the right
 });
@@ -289,7 +283,7 @@ async function openForm() {
 test("form frame: the bar row is intact and the panel title sits whole on the next row", async () => {
   const t = await openForm();
   const [bar, top] = t.frame().split("\n");
-  for (const l of ["Início", "Módulos", "Conformidade", "Plano", "Logs", "Comando", "0.1.0"]) expect(bar).toContain(l);
+  for (const l of ["Início", "Módulos", "Logs", "Comando", "0.1.0"]) expect(bar).toContain(l);
   expect(bar).not.toMatch(/[╭╮─│]/);
   expect(top).toMatch(/^ ╭─› net ip accept─+╮/);
 });
@@ -301,7 +295,7 @@ test("form footer comes from the form scope: no tab bar hint, and every key show
   expect(foot).not.toContain("tab abas");
   expect(t.frame()).not.toContain("tab campo ·"); // no inline hint line: the footer is the only place
   await t.type("x");
-  expect(t.frame()).toContain("x_");
+  expect(t.frame()).toMatch(/addr\*\s+x/);
   await t.press("k", { ctrl: true }); // ctrl+k palette
   expect(t.frame()).toContain("fila vazia");
   await t.press("ESCAPE");
@@ -367,10 +361,10 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expectScope("menu");
   expect(t.frame()).toMatch(/» /);
   await t.press("ARROW_UP");
-  await t.press("TAB"); // Conformidade: nothing to select, enter does nothing
+  await t.press("TAB"); // Logs: nothing to select, enter does nothing
   await t.press("RETURN");
   expect(foot()).toContain("troca aba");
-  expect(t.frame().split("\n")[1]).toContain("› conformidade");
+  expect(t.frame().split("\n")[1]).toContain("› logs");
 });
 
 test("every tab content and pushed screen uses the same title convention", async () => {

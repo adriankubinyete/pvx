@@ -1,8 +1,9 @@
-import { Children, type ReactNode } from "react";
+import { Children, useContext, type ReactNode } from "react";
 import type { Component, SdkUi, Tone } from "@pvx/sdk";
 import { clean } from "../palette/search.ts";
 import { levelOf, meter } from "../tabs/home.ts";
 import { useTheme } from "../theme-context.tsx";
+import { RootPanelCtx } from "./host.tsx";
 import type { Tokens } from "../theme.ts";
 
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
@@ -11,12 +12,19 @@ const tone = (c: Tokens, t: Tone = "text") => ({ ok: c.accent, warn: c.warn, err
 /** Module text never carries ANSI or control characters into `<text>`. */
 const textOf = (children: unknown) => clean(Children.toArray(children as ReactNode).map(String).join(""));
 
+/**
+ * A Panel at the page root is the page's own frame: the host already draws the border and the `› title`, so it draws
+ * neither (a second border would nest inside the first). A Panel inside another Panel keeps its border and title.
+ */
 export function Panel({ title, tone: t, children }: Props<"Panel">) {
   const { c, g, box } = useTheme();
+  const atRoot = useContext(RootPanelCtx);
   return (
-    <box flexDirection="column" flexShrink={0} paddingX={1} {...box(t ? tone(c, t) : undefined)} title={title ? `${g.query} ${clean(title)}` : undefined}>
-      {children as ReactNode}
-    </box>
+    <RootPanelCtx.Provider value={false}>
+      <box flexDirection="column" flexShrink={0} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
+        {children as ReactNode}
+      </box>
+    </RootPanelCtx.Provider>
   );
 }
 

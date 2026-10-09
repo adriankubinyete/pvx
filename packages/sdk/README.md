@@ -176,8 +176,8 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id), `Form` (formulário gerado do `ArgSpec` de um comando do módulo) e `Spacer`.
-- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)`; `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useTheme()` (cores `c` e glifos `g`).
+- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id), `Form` (formulário gerado do `ArgSpec` de um comando do módulo) e `Spacer`.
+- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)`; `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
 
 Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança "UI indisponível na CLI": por isso componentes só rodam dentro de `render()`.
@@ -188,8 +188,9 @@ Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança
 
 - `render()` devolve JSX e roda dentro do componente da página: pode chamar hooks. Se lançar, o host registra o erro, volta e avisa; o resto não é afetado.
 - Abre-se por `#<módulo>.<nome>` (ou `#<nome>`, se for único), na palette (`ctrl+k`, escopo `#`) ou no campo de comando; ou por um comando com `page`.
-- `keys`: lista de `{ keys, label, run }`. Aparecem no rodapé e no `?` enquanto a página está aberta. Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`. Reservadas (ignoradas): `esc`, `?`, `ctrl+c`, `ctrl+k`.
-- **Limite atual:** `run()` de uma tecla não enxerga o estado do componente. O padrão é guardar o setter numa variável da fábrica, no exemplo abaixo (`bump`). Uma tecla que lança vai para o log do módulo.
+- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`. Reservadas (ignoradas): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
+- `keys` em `PageDef` (`{ keys, label, run }[]`) continua valendo para teclas que não precisam do estado do componente; entram na mesma tabela de atalhos.
+- **Moldura.** O host desenha a borda da página e o título `› <title>`. Um `Panel` na raiz da página é só o conteúdo (sem borda e sem título): assim a página mostra uma moldura só. Para seções dentro da página, ponha `Panel` dentro de outro `Panel`: os internos têm borda e título.
 
 **Aba.** `tab: true` ou `tab: { label, order }` põe a página também na barra de abas, depois das abas do núcleo, ordenada por `order` e depois por rótulo. A aba visitada continua montada enquanto a tela de abas existe.
 
@@ -201,12 +202,11 @@ Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança
 import type { CommandCtx, Sdk } from "@pvx/sdk";
 
 export default (sdk: Sdk) => {
-  const { h, Panel, Text, KeyHint, useState, useCommand, useQuery } = sdk.ui;
+  const { h, Panel, Text, KeyHint, useState, useCommand, useQuery, useKey } = sdk.ui;
 
-  let bump: (() => void) | undefined;
   function Contador() {
     const [n, setN] = useState(0);
-    bump = () => setN((v) => v + 1);
+    useKey("space", "soma 1", () => setN((v) => v + 1));
     const status = useCommand("doc status");
     const q = useQuery<string>("doc.estado");
     return (
@@ -226,13 +226,44 @@ export default (sdk: Sdk) => {
       contador: {
         title: "Contador",
         render: () => <Contador />,
-        keys: [{ keys: "space", label: "soma 1", run: () => bump?.() }],
         tab: { label: "Contador", order: 10 },
       },
     },
   };
 };
 ```
+
+**Conformidade na UI.** `useConformity()` devolve o cache de conformidade do host, o **mesmo** que o painel do Início mostra: `{ profile?, message?, results, plan: { steps, manual }, checkedAt?, running, refresh(), apply(confirm) }`. É só leitura: o hook nunca avalia sozinho (a primeira visita chama `refresh()`; `r` em qualquer tela atualiza o cache de todas). `results` traz `{ level, text, fix? }`; `plan.steps` traz `{ cmd, for, implicit, reason?, optIn? }` na ordem de execução; `message` aparece quando não há perfil aplicável. `apply(confirm)` aplica o plano como comandos comuns pela sessão (scrollback, histórico e log): o host congela uma cópia dos passos, chama `confirm(passo)` antes de cada um (`"yes"`, `"skip"` ou `"stop"`) e para no primeiro erro ou em `"stop"`. O módulo continua dono da tela: ele deve mostrar a lista que congelou, não a viva. O motor (perfis, avaliação, ordenação) é do host; a CLI `pvx conformidade`, `pvx plano` e `pvx plano apply` não mudam.
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, Panel, Text, useEffect, useConformity, useKey } = sdk.ui;
+
+  function Resumo() {
+    const c = useConformity();
+    useEffect(() => {
+      if (!c.checkedAt) c.refresh();
+    }, []);
+    useKey("r", "atualiza", c.refresh);
+    return (
+      <Panel>
+        <Text tone="dim">{c.running ? "verificando…" : `${c.results.length} itens, ${c.plan.steps.length} passos`}</Text>
+        {c.results.map((r, i) => <Text key={i} tone={r.level}>{r.text}</Text>)}
+      </Panel>
+    );
+  }
+
+  return { pages: { resumo: { title: "Resumo", render: () => <Resumo />, tab: { label: "Resumo", order: 20 } } } };
+};
+```
+
+**Módulos embutidos.** O pvx traz módulos oficiais dentro do binário (`packages/builtin/<id>/`): são escritos exatamente como um usermodule (manifest, entrada, pragma clássico, só `import type` do SDK), mas confiáveis e sem git. O host os carrega por uma lista estática (`packages/builtin/index.ts`), porque o binário compilado não acha um `import()` de caminho dinâmico. Aparecem com `◆` em Módulos. O `conformidade` é um deles: as abas Conformidade e Plano.
 
 **Widget.** `widgets` mapeia um nome para `{ slot, priority, refreshMs?, data }` e preenche uma região da tela inicial (um *slot*). O núcleo desenha; o módulo só entrega dados, na forma fixa de cada slot:
 

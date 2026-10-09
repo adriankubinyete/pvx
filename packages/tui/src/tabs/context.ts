@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-export const TAB_IDS = ["inicio", "modulos", "conformidade", "plano", "logs", "comando"] as const;
+export const TAB_IDS = ["inicio", "modulos", "logs", "comando"] as const;
 export type CoreTabId = (typeof TAB_IDS)[number];
 /** A core tab, or `page:<module>.<page>` for a tab a module contributes. */
 export type TabId = CoreTabId | `page:${string}`;

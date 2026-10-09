@@ -37,6 +37,7 @@ const base: readonly Shortcut[] = [
   { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
   { keys: "ctrl+k", label: "palette", scope: "tabs", footer: true },
   { keys: "r", label: "atualiza", scope: "tabs" }, // core tabs only (conformidade, plano, logs); shown inline there, not in the footer
+  { keys: "←→", label: "cursor", scope: "session" },
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
   { keys: "!!", label: "repete", scope: "session", footer: true },
@@ -51,6 +52,7 @@ const base: readonly Shortcut[] = [
   { keys: "enter", label: "envia", scope: "modal" },
   { keys: "esc", label: "cancela", scope: "modal" },
   { keys: "tab", label: "campo", scope: "form", footer: true },
+  { keys: "←→", label: "cursor", scope: "form", footer: true },
   { keys: "space", label: "marca", scope: "form", footer: true },
   { keys: "enter", label: "roda", scope: "form", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "form", footer: true },
@@ -68,8 +70,24 @@ export const shortcuts: readonly Shortcut[] = [...new Map([...base, ...paletteSh
 
 /** Rows a module's page adds to its own scope (`page:<key>`): the table stays the one source for footer and help. */
 const pageRows = new Map<Scope, Shortcut[]>();
+/** Rows of `useKey`, added while the calling component is mounted. */
+const dynRows = new Map<Scope, Set<Shortcut>>();
+const listeners = new Set<() => void>();
+let rev = 0;
+const touch = () => (rev++, listeners.forEach((f) => f()));
+/** Changes when a page row is added or removed: the footer and `?` re-render on it. */
+export const rowsRev = () => rev;
+export const subscribeRows = (fn: () => void) => (listeners.add(fn), () => void listeners.delete(fn));
+/** The page's static rows. Called while rendering, before the footer renders: no notification (a setState there is an error). */
 export const setPageRows = (scope: Scope, rows: Shortcut[]) => void pageRows.set(scope, rows);
-const rowsOf = (scope: Scope) => [...shortcuts, ...(pageRows.get(scope) ?? [])];
+/** Adds one row; returns the remover. */
+export function addPageRow(scope: Scope, row: Shortcut): () => void {
+  const set = dynRows.get(scope) ?? dynRows.set(scope, new Set()).get(scope)!;
+  set.add(row);
+  touch();
+  return () => (set.delete(row), touch());
+}
+const rowsOf = (scope: Scope) => [...shortcuts, ...(pageRows.get(scope) ?? []), ...(dynRows.get(scope) ?? [])];
 
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] =>

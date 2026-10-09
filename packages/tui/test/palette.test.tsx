@@ -116,21 +116,48 @@ test("form shows required *, masks the secret and keeps it out of the line and t
   expect(b.argv.join(" ") + b.display).not.toContain("s3cr3t");
 });
 
-test("→ enters the args of the selected command, ← returns to the same command (only from an empty field)", async () => {
+test("→ enters the args; the cursor edits in place and ← at the start returns to the same command", async () => {
   await open(fake().session);
   await h!.type(">login");
   await h!.press("ARROW_RIGHT");
   expect(h!.frame()).toMatch(/» token\*/); // first field has focus
-  await h!.type("ab");
-  await h!.press("ARROW_LEFT"); // text in the field and no cursor movement: stays
-  expect(h!.frame()).toMatch(/» token\*/);
-  await h!.press("BACKSPACE");
-  await h!.press("BACKSPACE");
+  await h!.type("abc");
   await h!.press("ARROW_LEFT");
+  await h!.press("ARROW_LEFT");
+  await h!.type("X");
+  expect(h!.frame()).toMatch(/» token\* ●●●●/); // secret: masked, cursor moved, 4 chars
+  expect(h!.frame()).toMatch(/» token\*/);
+  await h!.press("HOME");
+  await h!.press("ARROW_LEFT"); // crossing the start: back to the list
   expect(h!.frame()).not.toMatch(/» token\*/);
   expect(h!.frame()).toContain("$ pvx demo login"); // same command still selected
   await h!.press("ARROW_RIGHT");
   expect(h!.frame()).toMatch(/» token\*/);
+});
+
+test("palette form: a plain field shows aXbc after abc, ←, ←, X", async () => {
+  await open(fake().session);
+  await h!.type(">greet");
+  await h!.press("ARROW_RIGHT");
+  await h!.type("abc");
+  await h!.press("ARROW_LEFT");
+  await h!.press("ARROW_LEFT");
+  await h!.type("X");
+  expect(h!.frame()).toMatch(/aXbc/);
+  expect(h!.frame()).toContain("$ pvx demo greet aXbc");
+  await h!.press("HOME");
+  await h!.press("ARROW_LEFT");
+  expect(h!.frame()).toContain("$ pvx demo greet aXbc"); // same command selected
+  expect(h!.frame()).not.toMatch(/» who/);
+});
+
+test("palette query: ← and → move the cursor and do not leave the query", async () => {
+  await open(fake().session);
+  await h!.type(">gret");
+  await h!.press("ARROW_LEFT");
+  await h!.press("ARROW_LEFT");
+  await h!.type("e");
+  expect(h!.frame()).toContain("› >greet");
 });
 
 test("→ on a command without args shows a hint", async () => {

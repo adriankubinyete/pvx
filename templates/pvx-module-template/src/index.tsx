@@ -6,17 +6,16 @@ import type { ModuleFactory } from "@pvx/sdk";
 
 const factory: ModuleFactory = (sdk) => {
   // A fábrica só monta o objeto do módulo: nada de I/O, rede ou exec aqui.
-  const { h, Panel, Text, KeyHint, useStore, useState } = sdk.ui;
+  const { h, Panel, Text, KeyHint, useStore, useState, useKey } = sdk.ui;
 
-  // `run()` de uma tecla não enxerga o estado do componente: a página entrega o setter por esta variável.
-  let saudar: (() => void) | undefined;
   function Painel() {
     const store = useStore();
     const [nome, setNome] = useState(() => store.get<string>("nome"));
-    saudar = () => {
+    // `useKey` roda no render: o handler enxerga o estado do componente.
+    useKey("s", "saúda o mundo", () => {
       store.set("nome", "mundo");
       setNome("mundo");
-    };
+    });
     return (
       <Panel title="exemplo">
         <Text tone={nome ? "ok" : "dim"}>{nome ? `olá, ${nome}` : "ninguém foi saudado"}</Text>
@@ -48,7 +47,7 @@ const factory: ModuleFactory = (sdk) => {
       },
     ],
     pages: {
-      painel: { title: "Exemplo", render: () => <Painel />, keys: [{ keys: "s", label: "saúda o mundo", run: () => saudar?.() }] },
+      painel: { title: "Exemplo", render: () => <Painel /> },
     },
   };
 };

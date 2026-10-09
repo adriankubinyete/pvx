@@ -22,6 +22,7 @@ const Row = memo(function Row({ item, selected, helpW, onHover, onPick }: RowPro
           {item.errorOf ? <span fg={c.error}>{`${g.error} `}</span> : null}
           <span fg={item.errorOf ? c.error : c.text}>{cut(item.label, LABEL_W - 6)}</span>
           {item.destructive ? <span fg={c.error}>{" !"}</span> : null}
+          {item.official ? <span fg={c.accent}>{` ${g.official}`}</span> : null}
         </text>
       </box>
       <text fg={c.dim}>{cut(item.help, helpW)}</text>

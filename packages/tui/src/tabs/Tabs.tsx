@@ -16,9 +16,9 @@ import { fitBar } from "./bar.ts";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 
-const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", conformidade: "Conformidade", plano: "Plano", logs: "Logs", comando: "Comando" };
+const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", logs: "Logs", comando: "Comando" };
 /** Tabs that show a core command's output (the id is also the command). */
-const CORE: readonly TabId[] = ["conformidade", "plano", "logs"];
+const CORE: readonly TabId[] = ["logs"];
 
 /** Which tab is open and who has the keyboard. Outside the components: the active tab is the only one mounted. */
 export interface TabsNav {
@@ -30,7 +30,7 @@ export interface TabsNav {
   /** Módulos: the module menu. */
   menu: MenuNav;
   home: HomeNav;
-  /** Last result of each core tab: memory only, for the TUI session. */
+  /** Last result of each core command tab (Logs): memory only, for the TUI session. */
   core: CoreCache;
   /** Comando input draft: memory only (a secret never goes in the line; it goes through the modal). */
   draft: string;

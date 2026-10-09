@@ -18,6 +18,8 @@ export interface Registry {
   /** Key = "<module>.<name>". */
   pages: Map<string, RegisteredPage>;
   modules: Map<string, Manifest>;
+  /** Ids of the modules that ship with pvx (marked ◆). */
+  official: Set<string>;
   /** Widgets of every module, collected per home slot. */
   slots: SlotHub;
   errors: LoadError[];
@@ -34,6 +36,7 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     capabilities: [],
     pages: new Map(),
     modules: new Map(),
+    official: new Set(),
     slots: createSlotHub(opts.slots),
     errors: [],
     register(manifest, def) {

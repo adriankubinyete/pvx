@@ -3,6 +3,7 @@ import { fg, setColorEnabled } from "../ansi.ts";
 import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
+import type { PlanStep } from "../plan/index.ts";
 import { CORE } from "./core.ts";
 import { pathHelp, rootHelp } from "./help.ts";
 
@@ -40,6 +41,8 @@ export interface CliIO {
 /** An output line that may carry the command that fixes it (conformidade; JSON mode only shows it). */
 export interface CoreLine extends OutLine {
   fix?: string;
+  /** `plano` only: the step this line lists (JSON mode only shows it). */
+  step?: PlanStep;
 }
 
 export interface Output {
@@ -76,7 +79,7 @@ export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}) }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;

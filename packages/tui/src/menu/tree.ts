@@ -14,6 +14,8 @@ export interface Item {
   /** Args of the command: any of them opens the form. */
   args?: ArgSpec[];
   destructive?: boolean;
+  /** A module that ships with pvx (◆). */
+  official?: boolean;
   errorOf?: string;
 }
 
@@ -54,7 +56,7 @@ export function buildRoot(registry: Registry): Item[] {
     const entries = [...registry.commands]
       .filter(([, cmd]) => cmd.moduleId === id)
       .map(([key, cmd]) => ({ key, cmd, path: key.split(" ").slice(1).filter(Boolean) }));
-    return { id: `m:${id}`, label: id, help: `${registry.modules.get(id)?.version ?? ""} carregado · ${plural(entries.length)}`, children: group(id, entries, 0) };
+    return { id: `m:${id}`, label: id, official: registry.official.has(id), help: `${registry.modules.get(id)?.version ?? ""} carregado · ${plural(entries.length)}`, children: group(id, entries, 0) };
   });
   return modules;
 }

@@ -17,6 +17,12 @@ export interface Manifest {
 
 export type ModuleFactory = (sdk: Sdk) => ModuleDef;
 
+/** A module that ships inside pvx (official, trusted, no git): its manifest and factory, listed by the host's static barrel. */
+export interface BuiltinModule {
+  manifest: Manifest;
+  factory: ModuleFactory;
+}
+
 export interface ModuleDef {
   /** Key = command path with spaces: "ip trust-phonevox". */
   commands?: Record<string, CommandDef>;
@@ -171,11 +177,58 @@ export type Tone = "ok" | "warn" | "error" | "info" | "accent" | "dim" | "text";
 export interface Kids {
   children?: unknown;
 }
-export type Component<P> = (props: P) => unknown;
+/** `key` is accepted on every component: lists of elements need it. */
+export type Component<P> = (props: P & { key?: string | number }) => unknown;
 
 export interface CommandRun {
   exit: number;
   lines: OutLine[];
+}
+
+/** One line of the `conformidade` result. */
+export interface ConformityResult {
+  level: Level;
+  /** `<capability title>: <proof text>`. */
+  text: string;
+  /** Command that fixes it, when there is one. */
+  fix?: string;
+}
+/** One step of the convergence plan, in the order it must run. */
+export interface ConformityStep {
+  cmd: string;
+  /** Capability ids the step serves. */
+  for: string[];
+  /** Added only because an earlier step affects its target. */
+  implicit: boolean;
+  reason?: string;
+  /** Never applied without an explicit yes. */
+  optIn?: boolean;
+}
+export type StepAnswer = "yes" | "skip" | "stop";
+export interface StepOutcome {
+  step: ConformityStep;
+  status: "ok" | "error" | "skipped";
+  code?: number;
+}
+
+/** The host's cached conformity: the same data the Início panel shows. */
+export interface Conformity {
+  /** Title of the applicable profile. */
+  profile?: string;
+  /** Set when there is nothing to list (no applicable profile): show it as is. */
+  message?: string;
+  results: ConformityResult[];
+  plan: { steps: ConformityStep[]; /** Pending items with no `fix`. */ manual: string[] };
+  /** When the cache was filled (ms); undefined until the first check. */
+  checkedAt?: number;
+  running: boolean;
+  /** Re-evaluates (results and plan together); a no-op while running. */
+  refresh(): void;
+  /**
+   * Applies the plan as ordinary commands through the session (scrollback, history, log). A frozen copy of the steps runs
+   * in order: `confirm` is asked before each one; stops at the first error or at "stop".
+   */
+  apply(confirm: (step: ConformityStep) => StepAnswer | Promise<StepAnswer>): Promise<StepOutcome[]>;
 }
 
 export interface SdkUi {
@@ -209,6 +262,13 @@ export interface SdkUi {
   useStore(): Store;
   /** Pages of this module only: `push("name")`, `pop()`. */
   useRouter(): { push(page: string): void; pop(): void };
+  /**
+   * Adds a key to the page while the calling component is mounted. Call it in render: `handler` closes over the
+   * component state. The key joins the footer and `?`. Reserved (ignored): esc, ?, ctrl+c, ctrl+k.
+   */
+  useKey(keys: string, label: string, handler: () => void): void;
+  /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
+  useConformity(): Conformity;
   /** Color tokens (`c`) and glyphs (`g`) of the active theme. */
   useTheme(): { c: Readonly<Record<string, string>>; g: Readonly<Record<string, string>> };
 }

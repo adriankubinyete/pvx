@@ -1,0 +1,6 @@
+{
+  "id": "conformidade",
+  "version": "1.0.0",
+  "entry": "src/index.tsx",
+  "contributes": { "pages": ["conformidade", "plano"] }
+}

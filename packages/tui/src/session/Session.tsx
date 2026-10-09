@@ -3,6 +3,9 @@ import { useRenderer } from "@opentui/react";
 import { createClipboard, createHostClipboard, createRendererClipboardAdapter, type ScrollBoxRenderable } from "@opentui/core";
 import type { Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
+import { editLine } from "../lineedit.ts";
+import { LineText } from "../LineText.tsx";
+import { useLayout } from "../layout.ts";
 import { useKeys } from "../keys.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { useTabs } from "../tabs/context.ts";
@@ -45,10 +48,13 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const { blocks, history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [input, setInputRaw] = useState(draft?.draft ?? "");
   // The draft lives outside the component (memory only): the tab switch unmounts this screen.
-  const setInput = useCallback((v: string) => (setInputRaw(v), draft && (draft.draft = v)), [draft]);
+  // Cursor in code points (`Infinity` = end, clamped on use). Any text set from outside typing (recall, completion, history) lands at the end.
+  const [cur, setCur] = useState(Infinity);
+  const setInput = useCallback((v: string) => (setInputRaw(v), setCur(Infinity), draft && (draft.draft = v)), [draft]);
   const [hi, setHi] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
-  const [search, setSearch] = useState<string | null>(null);
+  const [search, setSearchRaw] = useState<string | null>(null);
+  const setSearch = (v: string | null) => (setSearchRaw(v), setCur(Infinity));
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [fb, setFb] = useState<number | null>(null); // focused block, by id
@@ -88,10 +94,15 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
 
   const pick = useCallback((b: Block) => setFb(b.id), []);
 
-  const edit = (f: (s: string) => string) => {
-    if (searching) setSearch(f(search));
-    else setInput(f(input)), setHi(null);
-    setSel(0);
+  const buffer = searching ? search : input;
+  const cursor = Math.min(cur, [...buffer].length);
+  const edit = (text: string, at: number) => {
+    if (text !== buffer) {
+      if (searching) setSearchRaw(text);
+      else setInputRaw(text), setHi(null), draft && (draft.draft = text);
+      setSel(0);
+    }
+    setCur(at);
   };
   const submit = () => {
     const line = input;
@@ -151,14 +162,16 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       if (!searching && hi !== null) browse(hi + 1 < history.length ? hi + 1 : null);
       return true;
     }
-    if (k.name === "backspace") return edit((s) => [...s].slice(0, -1).join("")), true;
     if (k.sequence === "?" && !input && !searching) return;
-    if (printable(k.sequence) && !k.ctrl && !k.meta) return edit((s) => s + k.sequence), true;
+    const r = editLine({ text: buffer, cursor }, k);
+    if (r) return edit(r.text, r.cursor), true; // ←/→ at the edges are a no-op here
+
   });
 
   const hint = note ?? (searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
   const inputFocused = !barFocused && !focus;
-  const typed = searching ? `(busca) ${search}` : input;
+  const { cols } = useLayout();
+  const room = Math.max(10, cols - 12 - [...hint].length - (searching ? 8 : 0));
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom" focused={false} contentOptions={{ gap: 1 }}>
@@ -168,8 +181,8 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(inputFocused ? c.accent : undefined)}>
         <text>
           <span fg={inputFocused ? c.accent : c.dim}><b>{`${g.prompt} `}</b></span>
-          {typed || inputFocused ? <span fg={c.text}>{typed}</span> : <span fg={c.dim}>digite um comando</span>}
-          {inputFocused ? <span bg={c.accent}>{" "}</span> : null}
+          {searching ? <span fg={c.text}>(busca) </span> : null}
+          {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} /> : <span fg={c.dim}>digite um comando</span>}
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>

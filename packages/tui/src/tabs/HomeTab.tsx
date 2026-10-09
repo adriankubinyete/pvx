@@ -10,7 +10,8 @@ import { usePages } from "../sdk-ui/host.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
-import { hhmm, refreshCore } from "./CoreTab.tsx";
+import { hhmm } from "./CoreTab.tsx";
+import { conformityOf } from "./conformity.ts";
 import { activity, fmtUptime, levelOf, meter, parseConformity, relTime, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
@@ -98,8 +99,10 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
   const ip = useMemo(primaryIp, []);
 
   const color = { ok: c.accent, warn: c.warn, error: c.error };
-  const cache = nav.core.conformidade;
-  const done = typeof cache === "object" ? parseConformity(cache) : undefined;
+  const conf = conformityOf(store); // the cache module pages read too
+  const snap = useSyncExternalStore(conf.subscribe, conf.getSnapshot);
+  const checked = snap.conformidade;
+  const done = checked ? parseConformity(checked) : undefined;
   syncHost(slots, done); // the profile's items go through the same slots the modules use
   const mark = (l: Att["level"]): [string, string] => (l === "error" ? [g.error, c.error] : l === "warn" ? [g.warn, c.warn] : [g.ok, c.dim]);
   const attention = slotItems<Att>(slots, "home.attention");
@@ -128,7 +131,7 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
     nav.draft = r.use;
     tabs?.goto("comando");
   };
-  const refresh = () => (refreshCore(store, nav.core, "conformidade", bump), void slots.refresh());
+  const refresh = () => (conf.refresh(), void slots.refresh());
 
   useKeys((k) => {
     if (!focused) return;
@@ -170,7 +173,7 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
       <text wrapMode="none" flexShrink={0}>
         {profile ? <span fg={c.accent}>{`perfil ${profile}`}</span> : <span fg={c.dim}>sem perfil</span>}
       </text>
-      {cache === "running" ? <text fg={c.dim} flexShrink={0}>verificando…</text>
+      {snap.running ? <text fg={c.dim} flexShrink={0}>verificando…</text>
         : !done ? <text fg={c.dim} flexShrink={0}>não verificado · r verifica</text>
         : done.message ? <text fg={c.dim} flexShrink={0}>{cut(clean(done.message), confW - 4)}</text>
         : (
@@ -180,7 +183,7 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
               <span fg={attention.length ? worst : c.accent}>{cf}</span>
               <span fg={c.dim}>{ce}</span>
             </text>
-            <text fg={c.dim} wrapMode="none" flexShrink={0}>{`verificado às ${hhmm((cache as { at: number }).at)} · ${hintText("home", "r")}`}</text>
+            <text fg={c.dim} wrapMode="none" flexShrink={0}>{`verificado às ${hhmm(checked!.at)} · ${hintText("home", "r")}`}</text>
           </>
         )}
       <Rows rows={rows.conformidade} sel={cur("conformidade")?.id} focused={focused && nav.home.panel === "conformidade"} w={confW - 4} onPick={(r) => (select("conformidade", r.id), use(r))} />

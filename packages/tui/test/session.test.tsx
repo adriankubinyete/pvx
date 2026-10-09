@@ -138,13 +138,33 @@ test("a secret typed in the modal never reaches the frame, history or logs", asy
   expect(t.frame()).toContain("token:");
   await t.type("hunter2zz");
   expect(t.frame()).not.toContain("hunter2zz");
-  expect(t.frame()).toContain("*********");
+  expect(t.frame()).toContain("●●●●●●●●●");
+  await t.press("ARROW_LEFT");
+  await t.press("ARROW_LEFT");
+  await t.type("Q");
+  expect(t.frame()).toContain("●●●●●●●●●●");
+  expect(t.frame()).not.toContain("hunter2zz");
   await t.press("RETURN");
   await t.flush();
-  expect(t.frame()).toContain("token com 9 chars");
+  expect(t.frame()).toContain("token com 10 chars");
   expect(t.frame()).not.toContain("hunter2zz");
   const files = [historyPath(), ...readdirSync(logsDir()).map((f) => join(logsDir(), f))];
   for (const f of files) expect(readFileSync(f, "utf8")).not.toContain("hunter2zz");
+});
+
+test("Comando input: move the cursor, insert in the middle, enter runs the edited line", async () => {
+  const t = await mount();
+  await t.type("demo greet ok");
+  for (let i = 0; i < 2; i++) await t.press("ARROW_LEFT");
+  await t.type("Z");
+  await t.press("END");
+  await t.type("!");
+  await t.press("HOME");
+  await t.press("DELETE");
+  expect(t.frame()).toContain("emo greet Zok!");
+  await t.press("RETURN");
+  await t.flush();
+  expect(t.frame()).toContain("emo greet Zok!");
 });
 
 test("full flow without mouse: type, complete, run, fail, repeat, palette, queue two, run them", async () => {

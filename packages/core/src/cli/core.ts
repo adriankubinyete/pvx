@@ -111,7 +111,7 @@ export const CORE: CoreCommand[] = [
         const { steps, manual } = buildPlan(r.results);
         steps.forEach((s, i) => {
           const tags = [s.implicit && `implícito: ${s.reason}`, s.optIn && "opt-in"].filter(Boolean).join("; ");
-          o.line({ kind: "plain", text: `${i + 1}. ${s.cmd}${tags ? ` (${tags})` : ""} para ${s.for.join(", ")}` });
+          o.line({ kind: "plain", text: `${i + 1}. ${s.cmd}${tags ? ` (${tags})` : ""} para ${s.for.join(", ")}`, step: s });
         });
         for (const m of manual) o.line({ kind: "warning", text: `manual: ${m.title}: ${m.text}` });
         if (!steps.length && !manual.length) o.line({ kind: "success", text: "nada a fazer" });

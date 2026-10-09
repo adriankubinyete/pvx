@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import type { Logger, Manifest, ModuleDef, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
+import type { BuiltinModule, Logger, Manifest, ModuleDef, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
 import { readManifest } from "./manifest.ts";
 import { usermodulesDir } from "./paths.ts";
 import type { Registry } from "./registry.ts";
@@ -20,12 +20,22 @@ export interface LoadOpts {
   makeLogger: (name: string) => Logger;
   /** `sdk.ui` for the factories (the TUI package builds it; core has no React). Default: calls throw "UI indisponível". */
   ui?: SdkUi;
+  /** Modules that ship with pvx (the app's static barrel): registered first, trusted, official. Not read from disk. */
+  builtin?: readonly BuiltinModule[];
   /** Trust hook (Fase 4 plugs in here). Default: allow everything. Return false to refuse the import. */
   canImport?: (dir: string, manifest: Manifest) => boolean | Promise<boolean>;
 }
 
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */
 export async function loadModules(registry: Registry, opts: LoadOpts): Promise<void> {
+  for (const { manifest, factory } of opts.builtin ?? []) {
+    try {
+      registry.register(manifest, factory({ version: 1, log: opts.makeLogger(manifest.id), ui: opts.ui ?? unavailableUi }));
+      registry.official.add(manifest.id);
+    } catch (e) {
+      registry.addError(manifest.id, (e as Error).message);
+    }
+  }
   const root = usermodulesDir();
   if (!existsSync(root)) return;
   for (const id of readdirSync(root).sort()) {

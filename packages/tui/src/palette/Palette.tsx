@@ -2,6 +2,8 @@ import { memo, useCallback, useMemo, useState, useSyncExternalStore, type ReactN
 import { resolveCommand, tokenize, type Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { matchKey } from "../keymap.ts";
+import { editLine } from "../lineedit.ts";
+import { LineText } from "../LineText.tsx";
 import { useLayout } from "../layout.ts";
 import { useFooterScope } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
@@ -54,8 +56,6 @@ const Row = memo(function Row({ id, hit, selected, fav, onPick }: RowProps) {
   );
 });
 
-const printable = (s: string) => s.length === 1 && s >= " " && s !== "\x7f";
-
 /** Overlay opened by ctrl+k. Modal: owns the keyboard. Backdrop and dialog are siblings (opacity pitfall). */
 export function Palette({ session, registry, onClose, favoritesFile }: PaletteProps) {
   const { c, g, box } = useTheme();
@@ -64,6 +64,9 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   // A queued command may ask (confirm, secret) while only this overlay is on screen, so it renders the modals itself.
   const { pending } = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [query, setQuery] = useState("");
+  // Cursors count code points; `Infinity` means "at the end" and is clamped where it is used (focus changes land there).
+  const [qcur, setQcur] = useState(0);
+  const [fcur, setFcur] = useState(Infinity);
   const [selId, setSelId] = useState("");
   const [focus, setFocus] = useState(-1); // form field index, -1 = list
   const [forms, setForms] = useState<Record<string, FormValues>>({});
@@ -101,6 +104,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const last = hit ? [...session.history].reverse().find((l) => l === hit.key || l.startsWith(`${hit.key} `)) : undefined;
 
   const pick = useCallback((id: string) => (setSelId(id), setFocus(-1)), []);
+  const focusField = (i: number) => (setFocus(i), setFcur(Infinity));
   const move = (d: number) => {
     const i = items.findIndex((l) => l.id === cur?.id);
     setSelId(items[Math.max(0, Math.min(items.length - 1, i + d))]?.id ?? "");
@@ -138,27 +142,29 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
       const it = ready();
       return it ? void runAll([it]) : undefined;
     }
-    // Fields have no text cursor (they append and backspace at the end), so `←` goes back to the list only on a flag or an empty field.
-    if (k.name === "right" && focus < 0) return specs.length ? setFocus(0) : setMsg("sem argumentos"), true;
-    if (k.name === "left" && focus >= 0) {
-      if (specs[focus]!.kind === "flag" || !values[specs[focus]!.name]) setFocus(-1);
-      return;
+    const f = focus >= 0 ? specs[focus] : undefined;
+    const text = f ? String(values[f.name] ?? "") : query;
+    const cursor = Math.min(f ? fcur : qcur, [...text].length);
+    if (f?.kind === "flag") {
+      if (k.name === "left") return setFocus(-1), true;
+      if (k.sequence === " ") return edit(f.name, values[f.name] !== true), true;
+    } else if (!(k.sequence === " " && !f && !query)) { // empty query: space enqueues (below)
+      const r = editLine({ text, cursor }, k);
+      if (r?.exit === "left" && f) return setFocus(-1), true; // the cursor tried to cross the start: back to the list, same command
+      if (r?.exit === "right" && !f) return specs.length ? focusField(0) : setMsg("sem argumentos"), true;
+      if (r) {
+        if (f) edit(f.name, r.text), setFcur(r.cursor);
+        else r.text !== query && setSelId(""), setQuery(r.text), setQcur(r.cursor);
+        return true;
+      }
     }
-    if (matchKey(k, "tab")) return setFocus(specs.length ? (focus + 1) % specs.length : -1);
+    if (k.name === "right" && focus < 0) return specs.length ? focusField(0) : setMsg("sem argumentos"), true;
+    if (matchKey(k, "tab")) return specs.length ? focusField((focus + 1) % specs.length) : setFocus(-1);
     if (k.name === "up" || k.name === "down") {
       const d = k.name === "up" ? -1 : 1;
-      return focus >= 0 ? setFocus(Math.max(0, Math.min(specs.length - 1, focus + d))) : move(d);
+      return focus >= 0 ? focusField(Math.max(0, Math.min(specs.length - 1, focus + d))) : move(d);
     }
-    const f = focus >= 0 ? specs[focus] : undefined;
-    if (k.name === "backspace") {
-      if (f && f.kind !== "flag") return edit(f.name, String(values[f.name] ?? "").slice(0, -1));
-      return f ? undefined : (setQuery(query.slice(0, -1)), setSelId(""));
-    }
-    if (k.ctrl || k.meta || !printable(k.sequence)) return;
-    if (f) return f.kind === "flag" ? (k.sequence === " " ? edit(f.name, values[f.name] !== true) : undefined) : edit(f.name, `${values[f.name] ?? ""}${k.sequence}`);
-    if (k.sequence === " " && !query) return enqueue(); // once there is a query, space is part of it (ctrl+n enqueues)
-    setQuery(query + k.sequence);
-    setSelId("");
+    if (k.sequence === " " && !f && !query) return enqueue(); // once there is a query, space is part of it (ctrl+n enqueues)
   }, { modal: true });
 
   const at = Math.max(0, lines.findIndex((l) => l.id === cur?.id));
@@ -177,7 +183,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
           <>
             <text fg={c.text}>{`${hit.key}${hit.destructive ? " !" : ""}`}</text>
             <text fg={c.dim}>{hit.help}</text>
-            {hit.page ? null : <Form specs={specs} values={values} focus={focus} line={built} last={last} />}
+            {hit.page ? null : <Form specs={specs} values={values} focus={focus} cursor={fcur} line={built} last={last} />}
           </>
         ) : null}
       </box>
@@ -190,7 +196,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
         position="absolute" top={1} left={Math.floor((cols - w) / 2)} width={w} height={Math.min(rows - 2, VISIBLE + 7)}
         flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)}
       >
-        <text><span fg={c.accent}>{`${g.query} `}</span><span fg={c.text}>{clean(query)}</span><span fg={c.dim}>{query ? "_" : "_ @módulo  >comando  #página  !destrutivo"}</span></text>
+        <text><span fg={c.accent}>{`${g.query} `}</span><LineText line={{ text: query, cursor: qcur }} focused={focus < 0} width={30} /><span fg={c.dim}>{query ? "" : " @módulo  >comando  #página  !destrutivo"}</span></text>
         {body}
         <text fg={queue.length ? c.accent : c.dim}>{queue.length ? `fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}` : "fila vazia"}</text>
         <text fg={c.warn}>{busy ? "rodando..." : msg}</text>

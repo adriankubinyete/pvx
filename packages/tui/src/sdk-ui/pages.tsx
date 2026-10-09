@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { RegisteredPage } from "@pvx/core";
-import type { Component, SdkUi } from "@pvx/sdk";
-import { matchKey, setPageRows, type Scope } from "../keymap.ts";
+import type { Component, KeySpec, SdkUi } from "@pvx/sdk";
+import { addPageRow, matchKey, setPageRows, type Scope } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { MenuForm } from "../menu/MenuForm.tsx";
 import { clean } from "../palette/search.ts";
@@ -9,16 +9,17 @@ import { Boundary, useRouter, type Screen } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
-import { HostCtx, runOwn, useHost, usePages, type HostPage } from "./host.tsx";
+import { HostCtx, RootPanelCtx, runOwn, useHost, usePages, type HostPage } from "./host.tsx";
 
 /** Keys the host owns: a page cannot take them over. */
 const RESERVED = ["esc", "?", "ctrl+c", "ctrl+k"];
 const keysOf = (page: RegisteredPage) => (page.keys ?? []).filter((k) => !RESERVED.includes(k.keys));
+const rowOf = (scope: Scope, k: KeySpec) => ({ keys: clean(k.keys), label: clean(k.label), scope, footer: true });
 
 /** The footer scope of a page. Registers the page's own keys in the shortcut table (footer and `?` read them from there). */
 export function pageScope(page: RegisteredPage): Scope {
   const scope: Scope = `page:${page.key}`;
-  setPageRows(scope, keysOf(page).map((k) => ({ keys: clean(k.keys), label: clean(k.label), scope, footer: true })));
+  setPageRows(scope, keysOf(page).map((k) => rowOf(scope, k)));
   return scope;
 }
 
@@ -32,6 +33,8 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
   const router = useRouter();
   const { box, g } = useTheme();
   const { pending } = useSyncExternalStore(deps.session.subscribe, deps.session.getSnapshot);
+  const dynKeys = useRef(new Set<KeySpec>()).current; // `useKey`: the keys of the components mounted in this page
+  const scope: Scope = `page:${page.key}`;
   const host = useMemo<HostPage>(() => ({
     moduleId: page.moduleId,
     deps,
@@ -41,10 +44,16 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
       router.push(pageScreen(next));
     },
     pop: router.pop,
-  }), [page.moduleId, deps, router.push, router.pop]);
+    addKey(spec) {
+      if (RESERVED.includes(spec.keys)) return () => {};
+      dynKeys.add(spec);
+      const off = addPageRow(scope, rowOf(scope, spec));
+      return () => (dynKeys.delete(spec), off());
+    },
+  }), [page.moduleId, page.key, deps, router.push, router.pop]);
   useKeys((k) => {
     if (!enabled) return;
-    const spec = keysOf(page).find((s) => matchKey(k, s.keys));
+    const spec = [...dynKeys, ...keysOf(page)].find((s) => matchKey(k, s.keys));
     if (!spec) return;
     try {
       spec.run();
@@ -55,8 +64,10 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
   });
   return (
     <HostCtx.Provider value={host}>
-      <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} {...box()} title={`${g.query} ${clean(page.title)}`}>
-        <Render page={page} />
+      <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box()} title={`${g.query} ${clean(page.title)}`}>
+        <RootPanelCtx.Provider value={true}>
+          <Render page={page} />
+        </RootPanelCtx.Provider>
       </box>
       {enabled && router.scope !== "palette" ? <SessionModals store={deps.session} pending={pending} /> : null}
     </HostCtx.Provider>

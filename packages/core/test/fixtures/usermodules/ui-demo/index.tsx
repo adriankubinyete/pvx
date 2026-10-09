@@ -5,13 +5,12 @@
 import type { CommandCtx, Sdk } from "@pvx/sdk";
 
 export default (sdk: Sdk) => {
-  const { h, Panel, Text, KeyHint, Table, Meter, useState, useCommand, useQuery } = sdk.ui;
+  const { h, Panel, Text, KeyHint, Table, Meter, useState, useCommand, useQuery, useKey } = sdk.ui;
 
-  // A key's `run()` has no access to component state: the page hands its setter out through this variable.
-  let bump: (() => void) | undefined;
   function Counter() {
     const [n, setN] = useState(0);
-    bump = () => setN((v) => v + 1);
+    useKey("space", "soma 1", () => setN((v) => v + 1));
+    useKey("esc", "nunca", () => setN(99)); // reserved: ignored
     return (
       <Panel title="contador">
         <Text>{`n = ${n}`}</Text>
@@ -21,10 +20,9 @@ export default (sdk: Sdk) => {
     );
   }
 
-  let runStatus: (() => void) | undefined;
   function Overview() {
     const status = useCommand("ui-demo status");
-    runStatus = () => void status.run();
+    useKey("s", "roda status", () => void status.run());
     const q = useQuery<string>("ui-demo.state");
     return (
       <Panel title="visão geral">
@@ -35,10 +33,9 @@ export default (sdk: Sdk) => {
     );
   }
 
-  let flip: (() => void) | undefined;
   function Board() {
     const [on, setOn] = useState(false);
-    flip = () => setOn((v) => !v);
+    useKey("t", "alterna", () => setOn((v) => !v));
     return (
       <Panel title="quadro">
         <Text tone={on ? "ok" : "dim"}>{`estado: ${on ? "on" : "off"}`}</Text>
@@ -56,9 +53,10 @@ export default (sdk: Sdk) => {
     },
     queries: { "ui-demo.state": () => "ready" },
     pages: {
-      counter: { title: "Contador", render: () => <Counter />, keys: [{ keys: "space", label: "soma 1", run: () => bump?.() }] },
-      board: { title: "Quadro", render: () => <Board />, tab: { label: "Demo", order: 5 }, keys: [{ keys: "t", label: "alterna", run: () => flip?.() }] },
-      overview: { title: "Visão geral", render: () => <Overview />, keys: [{ keys: "s", label: "roda status", run: () => runStatus?.() }] },
+      // `keys` still works for keys that need no component state.
+      counter: { title: "Contador", render: () => <Counter />, keys: [{ keys: "x", label: "falha", run: () => { throw new Error("tecla quebrou"); } }] },
+      board: { title: "Quadro", render: () => <Board />, tab: { label: "Demo", order: 5 } },
+      overview: { title: "Visão geral", render: () => <Overview /> },
       boom: { title: "Quebrada", render: () => <Boom /> },
     },
   };
