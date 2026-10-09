@@ -16,7 +16,8 @@
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true
+    "noImplicitOverride": true,
+    "paths": { "@pvx/*": ["./packages/*/src/index.ts"] }
   },
-  "include": ["packages", "apps", "test"]
+  "include": ["packages", "apps", "test", "templates"]
 }

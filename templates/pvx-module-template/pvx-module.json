@@ -1,0 +1,7 @@
+{
+  "id": "exemplo",
+  "version": "0.1.0",
+  "entry": "src/index.tsx",
+  "pvx": ">=0.0.1",
+  "contributes": { "commands": ["saudar"], "pages": ["painel"], "capabilities": ["exemplo.saudacao"] }
+}
