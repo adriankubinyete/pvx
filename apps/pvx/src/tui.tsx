@@ -1,18 +1,22 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { createLogger, createRegistry, loadModules, logsDir, pvxHome } from "@pvx/core";
-import { App, createSessionStore, ModuleChips, Session } from "@pvx/tui";
+import { pvxHome, runCapture, type CliIO } from "@pvx/core";
+import { App, createMenuNav, createSessionStore, Menu, ModuleChips } from "@pvx/tui";
 import { join } from "node:path";
 
-/** Opens the TUI. Resolves after the renderer is destroyed. */
-export async function openTui(): Promise<void> {
-  const registry = createRegistry();
-  const makeLogger = (name: string) => createLogger(logsDir(), name);
-  await loadModules(registry, { hostVersion: "0.1.0", makeLogger });
-  const store = createSessionStore({ registry, makeLogger, historyPath: join(pvxHome(), "tui-history") });
+/** Opens the TUI on the menu screen. Resolves after the renderer is destroyed. */
+export async function openTui(io: Omit<CliIO, "argv" | "out" | "isTTY">): Promise<void> {
+  const { registry, makeLogger, isRoot, version } = io;
+  const store = createSessionStore({
+    registry,
+    makeLogger,
+    isRoot,
+    historyPath: join(pvxHome(), "tui-history"),
+    core: (argv) => runCapture(io, argv),
+  });
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const closed = new Promise<void>((resolve) => renderer.once("destroy", resolve));
-  const root = { id: "sessao", element: <Session store={store} registry={registry} /> };
+  const root = { id: "menu", scope: "menu" as const, element: <Menu store={store} registry={registry} nav={createMenuNav()} version={version} /> };
   createRoot(renderer).render(<App root={root} logger={makeLogger("core")} onExit={() => renderer.destroy()} chips={<ModuleChips registry={registry} />} />);
   await closed;
 }

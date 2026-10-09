@@ -27,16 +27,19 @@ async function main(): Promise<number> {
   // Only `logs -f` handles Ctrl+C; a global listener would swallow the first Ctrl+C of a hung command.
   const argv = process.argv.slice(2);
   if (argv[0] === "logs" && argv.some((a) => a === "-f" || a === "--follow")) process.once("SIGINT", () => abort.abort());
-  const r = await runCli({
-    argv,
+  const base = {
     env: process.env,
-    isTTY: tty,
     isRoot: process.getuid?.() === 0,
     registry,
     makeLogger,
     profilesDir: PROFILES_DIR,
     version: VERSION,
     theme,
+  };
+  const r = await runCli({
+    ...base,
+    argv,
+    isTTY: tty,
     out: (line) => console.log(line),
     readStdin: () => Bun.stdin.text(),
     ask: tty ? ask : undefined,
@@ -44,7 +47,7 @@ async function main(): Promise<number> {
     signal: abort.signal,
   });
   if (r === "tui") {
-    await (await import("./tui.tsx")).openTui();
+    await (await import("./tui.tsx")).openTui(base);
     return EXIT.OK;
   }
   return r;

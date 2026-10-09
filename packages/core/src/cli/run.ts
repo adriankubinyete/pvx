@@ -51,6 +51,22 @@ export function formatLine(l: OutLine, theme: Palette): string {
   return `${fg(theme[color], `[${glyph}]`)} ${fg(theme.text, l.text)}`;
 }
 
+const findCore = (argv: string[]) => [...CORE].reverse().find((c) => c.key.split(" ").every((w, i) => argv[i] === w));
+
+/** Strict root, one rule for the CLI and the TUI: every module command needs uid 0; core commands only if they write (`root`). */
+export const requiresRoot = (registry: Registry, argv: string[]): boolean => {
+  const core = findCore(argv);
+  return core ? Boolean(core.root) : Boolean(resolveCommand(registry, argv));
+};
+export const rootMessage = () => `grava em ${pvxHome()}: rode com sudo`;
+
+/** Runs a line through `runCli` in `--json` mode and returns its lines: how the TUI reaches the core commands. */
+export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv: string[]): Promise<{ exit: number; lines: OutLine[] }> {
+  let text = "";
+  const exit = await runCli({ ...io, argv: [...argv, "--json"], isTTY: false, out: (l) => void (text += l) });
+  return { exit: exit === "tui" ? EXIT.OK : exit, lines: (JSON.parse(text) as { lines: OutLine[] }).lines };
+}
+
 /** Text mode streams lines as they come; --json prints one object at the end and nothing else. */
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: OutLine[] = [];
@@ -82,7 +98,6 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
     ...[...io.registry.commands].map(([key, c]) => ({ key, help: c.help, args: c.args, destructive: c.destructive })),
   ];
   const fail = (exit: number, text: string) => (o.line({ kind: "error", text }), o.finish(exit));
-  const needRoot = () => fail(EXIT.ERROR, `grava em ${pvxHome()}: rode com sudo`);
   const showHelp = (lines: string[]) => lines.forEach((text) => o.line({ kind: "plain", text }));
 
   if (!argv.length) {
@@ -98,14 +113,13 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
   }
 
   try {
-    const core = [...CORE].reverse().find((c) => c.key.split(" ").every((w, i) => argv[i] === w));
+    if (!io.isRoot && requiresRoot(io.registry, argv)) return fail(EXIT.ERROR, rootMessage());
+    const core = findCore(argv);
     if (core) {
-      if (core.root && !io.isRoot) return needRoot();
       return o.finish(await core.run({ io, o, rest: argv.slice(core.key.split(" ").length), json, yes }));
     }
 
     const found = resolveCommand(io.registry, argv);
-    if (found && !io.isRoot) return needRoot();
     let confirmed = yes;
     if (found?.cmd.destructive && !yes && io.isTTY && io.ask) {
       const a = (await io.ask(`\`${found.key}\` é destrutivo. Continuar? [s/N] `)).trim().toLowerCase();

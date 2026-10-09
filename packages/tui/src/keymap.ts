@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "session" | "palette";
+export type Scope = "global" | "menu" | "session" | "palette";
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -17,6 +17,11 @@ const base: readonly Shortcut[] = [
   { keys: "esc", label: "voltar", scope: "global", footer: true },
   { keys: "?", label: "ajuda", scope: "global", footer: true },
   { keys: "ctrl+c", label: "sair", scope: "global" },
+  { keys: "↑↓", label: "move", scope: "menu", footer: true },
+  { keys: "enter", label: "abre", scope: "menu", footer: true },
+  { keys: "/", label: "comando", scope: "menu", footer: true },
+  { keys: "ctrl+k", label: "palette", scope: "menu", footer: true },
+  { keys: "esc", label: "sobe um nível", scope: "menu" },
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
   { keys: "!!", label: "repete", scope: "session", footer: true },

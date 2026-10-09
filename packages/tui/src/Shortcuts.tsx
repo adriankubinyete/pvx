@@ -25,10 +25,10 @@ export function Footer({ scope }: { scope: Scope }) {
   );
 }
 
-const titles: Record<Scope, string> = { global: "geral", session: "sessão", palette: "palette" };
+const titles: Record<Scope, string> = { global: "geral", menu: "menu", session: "sessão", palette: "palette" };
 
 /** Two columns, so every scope fits in 80x24. */
-const columns: Scope[][] = [["global", "session"], ["palette"]];
+const columns: Scope[][] = [["global", "session"], ["menu", "palette"]];
 
 /** The `?` overlay: every shortcut in the table, by scope. A modal: it owns the keyboard. */
 export function HelpOverlay({ onClose }: { onClose: () => void }) {

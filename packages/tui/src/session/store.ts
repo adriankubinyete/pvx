@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
-import { execute, resolveCommand, tokenize, type Registry } from "@pvx/core";
+import { execute, requiresRoot, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
 
 export const MAX_BLOCKS = 500;
 const MAX_HISTORY = 500;
@@ -32,7 +32,10 @@ export interface SessionApi {
   readonly history: readonly string[];
   /** Never rejects: a throw becomes an error block. `!!` runs the last history entry. */
   run(line: string, opts?: { secrets?: Record<string, string> }): Promise<{ exit: number }>;
+  /** Re-runs a block; a secret is asked again through the modal. */
   repeat(blockId: number): Promise<{ exit: number }>;
+  /** The line to recall for a block: the real one (memory only) when the shown one is masked. */
+  lineOf(blockId: number): string;
   clear(): void;
   /** Answers a pending confirm (boolean) or secret (string, or undefined to cancel). */
   answer(id: number, value: boolean | string | undefined): void;
@@ -64,12 +67,25 @@ export function maskLine(registry: Registry, line: string): string {
   return `${argv.slice(0, f.n).join(" ")} ***`;
 }
 
-export function createSessionStore(opts: { registry: Registry; makeLogger: (name: string) => Logger; historyPath: string }): SessionApi {
-  const { registry, makeLogger, historyPath } = opts;
+export interface SessionOpts {
+  registry: Registry;
+  makeLogger: (name: string) => Logger;
+  historyPath: string;
+  /** Real uid 0 (strict root: injected so tests can pass true). */
+  isRoot: boolean;
+  /** Runs the core commands (`plano`, `logs`...) that are not in the registry. */
+  core?: (argv: string[]) => Promise<{ exit: number; lines: OutLine[] }>;
+}
+
+export function createSessionStore(opts: SessionOpts): SessionApi {
+  const { registry, makeLogger, historyPath, isRoot, core } = opts;
   let state: SessionState = { blocks: [], history: loadHistory(historyPath), pending: [] };
   const subs = new Set<() => void>();
   const waiting = new Map<number, (v: boolean | string | undefined) => void>();
   let seq = 0;
+  // Real lines of masked blocks. Memory only: the masked line is all that reaches blocks, history and disk.
+  const raws = new Map<number, string>();
+  let lastRaw: string | undefined;
   const set = (patch: Partial<SessionState>) => {
     state = { ...state, ...patch };
     subs.forEach((f) => f());
@@ -84,15 +100,18 @@ export function createSessionStore(opts: { registry: Registry; makeLogger: (name
 
   async function run(raw: string, ro: { secrets?: Record<string, string> } = {}): Promise<{ exit: number }> {
     let line = raw.trim();
-    if (line === "!!") line = state.history.at(-1) ?? "";
+    if (line === "!!") line = lastRaw ?? state.history.at(-1) ?? "";
     if (!line) return { exit: 0 };
     const shown = maskLine(registry, line);
     const id = ++seq;
     const t0 = Date.now();
-    let found: ReturnType<typeof resolveCommand>;
+    let argv: string[] = [];
     try {
-      found = resolveCommand(registry, tokenize(line));
+      argv = tokenize(line);
     } catch {}
+    const found = resolveCommand(registry, argv);
+    if (shown !== line) raws.set(id, line);
+    lastRaw = shown !== line ? line : undefined;
     const block: Block = { id, line: shown, status: "running", moduleId: found?.cmd.moduleId ?? "core", lines: [] };
     set({ blocks: [...state.blocks, block].slice(-MAX_BLOCKS) });
     addHistory(shown);
@@ -100,16 +119,20 @@ export function createSessionStore(opts: { registry: Registry; makeLogger: (name
     let exit = 1;
     let lines: OutLine[];
     try {
-      const confirmed = found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", cmd: found.key }) : false;
-      if (found?.cmd.destructive && !confirmed) lines = [{ kind: "warning", text: "cancelado" }];
+      const denied = !isRoot && requiresRoot(registry, argv);
+      const confirmed = !denied && found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", cmd: found.key }) : false;
+      if (denied) lines = [{ kind: "error", text: rootMessage() }];
+      else if (found?.cmd.destructive && !confirmed) lines = [{ kind: "warning", text: "cancelado" }];
       else {
-        const r = await execute(registry, line, {
-          makeLogger,
-          confirmed,
-          env: ro.secrets ? { ...process.env, ...secretEnv(ro.secrets) } : undefined,
-          readStdin: async () => "",
-          promptSecret: (name) => ask<string | undefined>({ kind: "secret", name }),
-        });
+        const r = !found && core && argv.length
+          ? await core(argv)
+          : await execute(registry, line, {
+              makeLogger,
+              confirmed,
+              env: ro.secrets ? { ...process.env, ...secretEnv(ro.secrets) } : undefined,
+              readStdin: async () => "",
+              promptSecret: (name) => ask<string | undefined>({ kind: "secret", name }),
+            });
         ({ exit, lines } = r);
       }
     } catch (e) {
@@ -140,10 +163,11 @@ export function createSessionStore(opts: { registry: Registry; makeLogger: (name
       return state.history;
     },
     run,
-    repeat: async (blockId) => {
-      const b = state.blocks.find((x) => x.id === blockId);
-      return b ? run(b.line) : { exit: 1 };
+    repeat: async (id) => {
+      const b = state.blocks.find((x) => x.id === id);
+      return b ? run(raws.get(id) ?? b.line) : { exit: 1 };
     },
+    lineOf: (blockId) => raws.get(blockId) ?? state.blocks.find((x) => x.id === blockId)?.line ?? "",
     clear: () => set({ blocks: [] }),
     answer(id, value) {
       waiting.get(id)?.(value);

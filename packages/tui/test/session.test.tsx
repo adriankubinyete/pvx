@@ -19,7 +19,7 @@ const historyPath = () => join(pvxHome(), "tui-history");
 let store: ReturnType<typeof createSessionStore>;
 async function mount(size?: { cols: number; rows: number }) {
   const makeLogger = (n: string) => createLogger(logsDir(), n);
-  store = createSessionStore({ registry, makeLogger, historyPath: historyPath() });
+  store = createSessionStore({ registry, makeLogger, historyPath: historyPath(), isRoot: true });
   const root = { id: "sessao", element: <Session store={store} registry={registry} /> };
   h = await renderTui(
     <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} chips={<ModuleChips registry={registry} />} />,

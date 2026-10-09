@@ -11,7 +11,7 @@ import { BlockView } from "./Blocks.tsx";
 import { complete, rank, type Candidate } from "./complete.ts";
 import { LogScreen } from "./LogScreen.tsx";
 import { SessionModals } from "./Modals.tsx";
-import type { SessionApi } from "./store.ts";
+import type { Block, SessionApi } from "./store.ts";
 
 const printable = (s: string) => [...s].length === 1 && s >= " " && s !== "\x7f";
 
@@ -75,6 +75,8 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   }, [running]);
   const recall = useCallback((line: string) => (setInput(line), setHi(null), setSel(0)), []);
 
+  const pick = useCallback((b: Block) => recall(store.lineOf(b.id)), [recall, store]);
+
   const edit = (f: (s: string) => string) => {
     if (searching) setSearch(f(search));
     else setInput(f(input)), setHi(null);
@@ -134,7 +136,7 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom" focused={false} contentOptions={{ gap: 1 }}>
-        {blocks.map((b) => <BlockView key={b.id} b={b} actions={b === target} tick={b.status === "running" ? tick : 0} onPick={recall} />)}
+        {blocks.map((b) => <BlockView key={b.id} b={b} actions={b === target} tick={b.status === "running" ? tick : 0} onPick={pick} />)}
       </scrollbox>
       {items.length ? <Popup items={items} sel={at} /> : null}
       <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(c.accent)}>
