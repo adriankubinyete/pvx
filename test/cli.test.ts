@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { createLogger, createRegistry, loadModules, logsDir, runCli } from "../packages/core/src/index.ts";
+import { theme } from "../packages/tui/src/index.ts";
 
 const root = join(import.meta.dir, "..");
 
@@ -26,30 +28,58 @@ test("no args and no TTY: prints the help and exits 2 (never hangs, never opens 
   expect(r.stdout).toContain("demo greet");
 });
 
+process.env.PVX_USERMODULES = join(root, "packages/core/test/fixtures/usermodules");
+const registry = createRegistry();
+await loadModules(registry, { hostVersion: "1.0.0", makeLogger: (n) => createLogger(logsDir(), n) });
+
+/** In-process runner with injected root, real file logs and captured stdout. */
+async function run(argv: string[], env: Record<string, string> = {}) {
+  const out: string[] = [];
+  const exit = await runCli({
+    argv,
+    env: { NO_COLOR: "1", ...env },
+    isTTY: false,
+    isRoot: true,
+    registry,
+    makeLogger: (n) => createLogger(logsDir(), n),
+    profilesDir: join(root, "profiles"),
+    version: "1.0.0",
+    theme,
+    out: (l) => out.push(l),
+  });
+  return { stdout: out.map((l) => `${l}\n`).join(""), exit };
+}
+
+test("non-root user running a module command gets the sudo message and exit 1", async () => {
+  const r = await pvx(["demo", "greet", "bob"]);
+  expect(r.exit).toBe(1);
+  expect(r.stdout).toContain("rode com sudo");
+});
+
 test("NO_COLOR: no escape sequences, glyphs stay", async () => {
-  const r = await pvx(["demo", "greet", "bob"], { NO_COLOR: "1" });
+  const r = await run(["demo", "greet", "bob"]);
   expect(r.stdout).toBe("[✓] oi bob\n");
   expect(r.stdout).not.toContain("\x1b");
 });
 
 test("--json prints exactly one object", async () => {
-  const r = await pvx(["demo", "greet", "bob", "--json"]);
+  const r = await run(["demo", "greet", "bob", "--json"]);
   expect(JSON.parse(r.stdout)).toEqual({ ok: true, exit: 0, lines: [{ kind: "success", text: "oi bob" }] });
 });
 
 test("PVX_SECRET_* reaches the command but appears in neither stdout nor any file under PVX_HOME", async () => {
   const secret = "hunter2-s3cr3t-value";
-  const r = await pvx(["demo", "login"], { PVX_SECRET_TOKEN: secret });
+  const r = await run(["demo", "login"], { PVX_SECRET_TOKEN: secret });
   expect(r.exit).toBe(0);
   expect(r.stdout).toBe("[✓] token com 20 chars\n"); // the command did receive it
-  expect(r.stdout + r.stderr).not.toContain(secret);
+  expect(r.stdout).not.toContain(secret);
   const all = files(process.env.PVX_HOME!);
   expect(all.some((f) => f.endsWith("demo.log"))).toBe(true); // the run was logged...
   for (const f of all) expect(readFileSync(f, "utf8")).not.toContain(secret); // ...without the secret
 });
 
 test("a throwing command becomes an error line and its traceback goes to the module log", async () => {
-  const r = await pvx(["throws-on-run", "crash"]);
+  const r = await run(["throws-on-run", "crash"]);
   expect(r.exit).toBe(1);
   expect(r.stdout).toContain("kaboom");
   expect(readFileSync(join(process.env.PVX_HOME!, "logs/throws-on-run.log"), "utf8")).toContain("kaboom");

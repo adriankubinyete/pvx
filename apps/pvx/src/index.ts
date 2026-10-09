@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { theme } from "@pvx/tui";
 import { EXIT, type Logger } from "@pvx/sdk";
-import { canWritePvxHome, createLogger, createRegistry, loadModules, logsDir, runCli } from "@pvx/core";
+import { createLogger, createRegistry, loadModules, logsDir, runCli } from "@pvx/core";
 import { ask, askSecret } from "./prompt.ts";
 
 const VERSION = "0.1.0";
@@ -31,7 +31,7 @@ async function main(): Promise<number> {
     argv,
     env: process.env,
     isTTY: tty,
-    isRoot: canWritePvxHome(process.getuid?.()),
+    isRoot: process.getuid?.() === 0,
     registry,
     makeLogger,
     profilesDir: PROFILES_DIR,

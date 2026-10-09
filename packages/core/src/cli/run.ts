@@ -1,5 +1,3 @@
-import { accessSync, constants } from "node:fs";
-import { dirname } from "node:path";
 import { EXIT, type Logger, type OutLine } from "@pvx/sdk";
 import { fg, setColorEnabled } from "../ansi.ts";
 import { execute } from "../engine/execute.ts";
@@ -21,7 +19,7 @@ export interface CliIO {
   argv: string[];
   env: Record<string, string | undefined>;
   isTTY: boolean;
-  /** May write to PVX_HOME (see canWritePvxHome). */
+  /** Real uid 0. Injected so tests can run module commands; the entrypoint passes no bypass. */
   isRoot: boolean;
   registry: Registry;
   makeLogger: (name: string) => Logger;
@@ -63,21 +61,6 @@ function createOutput(io: CliIO, json: boolean): Output {
       return exit;
     },
   };
-}
-
-/** Root, or a PVX_HOME the user can write to (dev and tests with a temp PVX_HOME). */
-export function canWritePvxHome(uid: number | undefined): boolean {
-  if (uid === 0) return true;
-  let dir = pvxHome();
-  for (;;) {
-    try {
-      accessSync(dir, constants.W_OK);
-      return true;
-    } catch (e) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT" || dirname(dir) === dir) return false;
-      dir = dirname(dir); // not created yet: the nearest existing parent decides
-    }
-  }
 }
 
 /** Returns the exit code, or "tui" when a TTY user ran `pvx` with no arguments. */
