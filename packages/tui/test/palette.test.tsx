@@ -72,7 +72,7 @@ test("queue runs in order and stops at the first failure; favorites persist", as
   await h!.press("ARROW_DOWN");
   await h!.press("n", { ctrl: true });
   expect(h!.frame()).toContain("fila (2)");
-  await h!.press("\x1b[13;5u"); // ctrl+enter as the kitty protocol sends it
+  await h!.press("RETURN", { ctrl: true });
   await h!.flush();
   expect(ok.calls.map((c) => c.line)).toEqual(["cap-fixture fix-a", "cap-fixture fix-b"]);
   expect(o.closes()).toBe(1);
@@ -84,7 +84,7 @@ test("queue runs in order and stops at the first failure; favorites persist", as
   await h!.press("n", { ctrl: true });
   await h!.press("ARROW_DOWN");
   await h!.press("n", { ctrl: true });
-  await h!.press("\x1b[13;5u"); // ctrl+enter as the kitty protocol sends it
+  await h!.press("RETURN", { ctrl: true });
   await h!.flush();
   expect(bad.calls.map((c) => c.line)).toEqual(["cap-fixture fix-a"]);
 

@@ -1,9 +1,12 @@
 import { memo, useState } from "react";
 import type { OutLine } from "@pvx/sdk";
+import { shortcuts } from "../keymap.ts";
 import { useTheme } from "../theme-context.tsx";
 import type { Block } from "./store.ts";
 
 const kinds = { success: "ok", warning: "warn", error: "error", info: "info" } as const;
+/** Error-block actions, from the one shortcut table. */
+const errorActions = shortcuts.filter((s) => s.scope === "session" && s.keys.startsWith("alt+"));
 const dur = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 
 function Line({ l }: { l: OutLine }) {
@@ -44,8 +47,8 @@ export const BlockView = memo(function BlockView({ b, actions, tick, onPick }: {
         {b.lines.map((l, i) => <Line key={i} l={l} />)}
         {actions ? (
           <text fg={c.dim}>
-            {[["r", "repetir"], ["l", "log do módulo"], ["c", "copiar erro"]].map(([k, v], i) => (
-              <span key={k}><span fg={c.accent}><b>{k}</b></span>{` ${v}${i < 2 ? "   " : ""}`}</span>
+            {errorActions.map((s, i) => (
+              <span key={s.keys}><span fg={c.accent}><b>{s.keys}</b></span>{` ${s.label}${i < errorActions.length - 1 ? "   " : ""}`}</span>
             ))}
           </text>
         ) : null}

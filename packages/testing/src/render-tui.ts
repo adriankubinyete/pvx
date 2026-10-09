@@ -5,18 +5,19 @@ import type { KeyInput } from "@opentui/core/testing";
 
 type Mods = { shift?: boolean; ctrl?: boolean; meta?: boolean };
 
-/** A lone ESC waits for the parser timeout before it is reported. */
-const ESC_WAIT_MS = 120;
-
 export interface TuiHarness {
   /** Current frame as text. */
   frame(): string;
-  /** Presses a key (`"a"`, `"L"`, `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`...) inside `act` and flushes. Waits after ESC. */
+  /** Presses a key (`"a"`, `"L"`, `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`...) inside `act` and flushes. */
   press(key: KeyInput, mods?: Mods): Promise<void>;
-  /** Types text char by char, each in `act` + flush. */
+  /** Types text char by char, each a `press`. */
   type(text: string): Promise<void>;
   /** Waits for pending timers and renders (use after something async). */
   flush(): Promise<void>;
+  /** Waits until `pred` is true (polls in frames, not ms). */
+  waitFor(pred: () => boolean): Promise<void>;
+  /** Waits until `pred(frame)` is true; returns the matching frame. */
+  waitForFrame(pred: (frame: string) => boolean): Promise<string>;
   resize(cols: number, rows: number): Promise<void>;
   /** Always call at the end (`afterEach`). Unmounts the tree. */
   destroy(): void;
@@ -24,11 +25,13 @@ export interface TuiHarness {
 
 /** Renders `element` in a headless terminal of `cols` x `rows`, with `act` and flush handled. */
 export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: { cols?: number; rows?: number } = {}): Promise<TuiHarness> {
-  const t = await testRender(element, { width: cols, height: rows });
-  // React only complains about updates outside `act` while this flag is on. Timers (spinner, log refresh) and the
-  // store update on their own between our calls, so the flag is on only while we are inside `act`.
+  // Kitty mode: ESC needs no parser timeout, and ctrl+enter / shift+enter can be sent.
+  const t = await testRender(element, { width: cols, height: rows, kittyKeyboard: true });
+  // `testRender` leaves IS_REACT_ACT_ENVIRONMENT on until destroy; with it on, every timer tick (spinner, log
+  // refresh) and store update between our calls warns "not wrapped in act" (111 tests: 4 -> 146 warnings).
+  // So it is on only while we are inside `act`.
   const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
-  const inAct = async (fn: () => Promise<void>) => {
+  const inAct = async (fn: () => void | Promise<void>) => {
     env.IS_REACT_ACT_ENVIRONMENT = true;
     try {
       await act(fn);
@@ -36,38 +39,34 @@ export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: {
       env.IS_REACT_ACT_ENVIRONMENT = false;
     }
   };
-  const settle = async () => {
-    await inAct(async () => {});
+  const flush = async () => {
+    await inAct(async () => {}); // drains React effects
     await t.flush();
   };
-  await settle();
-  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+  await flush();
   const press: TuiHarness["press"] = async (key, mods) => {
-    await inAct(async () => {
-      t.mockInput.pressKey(key, mods);
-    });
-    await settle(); // act commits React; the flush then repaints
-    if (key === "ESCAPE") {
-      await inAct(() => sleep(ESC_WAIT_MS)); // the parser timeout fires the key here, so it needs act
-      await settle();
-    }
+    await inAct(async () => t.mockInput.pressKey(key, mods)); // async callback: act also drains the store's promise continuations
+    await flush();
   };
   return {
     frame: () => t.captureCharFrame(),
-    flush: settle,
+    flush,
+    waitFor: (pred) => t.waitFor(pred),
+    waitForFrame: (pred) => t.waitForFrame(pred),
     press,
     async type(text) {
-      for (const ch of text) await press(ch, ch !== ch.toLowerCase() ? { shift: true } : undefined);
+      // Not `mockInput.typeText`: it drops keys here, since a handler reads the input state of its last render.
+      // Kitty reports Shift+l as name `l`, sequence `L`, shift: so send the lowercase key with shift.
+      for (const ch of text) await (ch !== ch.toLowerCase() ? press(ch.toLowerCase(), { shift: true }) : press(ch));
     },
     async resize(c, r) {
-      await inAct(async () => t.resize(c, r));
-      await settle();
+      await inAct(() => t.resize(c, r));
+      await flush();
     },
-    // The renderer's destroy event unmounts the React root; that update needs `act` too.
     destroy() {
       if (t.renderer.isDestroyed) return;
       env.IS_REACT_ACT_ENVIRONMENT = true; // testRender's onDestroy turns it off again
-      act(() => t.renderer.destroy());
+      act(() => t.renderer.destroy()); // destroy updates the root outside the onDestroy `act`: still needs this one
     },
   };
 }

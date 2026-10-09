@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRenderer } from "@opentui/react";
-import type { ScrollBoxRenderable } from "@opentui/core";
+import { createClipboard, createHostClipboard, createRendererClipboardAdapter, type ScrollBoxRenderable } from "@opentui/core";
 import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
-import { useOpenPalette } from "../palette/Palette.tsx";
 import { useRouter } from "../router.tsx";
 import { useTheme } from "../theme-context.tsx";
 import { BlockView } from "./Blocks.tsx";
@@ -49,7 +48,6 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const scroll = useRef<ScrollBoxRenderable>(null);
-  const palette = useOpenPalette({ session: store, registry });
 
   const searching = search !== null;
   let start = 0;
@@ -120,10 +118,13 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
     }
     if (k.name === "backspace") return edit((s) => [...s].slice(0, -1).join("")), true;
     if (!input && !searching && target) {
-      if (k.sequence === "r") return void store.repeat(target.id), true;
-      if (k.sequence === "l") return router.push({ id: "log", element: <LogScreen moduleId={target.moduleId} /> }), true;
-      if (k.sequence === "c") {
-        renderer.copyToClipboardOSC52(target.lines.filter((l) => l.kind === "error").map((l) => l.text).join("\n"));
+      if (matchKey(k, "alt+r")) return void store.repeat(target.id), true;
+      if (matchKey(k, "alt+l")) return router.push({ id: "log", element: <LogScreen moduleId={target.moduleId} /> }), true;
+      if (matchKey(k, "alt+c")) {
+        const text = target.lines.filter((l) => l.kind === "error").map((l) => l.text).join("\n");
+        // Host + OSC52: the terminal path alone fails under tmux and SSH.
+        const clip = createClipboard({ host: createHostClipboard(), terminal: createRendererClipboardAdapter(renderer) });
+        void clip.writeText(text, { destination: "best-available" }).finally(() => clip.dispose());
         return setNote("copiado"), true;
       }
     }
@@ -147,8 +148,7 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>
-      {palette.shown ? null : <SessionModals store={store} pending={pending} />}
-      {palette.element}
+      {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}
     </box>
   );
 }

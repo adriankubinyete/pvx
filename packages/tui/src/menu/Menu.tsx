@@ -5,7 +5,6 @@ import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
-import { useOpenPalette } from "../palette/Palette.tsx";
 import { clean } from "../palette/search.ts";
 import { useRouter } from "../router.tsx";
 import { LogScreen } from "../session/LogScreen.tsx";
@@ -77,7 +76,6 @@ export function Menu({ store, registry, nav, version }: { store: SessionApi; reg
   const [sel, setSel] = useState(nav.sel);
   const [view, setView] = useState<View>({ kind: "list" });
   const scroll = useRef<ScrollBoxRenderable>(null);
-  const palette = useOpenPalette({ session: store, registry });
   nav.path = path;
   nav.sel = sel;
 
@@ -136,8 +134,7 @@ export function Menu({ store, registry, nav, version }: { store: SessionApi; reg
         </box>
       ) : null}
       {narrow ? null : <SidePanel registry={registry} history={history} version={version} />}
-      {palette.shown ? null : <SessionModals store={store} pending={pending} />}
-      {palette.element}
+      {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}
     </box>
   );
 }

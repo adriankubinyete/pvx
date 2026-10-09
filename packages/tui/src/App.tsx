@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { Logger } from "@pvx/sdk";
+import { PaletteHost, type PaletteProps } from "./palette/Palette.tsx";
 import { KeyRouter, useKeys } from "./keys.tsx";
 import { MIN_COLS, MIN_ROWS, useLayout } from "./layout.ts";
 import { RouterProvider, ScreenOutlet, useRouter, type Screen } from "./router.tsx";
@@ -14,11 +15,13 @@ export interface AppProps {
   onExit: () => void;
   /** Chips for the top strip (widgets); optional. */
   chips?: ReactNode;
+  /** Session and registry for the command palette (ctrl+k, from every screen). Without it there is no palette. */
+  palette?: Omit<PaletteProps, "onClose">;
   /** Override of `$PVX_HOME/tui-state.json` (tests). */
   statePath?: string;
 }
 
-function Frame({ chips }: { chips?: ReactNode }) {
+function Frame({ chips, palette }: Pick<AppProps, "chips" | "palette">) {
   const { c, result } = useTheme();
   const { depth, pop, notice, scope } = useRouter();
   const { cols, rows } = useLayout();
@@ -41,27 +44,28 @@ function Frame({ chips }: { chips?: ReactNode }) {
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <ScreenOutlet />
         {help ? <HelpOverlay onClose={() => setHelp(false)} /> : null}
+        {palette ? <PaletteHost {...palette} /> : null}
       </box>
       <Footer scope={scope} />
     </box>
   );
 }
 
-function Root({ onExit, chips }: Pick<AppProps, "onExit" | "chips">) {
+function Root({ onExit, chips, palette }: Pick<AppProps, "onExit" | "chips" | "palette">) {
   const theme = useTheme();
   return (
     <KeyRouter onQuit={() => (theme.flush(), onExit())}>
-      <Frame chips={chips} />
+      <Frame chips={chips} palette={palette} />
     </KeyRouter>
   );
 }
 
 /** App frame: chip strip, current screen, footer shortcut line. Esc pops, Ctrl+C exits. */
-export function App({ root, logger, onExit, chips, statePath }: AppProps) {
+export function App({ root, logger, onExit, chips, palette, statePath }: AppProps) {
   return (
     <ThemeProvider statePath={statePath}>
       <RouterProvider root={root} logger={logger}>
-        <Root onExit={onExit} chips={chips} />
+        <Root onExit={onExit} chips={chips} palette={palette} />
       </RouterProvider>
     </ThemeProvider>
   );

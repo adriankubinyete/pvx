@@ -22,7 +22,7 @@ async function mount(size?: { cols: number; rows: number }) {
   store = createSessionStore({ registry, makeLogger, historyPath: historyPath(), isRoot: true });
   const root = { id: "sessao", element: <Session store={store} registry={registry} /> };
   h = await renderTui(
-    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} chips={<ModuleChips registry={registry} />} />,
+    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} chips={<ModuleChips registry={registry} />} />,
     size,
   );
   return h;
@@ -54,12 +54,32 @@ test("an error block offers actions; r repeats; a throwing module does not end t
   expect(t.frame()).toContain("[✗] falhou");
   expect(t.frame()).toContain("repetir");
   expect(t.frame()).toContain("copiar erro");
-  await t.press("r");
+  await t.press("r", { meta: true });
   expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(2);
   await run(t, "throws-on-run crash");
   expect(t.frame()).toContain("kaboom");
   await run(t, "demo greet ok");
   expect(t.frame()).toContain("[✓] oi ok");
+});
+
+test("after a failed block, plain r/l/c type into the input (cause: they used to be error-block shortcuts)", async () => {
+  const t = await mount();
+  await run(t, "demo greet bad");
+  await t.type("reboot");
+  expect(t.frame()).toContain("❯ reboot");
+  expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(1); // no repeat fired
+  await t.press("l", { meta: true }); // with text in the input the alt action does not fire nor type
+  expect(t.frame()).toContain("❯ reboot");
+  expect(t.frame()).not.toContain("log demo");
+});
+
+test("ctrl+k opens the palette from the log screen too", async () => {
+  const t = await mount();
+  await run(t, "demo greet bad");
+  await t.press("l", { meta: true });
+  expect(t.frame()).toContain("log demo");
+  await t.press("k", { ctrl: true });
+  expect(t.frame()).toContain("fila vazia");
 });
 
 test("destructive asks for confirmation: n cancels, s runs", async () => {
@@ -99,7 +119,7 @@ test("full flow without mouse: type, complete, run, fail, repeat, palette, queue
   await t.press("TAB");
   await run(t, "bad");
   expect(t.frame()).toContain("[✗] falhou");
-  await t.press("r");
+  await t.press("r", { meta: true });
   expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(2);
 
   await t.press("k", { ctrl: true });

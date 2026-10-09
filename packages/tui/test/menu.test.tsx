@@ -32,7 +32,7 @@ async function mount(opts: { isRoot?: boolean; cols?: number; rows?: number } = 
   });
   const root = { id: "menu", scope: "menu" as const, element: <Menu store={store} registry={registry} nav={createMenuNav()} version="0.1.0" /> };
   h = await renderTui(
-    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} chips={<ModuleChips registry={registry} />} />,
+    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} chips={<ModuleChips registry={registry} />} />,
     { cols: opts.cols, rows: opts.rows },
   );
   return { t: h, store };

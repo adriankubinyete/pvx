@@ -28,6 +28,9 @@ const base: readonly Shortcut[] = [
   { keys: "#", label: "páginas", scope: "session", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "session", footer: true },
   { keys: "ctrl+l", label: "limpa", scope: "session", footer: true },
+  { keys: "alt+r", label: "repetir", scope: "session" }, // error-block actions: last block failed; a modifier so plain letters still type
+  { keys: "alt+l", label: "log do módulo", scope: "session" },
+  { keys: "alt+c", label: "copiar erro", scope: "session" },
   { keys: "tab", label: "completa", scope: "session" },
   { keys: "enter", label: "roda", scope: "session" },
 ];
@@ -50,7 +53,7 @@ export function matchKey(key: KeyEvent, spec: string): boolean {
   if (spec === "ctrl+j" && key.name === "linefeed") return true; // plain terminals: ctrl+j is a raw \n
   const parts = spec === "+" ? ["+"] : spec.split("+");
   const name = parts.pop()!;
-  const mods = new Set(parts);
+  const mods = new Set(parts.map((p) => (p === "alt" ? "meta" : p)));
   if (!!key.ctrl !== mods.has("ctrl") || !!key.meta !== mods.has("meta")) return false;
   if (!mods.size) {
     if (name === "space") return key.sequence === " ";

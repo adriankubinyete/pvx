@@ -194,9 +194,9 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   );
 }
 
-/** Binds ctrl+k. Render `element` anywhere in the screen tree; `open` is for other triggers. */
-export function useOpenPalette(props: Omit<PaletteProps, "onClose">) {
+/** Binds ctrl+k and renders the overlay. Mounted once by `App`, so it opens from every screen. */
+export function PaletteHost(props: Omit<PaletteProps, "onClose">) {
   const [shown, setShown] = useState(false);
   useKeys((k) => (matchKey(k, "ctrl+k") ? (setShown(true), true) : undefined), { base: true });
-  return { shown, open: () => setShown(true), element: shown ? <Palette {...props} onClose={() => setShown(false)} /> : null };
+  return shown ? <Palette {...props} onClose={() => setShown(false)} /> : null;
 }

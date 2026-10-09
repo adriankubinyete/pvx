@@ -104,6 +104,18 @@ test("Shift: matchKey tells l from L by sequence (name stays lowercase)", () => 
   expect(matchKey(key({ name: "linefeed", sequence: "\n" }), "ctrl+j")).toBe(true);
 });
 
+test("kitty harness: Shift+l arrives as name l / sequence L, ctrl+enter is sent directly, ESC needs no wait", async () => {
+  const seen: { name: string; sequence: string; shift: boolean; ctrl: boolean }[] = [];
+  const Spy = () => (useKeys((k) => void seen.push({ name: k.name, sequence: k.sequence, shift: k.shift, ctrl: k.ctrl })), <text>spy</text>);
+  h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><Spy /></KeyRouter></ThemeProvider>);
+  await h.press("l", { shift: true });
+  await h.press("RETURN", { ctrl: true });
+  await h.press("ESCAPE");
+  expect(seen[0]).toMatchObject({ name: "l", sequence: "L", shift: true });
+  expect(matchKey(seen[1] as never, "ctrl+enter")).toBe(true);
+  expect(seen[2]).toMatchObject({ name: "escape" });
+});
+
 test("the one shortcut table has a single row per keys + scope and includes the palette's", () => {
   const ids = shortcuts.map((s) => `${s.scope}:${s.keys}`);
   expect(new Set(ids).size).toBe(ids.length);

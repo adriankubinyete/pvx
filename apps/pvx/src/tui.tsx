@@ -17,6 +17,6 @@ export async function openTui(io: Omit<CliIO, "argv" | "out" | "isTTY">): Promis
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const closed = new Promise<void>((resolve) => renderer.once("destroy", resolve));
   const root = { id: "menu", scope: "menu" as const, element: <Menu store={store} registry={registry} nav={createMenuNav()} version={version} /> };
-  createRoot(renderer).render(<App root={root} logger={makeLogger("core")} onExit={() => renderer.destroy()} chips={<ModuleChips registry={registry} />} />);
+  createRoot(renderer).render(<App root={root} logger={makeLogger("core")} onExit={() => renderer.destroy()} palette={{ session: store, registry }} chips={<ModuleChips registry={registry} />} />);
   await closed;
 }
