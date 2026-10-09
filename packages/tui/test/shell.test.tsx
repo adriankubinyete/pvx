@@ -100,6 +100,15 @@ test("Shift: matchKey tells l from L by sequence (name stays lowercase)", () => 
   expect(matchKey(key({ name: "l", sequence: "L", shift: true }), "l")).toBe(false);
   expect(matchKey(key({ ctrl: true, sequence: "\f" }), "ctrl+l")).toBe(true);
   expect(matchKey(key({ name: "escape", sequence: "\x1b" }), "esc")).toBe(true);
+  // A plain terminal sends ctrl+j as a raw \n: name "linefeed", ctrl false.
+  expect(matchKey(key({ name: "linefeed", sequence: "\n" }), "ctrl+j")).toBe(true);
+});
+
+test("the one shortcut table has a single row per keys + scope and includes the palette's", () => {
+  const ids = shortcuts.map((s) => `${s.scope}:${s.keys}`);
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(ids).toContain("palette:ctrl+enter");
+  expect(ids).toContain("palette:ctrl+j");
 });
 
 test("every glyph, unicode and ascii, takes one cell in a rendered frame", async () => {

@@ -1,3 +1,4 @@
+import { memo, useState } from "react";
 import type { OutLine } from "@pvx/sdk";
 import { useTheme } from "../theme-context.tsx";
 import type { Block } from "./store.ts";
@@ -17,12 +18,18 @@ function Line({ l }: { l: OutLine }) {
   );
 }
 
-/** One scrollback block: command line, status and duration, output indented 3 cells. `actions`: error shortcuts. */
-export function BlockView({ b, actions }: { b: Block; actions: boolean }) {
+/**
+ * One scrollback block: command line, status and duration, output indented 3 cells. `actions`: error shortcuts.
+ * `tick` only matters while running (the spinner frame). Memoized, and hover is local state, so hovering repaints one block.
+ */
+export const BlockView = memo(function BlockView({ b, actions, tick, onPick }: { b: Block; actions: boolean; tick: number; onPick: (line: string) => void }) {
   const { c, g } = useTheme();
-  const st = { running: [g.spinner, c.info], ok: [g.ok, c.accent], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
+  const [hover, setHover] = useState(false);
+  const frames = [...g.spinner];
+  const st = { running: [frames[tick % frames.length]!, c.info], ok: [g.ok, c.accent], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
   return (
-    <box id={`b${b.id}`} flexDirection="column" flexShrink={0} backgroundColor={c.panel} paddingX={1}>
+    <box id={`b${b.id}`} flexDirection="column" flexShrink={0} backgroundColor={hover ? c.selected : c.panel} paddingX={1}
+      onMouseOver={() => setHover(true)} onMouseOut={() => setHover(false)} onMouseDown={() => onPick(b.line)}>
       <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <text>
           <span fg={c.accent}>{`${g.prompt} `}</span>
@@ -45,4 +52,4 @@ export function BlockView({ b, actions }: { b: Block; actions: boolean }) {
       </box>
     </box>
   );
-}
+});

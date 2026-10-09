@@ -30,16 +30,17 @@ export type AccentName = keyof typeof accents;
 export const glyphs = {
   unicode: {
     ok: "✓", warn: "▲", warnTag: "!", error: "✗", info: "i", active: "●", inactive: "○",
-    meterFull: "▰", meterEmpty: "▱", prompt: "❯", query: "›", cursor: "»", spinner: "⠹",
+    meterFull: "▰", meterEmpty: "▱", prompt: "❯", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
     official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═",
   },
   ascii: {
     ok: "+", warn: "^", warnTag: "!", error: "x", info: "i", active: "*", inactive: "o",
-    meterFull: "#", meterEmpty: "-", prompt: ">", query: ">", cursor: ">", spinner: "*",
+    meterFull: "#", meterEmpty: "-", prompt: ">", query: ">", cursor: ">", spinner: "|/-\\",
     official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=",
   },
 } as const;
 export type Symbols = keyof typeof glyphs;
+/** `spinner` holds the animation frames, one cell each. */
 export type Glyphs = { [K in keyof (typeof glyphs)["unicode"]]: string };
 
 /** Axis 3: border style of panels. */

@@ -1,4 +1,5 @@
-import { stripAnsi, type Registry } from "@pvx/core";
+import type { Registry } from "@pvx/core";
+import { sanitize } from "../session/store.ts";
 
 export type Origin = "official" | "usermodule" | "dev";
 
@@ -13,8 +14,8 @@ export interface Hit {
   range: [number, number] | null;
 }
 
-/** Strips ANSI and control characters from module-provided text before it reaches `<text>`. */
-export const clean = (s: string) => stripAnsi(s).replace(/[\x00-\x1f\x7f-\x9f]/g, "");
+/** One-line form of `sanitize`: module-provided text must not carry ANSI or control characters into `<text>`. */
+export const clean = (s: string) => sanitize(s).join(" ");
 
 /** Fase 4: the manifest gets a real `origin` (trust store / dev link); until then everything is a usermodule. */
 const originOf = (m: object | undefined): Origin => {

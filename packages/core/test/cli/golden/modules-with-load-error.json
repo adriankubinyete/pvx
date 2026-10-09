@@ -19,6 +19,10 @@
       "text": "demo 1.0.0 carregado"
     },
     {
+      "kind": "success",
+      "text": "echoer 1.0.0 carregado"
+    },
+    {
       "kind": "warning",
       "text": "no-default erro: entry não exporta uma função por padrão (export default)"
     },

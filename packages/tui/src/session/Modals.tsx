@@ -5,12 +5,12 @@ import { useTheme } from "../theme-context.tsx";
 import type { Pending, SessionApi } from "./store.ts";
 
 /** Host questions of the session: destructive confirmation and masked secret input. Mount it wherever a run may be pending. */
-export function SessionModals({ store, pending }: { store: SessionApi; pending: readonly Pending[] }) {
+export function SessionModals({ store, pending }: { store: Pick<SessionApi, "answer">; pending: readonly Pending[] }) {
   const p = pending[0];
   return p ? <Modal key={p.id} store={store} p={p} /> : null;
 }
 
-function Modal({ store, p }: { store: SessionApi; p: Pending }) {
+function Modal({ store, p }: { store: Pick<SessionApi, "answer">; p: Pending }) {
   const { c, box, g } = useTheme();
   // The secret lives only in this state; it goes to `answer` and nowhere else.
   const [secret, setSecret] = useState("");

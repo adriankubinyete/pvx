@@ -1,8 +1,11 @@
-import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { resolveCommand, tokenize, type Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { matchKey } from "../keymap.ts";
 import { useLayout } from "../layout.ts";
+import { useFooterScope } from "../router.tsx";
+import { SessionModals } from "../session/Modals.tsx";
+import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { favoritesPath, loadFavorites, saveFavorites } from "./favorites.ts";
 import { Form } from "./Form.tsx";
@@ -10,10 +13,7 @@ import { buildLine, type FormValues } from "./form.ts";
 import { clean, search, type Hit } from "./search.ts";
 
 /** What the palette needs from the session. `secrets` go to `execute` as env/promptSecret, never argv. */
-export interface SessionLike {
-  run(line: string, opts?: { secrets?: Record<string, string> }): Promise<{ exit: number }>;
-  history: readonly string[];
-}
+export type SessionLike = Pick<SessionApi, "run" | "history" | "answer" | "subscribe" | "getSnapshot">;
 
 export interface PaletteProps {
   session: SessionLike;
@@ -60,6 +60,9 @@ const printable = (s: string) => s.length === 1 && s >= " " && s !== "\x7f";
 export function Palette({ session, registry, onClose, favoritesFile }: PaletteProps) {
   const { c, g, box } = useTheme();
   const { cols, rows } = useLayout();
+  useFooterScope("palette");
+  // A queued command may ask (confirm, secret) while only this overlay is on screen, so it renders the modals itself.
+  const { pending } = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [query, setQuery] = useState("");
   const [selId, setSelId] = useState("");
   const [focus, setFocus] = useState(-1); // form field index, -1 = list
@@ -115,16 +118,22 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     return { display: built.display, secrets: built.secrets };
   };
 
+  const enqueue = () => {
+    const it = ready();
+    if (it) setQueue([...queue, it]);
+  };
+
   useKeys((k) => {
     if (busy) return;
     setMsg("");
     if (matchKey(k, "esc")) return focus >= 0 ? setFocus(-1) : onClose();
-    if (matchKey(k, "ctrl+enter")) return queue.length ? void runAll(queue) : setMsg("fila vazia");
+    if (matchKey(k, "ctrl+enter") || matchKey(k, "ctrl+j")) return queue.length ? void runAll(queue) : setMsg("fila vazia");
     if (matchKey(k, "ctrl+f")) {
       if (!hit) return;
       const next = favs.includes(hit.key) ? favs.filter((f) => f !== hit.key) : [...favs, hit.key];
       return setFavs(next), saveFavorites(next, favoritesFile ?? favoritesPath());
     }
+    if (matchKey(k, "ctrl+n")) return enqueue();
     if (matchKey(k, "enter")) {
       const it = ready();
       return it ? void runAll([it]) : undefined;
@@ -141,10 +150,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     }
     if (k.ctrl || k.meta || !printable(k.sequence)) return;
     if (f) return f.kind === "flag" ? (k.sequence === " " ? edit(f.name, values[f.name] !== true) : undefined) : edit(f.name, `${values[f.name] ?? ""}${k.sequence}`);
-    if (k.sequence === " ") {
-      const it = ready();
-      return it ? setQueue([...queue, it]) : undefined;
-    }
+    if (k.sequence === " " && !query) return enqueue(); // once there is a query, space is part of it (ctrl+n enqueues)
     setQuery(query + k.sequence);
     setSelId("");
   }, { modal: true });
@@ -183,6 +189,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
         <text fg={queue.length ? c.accent : c.dim}>{queue.length ? `fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}` : "fila vazia"}</text>
         <text fg={c.warn}>{busy ? "rodando..." : msg}</text>
       </box>
+      <SessionModals store={session} pending={pending} />
     </box>
   );
 }
@@ -191,5 +198,5 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
 export function useOpenPalette(props: Omit<PaletteProps, "onClose">) {
   const [shown, setShown] = useState(false);
   useKeys((k) => (matchKey(k, "ctrl+k") ? (setShown(true), true) : undefined), { base: true });
-  return { open: () => setShown(true), element: shown ? <Palette {...props} onClose={() => setShown(false)} /> : null };
+  return { shown, open: () => setShown(true), element: shown ? <Palette {...props} onClose={() => setShown(false)} /> : null };
 }

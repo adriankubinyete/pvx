@@ -1,4 +1,5 @@
 import type { KeyEvent } from "@opentui/core";
+import { paletteShortcuts } from "./palette/shortcuts.ts";
 
 export type Scope = "global" | "session" | "palette";
 
@@ -12,7 +13,7 @@ export interface Shortcut {
 }
 
 /** The ONE shortcut table: the footer line and the `?` help both render from it. Add rows here. */
-export const shortcuts: readonly Shortcut[] = [
+const base: readonly Shortcut[] = [
   { keys: "esc", label: "voltar", scope: "global", footer: true },
   { keys: "?", label: "ajuda", scope: "global", footer: true },
   { keys: "ctrl+c", label: "sair", scope: "global" },
@@ -24,10 +25,10 @@ export const shortcuts: readonly Shortcut[] = [
   { keys: "ctrl+l", label: "limpa", scope: "session", footer: true },
   { keys: "tab", label: "completa", scope: "session" },
   { keys: "enter", label: "roda", scope: "session" },
-  { keys: "space", label: "enfileira", scope: "palette" },
-  { keys: "ctrl+enter", label: "roda a fila", scope: "palette" },
-  { keys: "ctrl+f", label: "favorito", scope: "palette", footer: true },
 ];
+
+/** Base rows plus the palette's own, one row per keys + scope (the first one wins). */
+export const shortcuts: readonly Shortcut[] = [...new Map([...base, ...paletteShortcuts].map((s) => [`${s.scope}:${s.keys}`, s])).values()];
 
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] =>
@@ -41,6 +42,7 @@ const NAMES: Record<string, string> = { esc: "escape", enter: "return" };
  * So a single character (`l`, `L`, `?`, `space`) matches on `sequence`, never with ctrl/meta.
  */
 export function matchKey(key: KeyEvent, spec: string): boolean {
+  if (spec === "ctrl+j" && key.name === "linefeed") return true; // plain terminals: ctrl+j is a raw \n
   const parts = spec === "+" ? ["+"] : spec.split("+");
   const name = parts.pop()!;
   const mods = new Set(parts);

@@ -6,3 +6,4 @@ export { KeyRouter, useKeys, type KeyHandler } from "./keys.tsx";
 export { RouterProvider, ScreenOutlet, useRouter, type Screen } from "./router.tsx";
 export { useLayout } from "./layout.ts";
 export * from "./session/index.ts";
+export { Chip, ModuleChips } from "./Chips.tsx";

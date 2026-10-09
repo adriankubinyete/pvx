@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRenderer } from "@opentui/react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
+import { useOpenPalette } from "../palette/Palette.tsx";
 import { useRouter } from "../router.tsx";
 import { useTheme } from "../theme-context.tsx";
 import { BlockView } from "./Blocks.tsx";
@@ -46,7 +47,9 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   const [sel, setSel] = useState(0);
   const [search, setSearch] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
   const scroll = useRef<ScrollBoxRenderable>(null);
+  const palette = useOpenPalette({ session: store, registry });
 
   const searching = search !== null;
   let start = 0;
@@ -62,6 +65,15 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   useEffect(() => {
     if (last) scroll.current?.scrollChildIntoView(`b${last.id}`);
   }, [last?.id, last?.status]);
+
+  // The spinner's only timer: it exists while a block runs.
+  const running = blocks.some((b) => b.status === "running");
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setTick((n) => n + 1), 100);
+    return () => clearInterval(t);
+  }, [running]);
+  const recall = useCallback((line: string) => (setInput(line), setHi(null), setSel(0)), []);
 
   const edit = (f: (s: string) => string) => {
     if (searching) setSearch(f(search));
@@ -122,7 +134,7 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom" focused={false} contentOptions={{ gap: 1 }}>
-        {blocks.map((b) => <BlockView key={b.id} b={b} actions={b === target} />)}
+        {blocks.map((b) => <BlockView key={b.id} b={b} actions={b === target} tick={b.status === "running" ? tick : 0} onPick={recall} />)}
       </scrollbox>
       {items.length ? <Popup items={items} sel={at} /> : null}
       <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(c.accent)}>
@@ -133,7 +145,8 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>
-      <SessionModals store={store} pending={pending} />
+      {palette.shown ? null : <SessionModals store={store} pending={pending} />}
+      {palette.element}
     </box>
   );
 }

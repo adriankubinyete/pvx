@@ -19,10 +19,15 @@ beforeAll(async () => {
   await loadModules(registry, { hostVersion: "1.0.0", makeLogger: () => noop });
 });
 
+const idle = { blocks: [], history: [], pending: [] }; // stable: useSyncExternalStore needs the same object
+
 function fake(failing = "") {
   const calls: { line: string; secrets?: Record<string, string> }[] = [];
   const session: SessionLike = {
     history: ["demo greet ana"],
+    answer() {},
+    subscribe: () => () => {},
+    getSnapshot: () => idle,
     async run(line, opts) {
       calls.push({ line, secrets: opts?.secrets });
       return { exit: line.startsWith(failing) && failing ? 1 : 0 };
@@ -63,9 +68,9 @@ test("queue runs in order and stops at the first failure; favorites persist", as
   const ok = fake();
   const o = await open(ok.session);
   await h!.type("@cap");
-  await h!.press(" ");
+  await h!.press("n", { ctrl: true });
   await h!.press("ARROW_DOWN");
-  await h!.press(" ");
+  await h!.press("n", { ctrl: true });
   expect(h!.frame()).toContain("fila (2)");
   await h!.press("\x1b[13;5u"); // ctrl+enter as the kitty protocol sends it
   await h!.flush();
@@ -76,9 +81,9 @@ test("queue runs in order and stops at the first failure; favorites persist", as
   const bad = fake("cap-fixture fix-a");
   await open(bad.session);
   await h!.type("@cap");
-  await h!.press(" ");
+  await h!.press("n", { ctrl: true });
   await h!.press("ARROW_DOWN");
-  await h!.press(" ");
+  await h!.press("n", { ctrl: true });
   await h!.press("\x1b[13;5u"); // ctrl+enter as the kitty protocol sends it
   await h!.flush();
   expect(bad.calls.map((c) => c.line)).toEqual(["cap-fixture fix-a"]);

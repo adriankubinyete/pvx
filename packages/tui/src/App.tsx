@@ -20,7 +20,7 @@ export interface AppProps {
 
 function Frame({ chips }: { chips?: ReactNode }) {
   const { c, result } = useTheme();
-  const { top, depth, pop, notice } = useRouter();
+  const { depth, pop, notice, scope } = useRouter();
   const { cols, rows } = useLayout();
   const [help, setHelp] = useState(false);
   useKeys((k) => {
@@ -35,14 +35,14 @@ function Frame({ chips }: { chips?: ReactNode }) {
   return (
     <box flexDirection="column" width="100%" height="100%" backgroundColor={c.bg} paddingX={1}>
       <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
-        <box flexDirection="row" gap={1}>{chips}</box>
+        <box flexDirection="row" gap={1} flexShrink={1} minWidth={0} overflow="hidden">{chips}</box>
         {n ? <text fg={n.color}>{`${n.marker} ${notice}`}</text> : <text fg={c.dim}>pvx</text>}
       </box>
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <ScreenOutlet />
         {help ? <HelpOverlay onClose={() => setHelp(false)} /> : null}
       </box>
-      <Footer scope={top.scope ?? "session"} />
+      <Footer scope={scope} />
     </box>
   );
 }

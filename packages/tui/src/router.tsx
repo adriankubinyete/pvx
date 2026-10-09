@@ -1,4 +1,4 @@
-import { Component, createContext, useCallback, useContext, useRef, useState, type ReactNode } from "react";
+import { Component, createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Logger } from "@pvx/sdk";
 import type { Scope } from "./keymap.ts";
 import { useTheme } from "./theme-context.tsx";
@@ -18,6 +18,9 @@ export interface RouterApi {
   pop(): void;
   /** Last crash message, cleared on the next push or pop. */
   notice: string | null;
+  /** Scope of the footer: an open overlay's (`useFooterScope`) or else the top screen's. */
+  scope: Scope;
+  setOverlay(scope: Scope | null): void;
 }
 
 const Ctx = createContext<RouterApi | null>(null);
@@ -26,6 +29,12 @@ export function useRouter(): RouterApi {
   const r = useContext(Ctx);
   if (!r) throw new Error("useRouter fora do RouterProvider");
   return r;
+}
+
+/** While mounted, the footer shows `scope` instead of the screen's. Does nothing outside a RouterProvider. */
+export function useFooterScope(scope: Scope) {
+  const set = useContext(Ctx)?.setOverlay;
+  useEffect(() => (set?.(scope), () => set?.(null)), [set, scope]);
 }
 
 type Entry = Screen & { uid: number };
@@ -59,6 +68,7 @@ export function RouterProvider({ root, logger, children }: { root: Screen; logge
   const uid = useRef(0);
   const [stack, setStack] = useState<Entry[]>(() => [{ ...root, uid: 0 }]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [overlay, setOverlay] = useState<Scope | null>(null);
   const push = useCallback((s: Screen) => {
     setNotice(null);
     setStack((st) => [...st, { ...s, uid: ++uid.current }]);
@@ -76,7 +86,7 @@ export function RouterProvider({ root, logger, children }: { root: Screen; logge
     setNotice(`tela "${e.id}" falhou: ${err.message}`);
   };
   return (
-    <Ctx.Provider value={{ top, depth: stack.length, push, pop, notice }}>
+    <Ctx.Provider value={{ top, depth: stack.length, push, pop, notice, scope: overlay ?? top.scope ?? "session", setOverlay }}>
       <Outlet.Provider value={(
         <Boundary key={top.uid} onCatch={(err) => crash(top, err)}>
           {top.element}
