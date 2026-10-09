@@ -6,7 +6,7 @@ import { builtin } from "../../../packages/builtin/index.ts";
 import { ask, askSecret } from "./prompt.ts";
 
 const VERSION = "0.1.0";
-// Dev layout. The compiled binary will need the profiles embedded (Fase 8).
+// Dev layout. The compiled binary will need the profiles embedded (not done yet).
 const PROFILES_DIR = join(import.meta.dir, "../../../profiles");
 
 /** Logging is best effort: an unwritable PVX_HOME must not break read-only commands. */

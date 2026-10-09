@@ -46,7 +46,7 @@ export type Glyphs = { [K in keyof (typeof glyphs)["unicode"]]: string };
 /** Axis 3: border style of panels. */
 export type BorderName = "rounded" | "single" | "none";
 
-/** Axis 4: result line format. `bracket` is the default (see DECISIONS.md). */
+/** Axis 4: result line format. `bracket` is the default. */
 export type ResultFormat = "bracket" | "glyph" | "text";
 export type ResultKind = "ok" | "warn" | "error" | "info";
 

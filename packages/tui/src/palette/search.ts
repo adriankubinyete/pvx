@@ -26,7 +26,7 @@ export interface Hit {
 /** One-line form of `sanitize`: module-provided text must not carry ANSI or control characters into `<text>`. */
 export const clean = (s: string) => sanitize(s).join(" ");
 
-/** Fase 4: the manifest gets a real `origin` (trust store / dev link); until then everything is a usermodule. */
+/** Origin comes from the manifest; anything without one is shown as a usermodule. */
 const originOf = (m: object | undefined): Origin => {
   const o = (m as { origin?: string } | undefined)?.origin;
   return o === "official" || o === "dev" ? o : "usermodule";

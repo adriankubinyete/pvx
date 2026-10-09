@@ -32,7 +32,7 @@ export function readJson<T>(file: string, fallback: T): T {
 export const listTrust = (): Record<string, TrustEntry> => readJson(trustFile(), {});
 export const getTrust = (id: string): TrustEntry | undefined => listTrust()[id];
 
-// ponytail: read-modify-write without a lock; two simultaneous approvals can lose one. Atomic rename only prevents torn files.
+// note: read-modify-write without a lock; two simultaneous approvals can lose one. Atomic rename only prevents torn files.
 export function approve(id: string, e: { url: string; sha: string; permissions?: Manifest["permissions"] }): TrustEntry {
   const entry: TrustEntry = {
     url: e.url,

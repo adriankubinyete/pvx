@@ -238,7 +238,7 @@ export type SlotData =
   | { label: string; level: Level; detail?: string }[] // home.chips
   | { level: Level; title: string; fix?: string }[] // home.attention, home.configured
   | string // home.summary
-  | string[]; // home.notes (home.panel's shape is decided with the widgets, Fase 3B)
+  | string[]; // home.notes (home.panel is reserved)
 
 export interface WidgetDef {
   slot: SlotId;

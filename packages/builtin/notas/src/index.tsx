@@ -61,7 +61,7 @@ export default (sdk: Sdk): ModuleDef => {
 
   // The marker as it was when Início opened: what is "new" stays new for the whole visit, while the file moves on.
   let base: { at?: string; last: number } | undefined;
-  // ponytail: process-wide, so two interleaved users in one process would share it; a pvx process serves one technician.
+  // note: process-wide, so two interleaved users in one process would share it; a pvx process serves one technician.
   async function baselineFor(u: string, touch: boolean) {
     const now = Date.now();
     if (touch && (!base || now - base.last > GAP_MS)) base = { at: await readSeen(u), last: now };

@@ -29,7 +29,7 @@ export function auditCommand(e: AuditCmd, o: { mutation?: boolean } = {}): void 
   if (o.mutation || e.destructive || process.env.PVX_AUDIT === "all") write({ kind: "cmd", user: currentUser(), ...e });
 }
 
-/** Called by the login banner (Fase 6C): who came in and from where (`SSH_CLIENT`). Always recorded. */
+/** Called by the login banner: who came in and from where (`SSH_CLIENT`). Always recorded. */
 export const auditLogin = (user: string, from?: string): void => write({ kind: "login", user, ...(from ? { from } : {}) });
 
 /** Module lifecycle (add, update, trust, remove...): always recorded. */

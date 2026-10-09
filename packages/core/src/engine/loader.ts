@@ -56,7 +56,7 @@ export async function loadModules(registry: Registry, opts: LoadOpts): Promise<v
   }
 }
 
-/** Evicts every cached file of the module so the next import re-evaluates it. Not `?v=`: that skips relative imports and leaks (spike 5). */
+/** Evicts every cached file of the module so the next import re-evaluates it. Not `?v=`: that skips relative imports and leaks memory. */
 export function evictModule(dir: string): void {
   const base = realpathSync(dir) + sep;
   for (const k of Object.keys(require.cache)) if (k.startsWith(base)) delete require.cache[k];
