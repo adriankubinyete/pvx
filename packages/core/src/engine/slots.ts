@@ -25,6 +25,8 @@ const validShape = (slot: SlotId, d: unknown) => (slot === "home.panel" ? true :
 export interface SlotHub {
   /** Called by the registry for each widget of a module. */
   add(moduleId: string, name: string, def: WidgetDef): void;
+  /** Drops every widget of a module (reload). */
+  remove(moduleId: string): void;
   /** Data the host itself contributes to a slot (first in it). Does not notify. */
   setHost(slot: SlotId, data: SlotData | undefined): void;
   /** Last data of a slot: host first, then widgets by priority. Never evaluates. Summaries are joined with " · ". */
@@ -90,6 +92,9 @@ export function createSlotHub(opts: SlotOpts = {}): SlotHub {
 
   return {
     add: (moduleId, name, def) => void entries.push({ id: `${moduleId}.${name}`, def, running: false, next: 0 }),
+    remove(moduleId) {
+      for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.id.startsWith(`${moduleId}.`)) entries.splice(i, 1);
+    },
     setHost: (slot, data) => void (data === undefined ? host.delete(slot) : host.set(slot, data)),
     read(slot) {
       const own = entries.filter((e) => e.def.slot === slot && e.data !== undefined).sort((a, b) => a.def.priority - b.def.priority);

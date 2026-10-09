@@ -60,7 +60,7 @@ const logsArgs: ArgSpec[] = [
 export const CORE: CoreCommand[] = [
   {
     key: "modules",
-    help: "Lista módulos, versão e estado (subcomandos: add, list, remove, enable, disable, trust)",
+    help: "Lista módulos, versão e estado (subcomandos: add, list, update, link, remove, enable, disable, trust)",
     run: listCommand,
   },
   catalogSearchCommand,

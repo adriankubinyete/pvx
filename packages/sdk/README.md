@@ -13,7 +13,7 @@ Os exemplos marcados com `<!-- test -->` neste arquivo são extraídos e rodados
 | `entry` | sim | Arquivo de entrada, relativo ao módulo (`src/index.tsx`). Tem de ficar dentro do diretório. |
 | `pvx` | não | Faixa semver do pvx aceita (`>=0.1.0`). Fora da faixa, o módulo não carrega e o erro diz qual faixa instalar. |
 | `applies` | não | `{ "file": "/etc/..." }`: sem o arquivo o módulo é ignorado em silêncio. |
-| `permissions` | não | `exec`, `net`, `fs`: o que o módulo declara usar. Serve à revisão de confiança. |
+| `permissions` | não | `exec`, `net`, `fs`: o que o módulo declara usar. Serve à revisão de confiança e é o que `ctx.exec`, `ctx.net` e `ctx.fs` aceitam (veja Permissões). |
 | `contributes` | não | `commands`, `pages`, `widgets`, `capabilities`: o que o módulo entrega, para listar sem importar o código. |
 | `uses` | não | Módulos cujas consultas este módulo chama com `ctx.query`. |
 
@@ -293,6 +293,59 @@ const factory: ModuleFactory = () => ({
 });
 export default factory;
 ```
+
+## Permissões: `ctx.exec`, `ctx.net`, `ctx.fs`
+
+Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest listou em `permissions`. Fora disso, lançam um erro claro e o host registra a violação no log do módulo e no `core.log`.
+
+| API | Regra |
+| --- | --- |
+| `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão), e devolve `{ code, stdout, stderr }`. |
+| `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. |
+| `ctx.fs.read / write / exists / list` | O caminho (resolvido, com symlinks) fica sob um prefixo de `permissions.fs`. O prefixo `rw:` libera escrita; sem ele, só leitura. O diretório de estado do próprio módulo é sempre permitido. |
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["uname"], "net": ["example.com"], "fs": ["rw:/var/lib/meu-modulo", "/etc/os-release"] }
+const factory: ModuleFactory = () => ({
+  commands: {
+    sistema: {
+      help: "Mostra o kernel e grava um marcador",
+      async run(ctx) {
+        const { stdout } = await ctx.exec("uname", ["-r"], { timeoutMs: 5000 });
+        ctx.out.success(`kernel ${stdout.trim()}`);
+        await ctx.fs.write("/var/lib/meu-modulo/ultimo", stdout);
+        const res = await ctx.net.fetch("https://example.com/ping");
+        ctx.out.info(`ping: ${res.status}`);
+      },
+    },
+  },
+});
+export default factory;
+```
+
+## Segurança
+
+**Isto não é um sandbox.** O módulo roda no mesmo processo do pvx, como root nas centrais. Nada impede um módulo de chamar `Bun.spawn`, `node:child_process`, `fetch` ou `node:fs` direto, e de contornar `ctx.*`. As permissões declarativas dão ao técnico uma lista honesta do que o módulo diz usar, e fazem o uso correto falhar alto quando passa do declarado. A barreira real é a revisão humana do commit.
+
+**Modelo de confiança**
+
+- Um módulo instalado por `modules add` só é importado depois de o técnico aprovar aquele commit (`modules trust <id> --sha <sha>`, ou `--trust` no `add`). A aprovação fica em `PVX_HOME/trust.json` com o sha, quem aprovou e as permissões vistas.
+- O módulo só carrega se `HEAD` for igual ao sha aprovado e a árvore git estiver limpa. Commit novo ou arquivo alterado: não carrega.
+- `modules update` busca e lista os commits novos e as mudanças de permissões, mas só avança com `--trust <sha do remoto>`; o avanço vai exatamente àquele commit (fast-forward).
+- Nenhuma variável de ambiente desliga a confiança. `PVX_USERMODULES` só muda o diretório. Módulos embutidos no binário não passam pelo gate: são código do próprio pvx.
+- Git roda sem hooks, sem submódulos, sem credenciais na URL, só `https` e `ssh`.
+- Um symlink em `usermodules/` só carrega se `modules link` o registrou (`PVX_HOME/modules.json`) e se ainda aponta para onde foi registrado. Um módulo dev (link) carrega **sem confiança por commit**: é para a máquina de quem desenvolve, não para uma central de cliente. Na TUI ele recarrega ao salvar; um erro de carga aparece no scrollback e a versão anterior continua ativa. Sem `dispose` ainda: timers e listeners da versão antiga continuam rodando depois da recarga.
+
+**O que NÃO é protegido**
+
+- Código de um commit aprovado: ele roda com os privilégios do pvx. Aprovar é confiar.
+- Uso direto de `Bun.spawn`, `fetch` e `node:fs` fora de `ctx.*`. A revisão mostra um aviso por análise estática, que é um aviso e não uma garantia (código gerado ou ofuscado passa).
+- Dependências empacotadas dentro do módulo: fazem parte do commit revisado.
+- A janela entre a checagem do commit e o `import()`: quem escreve em `usermodules/` já é root.
+- `ctx.exec`: o nome base é o que se confere, então um caminho absoluto com nome permitido roda. O programa em si e o que ele faz não são limitados.
 
 ## Como testar com `@pvx/testing`
 

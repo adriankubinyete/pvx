@@ -1,15 +1,18 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Manifest, OutLine } from "@pvx/sdk";
-import { logsDir, moduleStateDir, pvxHome, usermodulesDir } from "../engine/paths.ts";
+import { moduleStateDir, usermodulesDir } from "../engine/paths.ts";
 import { readManifestRaw } from "../engine/manifest.ts";
 import type { Registry } from "../engine/registry.ts";
-import { createLogger } from "../logs/index.ts";
 import { analyze } from "./analyze.ts";
 import * as G from "./git.ts";
-import { approve, getTrust, readJson, revoke, writeJsonAtomic } from "./trust.ts";
+import { audit, devLinks, disabledSet, invalidateUpdateCache, isLink, isRegisteredDev, matchSha, msg, setDevLinks, validId, writeDisabled, type Result } from "./common.ts";
+import { approve, getTrust, revoke } from "./trust.ts";
 
 export * from "./trust.ts";
+export * from "./dev.ts";
+export * from "./update.ts";
+export { audit, invalidateUpdateCache, type Result };
 export { GitError, checkUrl } from "./git.ts";
 export { analyze };
 
@@ -31,33 +34,15 @@ export interface ModuleRow {
   error?: string;
 }
 
-const ID = /^[a-z0-9-]+$/;
-const validId = (id: string) => {
-  if (!ID.test(id)) throw new Error(`id inválido: \`${id}\``);
-  return id;
-};
-const modulesFile = () => join(pvxHome(), "modules.json");
-const disabledSet = () => new Set(readJson<{ disabled?: string[] }>(modulesFile(), {}).disabled ?? []);
-const writeDisabled = (s: Set<string>) => writeJsonAtomic(modulesFile(), { disabled: [...s].sort() });
-const isLink = (dir: string) => lstatSync(dir).isSymbolicLink();
-
-/** The single call point of the diário (Fase 6): approve, revoke, remove, enable, disable all go through here to core.log. */
-export function audit(msg: string): void {
-  try {
-    createLogger(logsDir(), "core").info(msg);
-  } catch {}
-}
-
-const msg = (e: unknown) => (e as Error).message ?? String(e);
-const matchSha = (head: string, given: string) => given.length >= 7 && head.startsWith(given.toLowerCase());
-
 // ---------------------------------------------------------------- state
 
 /** Everything decided from disk alone: never imports, never fetches. `carregado` here means "eligible to import". */
 async function diskState(dir: string, id: string): Promise<ModuleRow> {
   const row: ModuleRow = { id, state: "carregado" };
   if (disabledSet().has(id)) return { ...row, state: "desativado" };
-  if (isLink(dir)) return { ...row, state: "dev" };
+  if (isLink(dir)) {
+    return isRegisteredDev(dir, id) ? { ...row, state: "dev" } : { ...row, state: "aguardando-confianca", error: "symlink não registrado; use pvx modules link" };
+  }
   if (!(await G.isRepoRoot(dir))) return { ...row, state: "aguardando-confianca", error: "não é um repositório git" };
   try {
     row.url = await G.originUrl(dir).catch(() => undefined);
@@ -239,6 +224,7 @@ export async function addModule(url: string, o: AddOpts): Promise<AddResult> {
     renameSync(tmp, dir);
     tmp = "";
     review.dir = dir;
+    invalidateUpdateCache();
     if (o.trust === undefined) return { ok: true, status: "instalado", id, sha: review.sha, state: "aguardando-confianca", review };
     approve(id, { url, sha: review.sha, permissions: review.permissions });
     audit(`trust aprovado: ${id} ${review.sha} (${url})`);
@@ -249,8 +235,6 @@ export async function addModule(url: string, o: AddOpts): Promise<AddResult> {
     if (tmp) rmSync(tmp, { recursive: true, force: true });
   }
 }
-
-export type Result = { ok: true; text: string } | { ok: false; error: string };
 
 /** Approves the commit currently checked out; `sha` must match HEAD (full or 7+ prefix). */
 export async function trustModule(id: string, sha: string): Promise<Result> {
@@ -283,8 +267,10 @@ export function removeModule(id: string, o: { purge?: boolean } = {}): Result {
   try {
     const dir = join(usermodulesDir(), validId(id));
     if (!existsSync(dir) && !isDanglingLink(dir)) throw new Error(`módulo "${id}" não instalado em usermodules`);
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true }); // on a link this removes only the link, never the target
     revoke(id);
+    if (devLinks().some((d) => d.id === id)) setDevLinks(devLinks().filter((d) => d.id !== id));
+    invalidateUpdateCache();
     const off = disabledSet();
     if (off.delete(id)) writeDisabled(off);
     if (o.purge) rmSync(join(moduleStateDir(id), ".."), { recursive: true, force: true });

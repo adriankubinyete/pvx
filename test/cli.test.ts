@@ -1,18 +1,21 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createLogger, createRegistry, loadModules, logsDir, runCli } from "../packages/core/src/index.ts";
+import { createLogger, createRegistry, loadModules, logsDir, runCli, trustModule } from "../packages/core/src/index.ts";
+import { useFixtureModules } from "../packages/testing/src/index.ts";
 import { theme } from "../packages/tui/src/index.ts";
 
 const root = join(import.meta.dir, "..");
 
-async function pvx(args: string[], env: Record<string, string> = {}) {
+/** Fixtures reach the real entrypoint as recorded dev links: the trust gate is never bypassed. */
+async function pvx(args: string[], env: Record<string, string> = {}, fixtures = ["demo"]) {
   const { NO_COLOR: _drop, ...base } = process.env;
+  const home = useFixtureModules(fixtures);
   const p = Bun.spawn(["bun", join(root, "apps/pvx/src/index.ts"), ...args], {
     stdin: "ignore",
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...base, PVX_USERMODULES: join(root, "packages/core/test/fixtures/usermodules"), ...env },
+    env: { ...base, ...home, ...env },
   });
   const [stdout, stderr, exit] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
   return { stdout, stderr, exit };
@@ -26,6 +29,25 @@ test("no args and no TTY: prints the help and exits 2 (never hangs, never opens 
   expect(r.exit).toBe(2);
   expect(r.stdout).toContain("uso: pvx");
   expect(r.stdout).toContain("demo greet");
+});
+
+test("PVX_USERMODULES does not bypass trust: an untrusted git module is never imported, and loads once approved", async () => {
+  const um = join(process.env.PVX_HOME!, "um");
+  const mod = join(um, "gm");
+  const marker = join(process.env.PVX_HOME!, "marker");
+  mkdirSync(mod, { recursive: true });
+  writeFileSync(join(mod, "pvx-module.json"), JSON.stringify({ id: "gm", version: "1.0.0", entry: "index.ts" }));
+  writeFileSync(join(mod, "index.ts"), `import { writeFileSync } from "node:fs";\nwriteFileSync(${JSON.stringify(marker)}, "x");\nexport default () => ({ commands: { hi: { help: "h", run: (c: any) => c.out.success("oi") } } });\n`);
+  for (const a of [["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "i"]]) Bun.spawnSync(["git", "-C", mod, ...a]);
+  const env = { PVX_USERMODULES: um };
+  const r = await pvx(["modules"], env, []);
+  expect(r.stdout).toContain("gm 1.0.0 aguardando-confianca");
+  expect(existsSync(marker)).toBe(false);
+  // control: the same module, approved for this commit, does import
+  process.env.PVX_USERMODULES = um;
+  expect((await trustModule("gm", Bun.spawnSync(["git", "-C", mod, "rev-parse", "HEAD"]).stdout.toString().trim())).ok).toBe(true);
+  await pvx(["modules"], env, []);
+  expect(existsSync(marker)).toBe(true);
 });
 
 process.env.PVX_USERMODULES = join(root, "packages/core/test/fixtures/usermodules");

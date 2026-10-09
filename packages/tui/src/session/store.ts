@@ -41,6 +41,8 @@ export interface SessionApi {
   /** The line to recall for a block: the real one (memory only) when the shown one is masked. */
   lineOf(blockId: number): string;
   clear(): void;
+  /** Pushes a synthetic block (host news such as a dev-module reload error); no history, no run. */
+  notice(line: string, status: Block["status"], lines: OutLine[], moduleId?: string): void;
   /** Answers a pending confirm (boolean) or secret (string, or undefined to cancel). */
   answer(id: number, value: boolean | string | undefined): void;
   subscribe(fn: () => void): () => void;
@@ -195,6 +197,10 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     },
     lineOf: (blockId) => raws.get(blockId) ?? state.blocks.find((x) => x.id === blockId)?.line ?? "",
     clear: () => set({ blocks: [] }),
+    notice(line, status, lines, moduleId = "core") {
+      const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
+      set({ blocks: [...state.blocks, { id: ++seq, line, status, moduleId, lines: clean }].slice(-MAX_BLOCKS) });
+    },
     answer(id, value) {
       waiting.get(id)?.(value);
       waiting.delete(id);

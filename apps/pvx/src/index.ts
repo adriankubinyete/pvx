@@ -22,8 +22,8 @@ const makeLogger = (name: string): Logger => {
 
 async function main(): Promise<number> {
   const registry = createRegistry();
-  // PVX_USERMODULES is a developer override of the directory (and what the CLI tests use): it skips per-commit trust.
-  const canImport = process.env.PVX_USERMODULES ? undefined : trustGate({ warn: (m) => makeLogger("core").warn(m) });
+  // No env var bypasses trust: PVX_USERMODULES only moves the directory. Built-ins ship with pvx and skip the gate.
+  const canImport = trustGate({ warn: (m) => makeLogger("core").warn(m) });
   await loadModules(registry, { hostVersion: VERSION, makeLogger, ui, builtin, canImport });
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const abort = new AbortController();

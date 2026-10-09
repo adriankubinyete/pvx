@@ -1,6 +1,7 @@
 import { EXIT } from "@pvx/sdk";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
+import { createGranted } from "./permissions.ts";
 import { resolveCommand, type Registry } from "./registry.ts";
 import { createStore } from "./store.ts";
 import { tokenize } from "./tokenize.ts";
@@ -51,6 +52,7 @@ export async function execute(registry: Registry, input: string | string[], opts
       store: createStore(cmd.moduleId),
       query: registry.query,
       slots: registry.slots,
+      ...createGranted(cmd.moduleId, registry.modules.get(cmd.moduleId)?.permissions, log, opts.makeLogger("core")),
     });
   } catch (e) {
     log.error(`exceção em ${key}: ${(e as Error).stack ?? e}`);

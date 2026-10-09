@@ -84,3 +84,11 @@ test("strict root: a module command in a non-root TUI is an error block and does
   expect(ran).toBe(0);
   expect(store.blocks[0]).toMatchObject({ status: "error", lines: [{ kind: "error", text: expect.stringContaining("rode com sudo") }] });
 });
+
+test("notice pushes a synthetic block (no history) with sanitized text", () => {
+  const s = createSessionStore({ registry, makeLogger: () => ({ debug: noop, info: noop, warn: noop, error: noop }), historyPath: join(pvxHome(), "h"), isRoot: true });
+  s.notice("recarga de dv", "error", [{ kind: "error", text: "\x1b[31mdv: Unexpected ;\x1b[0m" }], "dv");
+  expect(s.blocks).toHaveLength(1);
+  expect(s.blocks[0]).toMatchObject({ line: "recarga de dv", status: "error", moduleId: "dv", lines: [{ kind: "error", text: "dv: Unexpected ;" }] });
+  expect(s.history).toEqual([]);
+});

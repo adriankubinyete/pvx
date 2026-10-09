@@ -76,7 +76,7 @@ export const headSha = async (dir: string) => (await git(dir, ["rev-parse", "HEA
 export const dirtyCount = async (dir: string) => (await git(dir, ["status", "--porcelain"])).split("\n").filter(Boolean).length;
 export const originUrl = async (dir: string) => (await git(dir, ["remote", "get-url", "origin"])).trim();
 export const currentRef = async (dir: string) => (await git(dir, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
-export const fetch = (dir: string, allowFile?: boolean) => git(dir, ["fetch", "--quiet", "--no-recurse-submodules"], { timeoutMs: NET_MS, allowFile });
+export const fetch = (dir: string, allowFile?: boolean, timeoutMs = NET_MS) => git(dir, ["fetch", "--quiet", "--no-recurse-submodules"], { timeoutMs, allowFile });
 
 /** Counts against the already-fetched upstream (never fetches). Null without an upstream. */
 export async function aheadBehind(dir: string): Promise<{ ahead: number; behind: number } | null> {
@@ -88,8 +88,15 @@ export async function aheadBehind(dir: string): Promise<{ ahead: number; behind:
   }
 }
 
-/** One-line subjects of the commits the upstream has and HEAD lacks. */
-export const newCommits = async (dir: string) => (await git(dir, ["log", "--oneline", "HEAD..@{u}"])).split("\n").filter(Boolean);
-export const pullFfOnly = (dir: string, allowFile?: boolean) => git(dir, ["pull", "--ff-only", "--no-recurse-submodules"], { timeoutMs: NET_MS, allowFile });
+/** Commits (sha + subject) the already-fetched upstream has and HEAD lacks, newest first. */
+export async function newCommits(dir: string): Promise<{ sha: string; subject: string }[]> {
+  const out = await git(dir, ["log", "--format=%H%x09%s", "HEAD..@{u}"]);
+  return out.split("\n").filter(Boolean).map((l) => ({ sha: l.slice(0, l.indexOf("\t")), subject: l.slice(l.indexOf("\t") + 1) }));
+}
+export const upstreamSha = async (dir: string) => (await git(dir, ["rev-parse", "@{u}"])).trim();
+/** A file as it is in `rev` (no checkout). */
+export const showFile = (dir: string, rev: string, path: string) => git(dir, ["show", `${rev}:${path}`]);
+/** Fast-forwards to exactly `sha` (what the technician approved), without a second fetch that could move past it. */
+export const mergeFfOnly = (dir: string, sha: string) => git(dir, ["merge", "--ff-only", "--no-edit", sha]);
 /** True when `dir` is itself a repository root (not a folder inside some other checkout). */
 export const isRepoRoot = async (dir: string) => (await git(dir, ["rev-parse", "--show-prefix"]).catch(() => "x")).trim() === "";

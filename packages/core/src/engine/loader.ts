@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { join, sep } from "node:path";
-import type { BuiltinModule, Logger, Manifest, ModuleDef, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
+import { basename, join, sep } from "node:path";
+import type { BuiltinModule, Logger, Manifest, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
 import { readManifest } from "./manifest.ts";
 import { usermodulesDir } from "./paths.ts";
 import type { Registry } from "./registry.ts";
@@ -42,24 +42,35 @@ export async function loadModules(registry: Registry, opts: LoadOpts): Promise<v
     const dir = join(root, id);
     if (id.startsWith(".") || !statSync(dir).isDirectory()) continue; // dot dirs: clones in progress
     try {
-      const manifest = readManifest(dir, opts.hostVersion);
-      if (!manifest) continue;
-      if (!(await (opts.canImport ?? (() => true))(dir, manifest))) continue;
-      const base = realpathSync(dir);
-      let entry: string;
-      try {
-        entry = realpathSync(join(base, manifest.entry));
-      } catch {
-        throw new Error(`entry "${manifest.entry}" não encontrado`);
-      }
-      if (!entry.startsWith(base + sep)) throw new Error(`entry "${manifest.entry}" fora do diretório do módulo`);
-      const factory = (await import(entry)).default as ModuleFactory | undefined;
-      if (typeof factory !== "function") throw new Error("entry não exporta uma função por padrão (export default)");
-      const sdk: Sdk = { version: 1, log: opts.makeLogger(id), ui: opts.ui ?? unavailableUi };
-      const def: ModuleDef = factory(sdk);
-      registry.register(manifest, def);
+      await loadOne(registry, dir, opts);
     } catch (e) {
       registry.addError(id, (e as Error).message);
     }
   }
+}
+
+/** Evicts every cached file of the module so the next import re-evaluates it. Not `?v=`: that skips relative imports and leaks (spike 5). */
+export function evictModule(dir: string): void {
+  const base = realpathSync(dir) + sep;
+  for (const k of Object.keys(require.cache)) if (k.startsWith(base)) delete require.cache[k];
+}
+
+/** Manifest, gate, import, register. Throws on failure; a skipped module (`applies`, gate) returns quietly. `replace` swaps a registered module. */
+export async function loadOne(registry: Registry, dir: string, opts: LoadOpts, replace = false): Promise<void> {
+  const id = basename(dir);
+  const manifest = readManifest(dir, opts.hostVersion);
+  if (!manifest) return;
+  if (!(await (opts.canImport ?? (() => true))(dir, manifest))) return;
+  const base = realpathSync(dir);
+  let entry: string;
+  try {
+    entry = realpathSync(join(base, manifest.entry));
+  } catch {
+    throw new Error(`entry "${manifest.entry}" não encontrado`);
+  }
+  if (!entry.startsWith(base + sep)) throw new Error(`entry "${manifest.entry}" fora do diretório do módulo`);
+  const factory = (await import(entry)).default as ModuleFactory | undefined;
+  if (typeof factory !== "function") throw new Error("entry não exporta uma função por padrão (export default)");
+  const sdk: Sdk = { version: 1, log: opts.makeLogger(id), ui: opts.ui ?? unavailableUi };
+  registry.register(manifest, factory(sdk), { replace });
 }

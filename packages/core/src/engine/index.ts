@@ -7,3 +7,4 @@ export * from "./registry.ts";
 export * from "./store.ts";
 export * from "./tokenize.ts";
 export * from "./slots.ts";
+export * from "./permissions.ts";

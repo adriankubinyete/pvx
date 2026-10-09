@@ -23,8 +23,8 @@ export interface Registry {
   /** Widgets of every module, collected per home slot. */
   slots: SlotHub;
   errors: LoadError[];
-  /** Refuses the whole module (nothing registered) on id, command or query conflict. */
-  register(manifest: Manifest, def: ModuleDef): void;
+  /** Refuses the whole module (nothing registered) on id, command or query conflict. `replace` swaps an already registered module atomically (reload). */
+  register(manifest: Manifest, def: ModuleDef, o?: { replace?: boolean }): void;
   addError(id: string, error: string): void;
   query: QueryFn;
 }
@@ -39,17 +39,24 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     official: new Set(),
     slots: createSlotHub(opts.slots),
     errors: [],
-    register(manifest, def) {
+    register(manifest, def, o) {
       const id = manifest.id;
-      if (r.modules.has(id)) throw new Error(`id "${id}" já registrado`);
+      if (r.modules.has(id) && !o?.replace) throw new Error(`id "${id}" já registrado`);
       const cmds = Object.entries(def.commands ?? {}).map(([k, c]) => [`${id} ${k}`.trim(), c] as const);
       for (const [key] of cmds) {
         const other = r.commands.get(key);
-        if (other) throw new Error(`conflito: comando "${key}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
+        if (other && other.moduleId !== id) throw new Error(`conflito: comando "${key}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
       }
       for (const name of Object.keys(def.queries ?? {})) {
         const other = r.queries.get(name);
-        if (other) throw new Error(`conflito: consulta "${name}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
+        if (other && other.moduleId !== id) throw new Error(`conflito: consulta "${name}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
+      }
+      if (r.modules.has(id)) {
+        for (const [k, c] of r.commands) if (c.moduleId === id) r.commands.delete(k);
+        for (const [k, q] of r.queries) if (q.moduleId === id) r.queries.delete(k);
+        for (const [k, p] of r.pages) if (p.moduleId === id) r.pages.delete(k);
+        r.capabilities = r.capabilities.filter((c) => c.moduleId !== id);
+        r.slots.remove(id);
       }
       r.modules.set(id, manifest);
       for (const [key, c] of cmds) r.commands.set(key, { ...c, moduleId: id });

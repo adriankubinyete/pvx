@@ -61,6 +61,44 @@ export interface CommandCtx {
   store: Store;
   query: QueryFn;
   slots: SlotsApi;
+  /** Runs a program (no shell). Only commands whose basename is in `permissions.exec`. */
+  exec(cmd: string, args?: string[], opts?: ExecOpts): Promise<ExecResult>;
+  /** Only hosts (`host[:port]`) listed in `permissions.net`; redirects are not followed. */
+  net: { fetch(url: string, init?: NetInit): Promise<NetResponse> };
+  /** Only paths under `permissions.fs` (`rw:` prefix allows write) and the module's own state dir. */
+  fs: ModuleFs;
+}
+
+/** The subset of `fetch` a module needs (the SDK carries no DOM types). */
+export interface NetInit {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}
+export interface NetResponse {
+  status: number;
+  ok: boolean;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
+}
+
+export interface ExecOpts {
+  cwd?: string;
+  env?: Record<string, string>;
+  stdin?: string;
+  /** Default 30000; the process is killed after it. */
+  timeoutMs?: number;
+}
+export interface ExecResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+export interface ModuleFs {
+  read(path: string): Promise<string>;
+  write(path: string, data: string): Promise<void>;
+  exists(path: string): Promise<boolean>;
+  list(path: string): Promise<string[]>;
 }
 
 /** Read-only view of the home slots: the last collected data, never re-evaluated. `undefined` until something fills it. */

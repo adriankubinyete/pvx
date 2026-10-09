@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
-import { addModule, createRegistry, listModules, loadModules, runCli, trustGate, type CliIO } from "../../src/index.ts";
+import { addModule, createRegistry, listModules, listTrust, loadModules, pendingUpdates, reloadModule, runCli, trustGate, watchDevModules, type CliIO, type DevEvent } from "../../src/index.ts";
 
 const noop = () => {};
 const makeLogger = (): Logger => ({ debug: noop, info: noop, warn: noop, error: noop });
@@ -185,12 +185,32 @@ describe("gate", () => {
     expect(await states()).toEqual({ gm: "carregado" });
   });
 
-  test("a symlink is dev: loads without trust", async () => {
+  test("a symlink is dev only when `modules link` recorded it: loads without trust", async () => {
+    const o = origin("devm");
+    expect((await cli(`modules link ${o.work}`)).code).toBe(0);
+    expect(await states()).toEqual({ devm: "dev" });
+    expect(existsSync(marker)).toBe(true);
+  });
+
+  test("an unregistered symlink is never imported", async () => {
     const o = origin("devm");
     mkdirSync(process.env.PVX_USERMODULES!, { recursive: true });
     symlinkSync(o.work, modDir("devm"));
-    expect(await states()).toEqual({ devm: "dev" });
-    expect(existsSync(marker)).toBe(true);
+    expect(await states()).toEqual({ devm: "aguardando-confianca" });
+    const row = (await listModules(await load()))[0]!;
+    expect(row.error).toContain("use pvx modules link");
+    expect([...(await load()).modules.keys()]).toEqual([]);
+    expect(existsSync(marker)).toBe(false);
+  });
+
+  test("a recorded link that now points elsewhere does not load", async () => {
+    const a = origin("devm");
+    const b = origin("devm", {}, "other");
+    await cli(`modules link ${a.work}`);
+    rmSync(modDir("devm"));
+    symlinkSync(b.work, modDir("devm"));
+    expect(await states()).toEqual({ devm: "aguardando-confianca" });
+    expect(existsSync(marker)).toBe(false);
   });
 
   test("an entry that escapes through a symlink is an error", async () => {
@@ -334,6 +354,207 @@ describe("catalog id", () => {
     } finally {
       server.stop(true);
       for (const k of ["PVX_CATALOG_URL", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) save[k] === undefined ? delete process.env[k] : (process.env[k] = save[k]);
+    }
+  });
+});
+
+const head = (dir: string) => sh(dir, "rev-parse", "HEAD");
+const trusted = async (id = "gm", extra: Record<string, unknown> = {}) => {
+  const o = origin(id, extra);
+  await add(o.url, { trust: head(o.work) });
+  return o;
+};
+const manifestOf = (id: string, permissions: Record<string, string[]>) => JSON.stringify({ id, version: "1.0.0", entry: "index.ts", contributes: { commands: ["hi"] }, permissions });
+
+describe("update", () => {
+  test("nothing new: já está atualizado, exit 0, nothing redone", async () => {
+    const o = await trusted();
+    const before = listTrust().gm!;
+    const r = await cli("modules update gm");
+    expect(r).toMatchObject({ code: 0, text: "[✓] gm: já está atualizado" });
+    expect(head(modDir())).toBe(head(o.work));
+    expect(listTrust().gm).toEqual(before);
+  });
+
+  test("a new commit without --trust stays on the approved sha, state atras", async () => {
+    const o = await trusted();
+    const old = head(modDir());
+    const fresh = o.commit({ "x.txt": "x" }, "adiciona x");
+    const r = await cli("modules update gm");
+    expect(r.code).toBe(0);
+    expect(r.text).toContain("1 commit(s) novo(s)");
+    expect(r.text).toContain(`${fresh.slice(0, 7)} adiciona x`);
+    expect(r.text).toContain(`modules update gm --trust ${fresh.slice(0, 7)}`);
+    expect(head(modDir())).toBe(old);
+    expect((await listModules(await load()))[0]).toMatchObject({ state: "atras", behind: 1 });
+  });
+
+  test("--trust pulls, approves the new sha and loads", async () => {
+    const o = await trusted();
+    const fresh = o.commit({ "x.txt": "x" });
+    expect((await cli("modules update gm --trust deadbeefdeadbeef")).code).toBe(1);
+    expect(head(modDir())).not.toBe(fresh);
+    const r = await cli(`modules update gm --trust ${fresh}`);
+    expect(r.code).toBe(0);
+    expect(r.text).toContain("atualizado e aprovado");
+    expect(head(modDir())).toBe(fresh);
+    expect(listTrust().gm!.sha).toBe(fresh);
+    expect(await states()).toEqual({ gm: "carregado" });
+    expect((await cli("modules update gm")).text).toContain("já está atualizado");
+  });
+
+  test("the permission diff highlights added and removed exec/net/fs", async () => {
+    const o = await trusted("gm", { permissions: { exec: ["ls", "cat"], fs: ["/etc"] } });
+    o.commit({ "pvx-module.json": manifestOf("gm", { exec: ["cat", "curl"], net: ["x.com"] }) });
+    const r = await cli("modules update gm");
+    expect(r.text).toContain("permissões ADICIONADAS (exec): curl");
+    expect(r.text).toContain("permissões ADICIONADAS (net): x.com");
+    expect(r.text).toContain("permissões removidas (exec): ls");
+    expect(r.text).toContain("permissões removidas (fs): /etc");
+    expect(r.text).not.toContain("cat,");
+  });
+
+  test("a diverged history is refused as non-fast-forward", async () => {
+    const o = await trusted();
+    const fresh = o.commit({ "x.txt": "x" });
+    writeFileSync(join(modDir(), "local.txt"), "l");
+    sh(modDir(), "add", "-A");
+    sh(modDir(), "commit", "-q", "-m", "local");
+    const r = await cli(`modules update gm --trust ${fresh}`);
+    expect(r.code).toBe(1);
+    expect(r.text).toContain("não é fast-forward");
+  });
+
+  test("a dirty tree refuses the pull", async () => {
+    const o = await trusted();
+    const fresh = o.commit({ "x.txt": "x" });
+    writeFileSync(join(modDir(), "junk"), "j");
+    const r = await cli(`modules update gm --trust ${fresh}`);
+    expect(r.code).toBe(1);
+    expect(r.text).toContain("árvore alterada");
+  });
+
+  test("--all and a dev link", async () => {
+    await trusted();
+    const dev = origin("dv");
+    await cli(`modules link ${dev.work}`);
+    expect((await cli("modules update --all")).text).toBe("[✓] gm: já está atualizado");
+    expect((await cli("modules update dv")).code).toBe(1);
+    expect((await cli("modules update")).code).toBe(2);
+  });
+});
+
+describe("update-notice cache", () => {
+  const cache = () => join(process.env.PVX_HOME!, "update-check.json");
+  test("TTL: a fresh cache is used, an expired one refetches", async () => {
+    const o = await trusted();
+    o.commit({ "a.txt": "a" });
+    const t0 = Date.now();
+    expect(await pendingUpdates({ allowFile: true, now: t0 })).toEqual([{ id: "gm", behind: 1 }]);
+    o.commit({ "b.txt": "b" });
+    expect(await pendingUpdates({ allowFile: true, now: t0 + 3600_000 })).toEqual([{ id: "gm", behind: 1 }]); // cached
+    expect(await pendingUpdates({ allowFile: true, now: t0 + 7 * 3600_000 })).toEqual([{ id: "gm", behind: 2 }]);
+  });
+
+  test("offline: silent, no throw", async () => {
+    await trusted();
+    rmSync(join(tmp, "gm.git"), { recursive: true });
+    expect(await pendingUpdates({ allowFile: true })).toEqual([]);
+  });
+
+  test("add, update and remove invalidate it", async () => {
+    const o = await trusted();
+    const fill = async () => (o.commit({ [`f${Math.random()}`]: "x" }), await pendingUpdates({ allowFile: true }), expect(existsSync(cache())).toBe(true));
+    await fill();
+    await add(origin("other").url);
+    expect(existsSync(cache())).toBe(false);
+    await pendingUpdates({ allowFile: true });
+    await cli("modules update gm");
+    expect(existsSync(cache())).toBe(false);
+    await pendingUpdates({ allowFile: true });
+    expect((await cli("modules remove other --yes")).code).toBe(0);
+    expect(existsSync(cache())).toBe(false);
+  });
+});
+
+describe("link and reload", () => {
+  /** A dev module with a helper file: reload must re-evaluate relative imports too. */
+  function devModule() {
+    const dir = join(tmp, "dev-work");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "pvx-module.json"), JSON.stringify({ id: "dv", version: "1.0.0", entry: "index.ts" }));
+    writeFileSync(join(dir, "helper.ts"), 'export const word = "v1";\n');
+    writeFileSync(join(dir, "index.ts"), 'import { word } from "./helper.ts";\nexport default () => ({ commands: { hi: { help: "h", run: (c: any) => c.out.success(word) } } });\n');
+    return dir;
+  }
+  const opts = { hostVersion: "1.0.0", makeLogger };
+  const say = async (registry: ReturnType<typeof createRegistry>) => (await cli("dv hi", { registry })).text;
+
+  test("link warns, records dev, remove drops the link and the record but not the target", async () => {
+    const dir = devModule();
+    const r = await cli(`modules link ${dir}`);
+    expect(r.code).toBe(0);
+    expect(r.text).toContain("sem confiança por commit");
+    expect(await states()).toEqual({ dv: "dev" });
+    expect(readFileSync(join(process.env.PVX_HOME!, "modules.json"), "utf8")).toContain('"dv"');
+    expect((await cli(`modules link ${dir}`)).text).toContain("já linkado");
+    expect((await cli("modules remove dv --yes")).code).toBe(0);
+    expect(existsSync(modDir("dv"))).toBe(false);
+    expect(existsSync(join(dir, "helper.ts"))).toBe(true);
+    expect(JSON.parse(readFileSync(join(process.env.PVX_HOME!, "modules.json"), "utf8")).dev).toEqual([]);
+  });
+
+  test("reload picks up an edit (also in a relative import); a broken edit keeps the old version", async () => {
+    const dir = devModule();
+    await cli(`modules link ${dir}`);
+    const registry = await load();
+    expect(await say(registry)).toBe("[✓] v1");
+    writeFileSync(join(dir, "helper.ts"), 'export const word = "v2";\n');
+    expect(await reloadModule(registry, "dv", opts)).toEqual({ ok: true, text: "dv recarregado" });
+    expect(await say(registry)).toBe("[✓] v2");
+    writeFileSync(join(dir, "helper.ts"), "export const word = ;\n");
+    const bad = await reloadModule(registry, "dv", opts);
+    expect(bad.ok).toBe(false);
+    expect(await say(registry)).toBe("[✓] v2");
+    expect(registry.errors).toEqual([]);
+    writeFileSync(join(dir, "helper.ts"), 'export const word = "v3";\n');
+    expect((await reloadModule(registry, "dv", opts)).ok).toBe(true);
+    expect(await say(registry)).toBe("[✓] v3");
+  });
+
+  test("reload replaces commands (a removed command disappears) and refuses non-dev modules", async () => {
+    const dir = devModule();
+    await cli(`modules link ${dir}`);
+    const registry = await load();
+    writeFileSync(join(dir, "index.ts"), 'export default () => ({ commands: { other: { help: "h", run: (c: any) => c.out.success("o") } } });\n');
+    await reloadModule(registry, "dv", opts);
+    expect([...registry.commands.keys()]).toEqual(["dv other"]);
+    await trusted();
+    expect((await reloadModule(await load(), "gm", opts)).ok).toBe(false);
+  });
+
+  test("the watcher reloads on save and reports a load error as an event", async () => {
+    const dir = devModule();
+    await cli(`modules link ${dir}`);
+    const registry = await load();
+    const events: DevEvent[] = [];
+    const stop = watchDevModules(registry, (e) => events.push(e), { ...opts, debounceMs: 20, pollMs: 50 });
+    const until = async (n: number) => {
+      for (let i = 0; i < 100 && events.length < n; i++) await Bun.sleep(50);
+      expect(events.length).toBeGreaterThanOrEqual(n);
+    };
+    try {
+      await Bun.sleep(100);
+      writeFileSync(join(dir, "helper.ts"), 'export const word = "w2";\n');
+      await until(1);
+      expect(events.at(-1)).toEqual({ id: "dv", result: { ok: true, text: "dv recarregado" } });
+      expect(await say(registry)).toBe("[✓] w2");
+      writeFileSync(join(dir, "helper.ts"), "export const word = ;\n");
+      await until(events.length + 1);
+      expect(events.at(-1)!.result.ok).toBe(false);
+      expect(await say(registry)).toBe("[✓] w2");
+    } finally {
+      stop();
     }
   });
 });
