@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { EXIT, type ArgSpec, type OutLine } from "@pvx/sdk";
+import { EXIT, type ArgSpec } from "@pvx/sdk";
 import { parseArgs } from "../engine/args.ts";
 import { execute } from "../engine/execute.ts";
 import { logsDir } from "../engine/paths.ts";
@@ -7,16 +7,18 @@ import { createStore } from "../engine/store.ts";
 import { followLogs, readLogs } from "../logs/index.ts";
 import { applyPlan, buildPlan, evaluate, loadProfiles, selectProfile, type EvalResult } from "../plan/index.ts";
 import type { Entry } from "./help.ts";
+import { catalogSearchCommand } from "../catalog/search-command.ts";
+import { listCommand, MODULES_COMMANDS } from "./modules.ts";
 import type { CliIO, Output } from "./run.ts";
 
-interface Ctx {
+export interface Ctx {
   io: CliIO;
   o: Output;
   rest: string[];
   json: boolean;
   yes: boolean;
 }
-interface CoreCommand extends Entry {
+export interface CoreCommand extends Entry {
   /** Writes to PVX_HOME: needs root. */
   root?: boolean;
   run(c: Ctx): Promise<number>;
@@ -58,17 +60,10 @@ const logsArgs: ArgSpec[] = [
 export const CORE: CoreCommand[] = [
   {
     key: "modules",
-    help: "Lista módulos, versão e estado",
-    async run({ io, o }) {
-      const rows = [
-        ...[...io.registry.modules.values()].map((m) => ({ id: m.id, line: { kind: "success", text: `${m.id} ${m.version} carregado` } as OutLine })),
-        ...io.registry.errors.map((e) => ({ id: e.id, line: { kind: "warning", text: `${e.id} erro: ${e.error}` } as OutLine })),
-      ].sort((a, b) => a.id.localeCompare(b.id));
-      if (!rows.length) o.line({ kind: "info", text: "nenhum módulo instalado" });
-      for (const r of rows) o.line(r.line);
-      return EXIT.OK;
-    },
+    help: "Lista módulos, versão e estado (subcomandos: add, list, remove, enable, disable, trust)",
+    run: listCommand,
   },
+  catalogSearchCommand,
   {
     key: "logs",
     help: "Mostra os logs, mesclados por horário",
@@ -150,6 +145,7 @@ export const CORE: CoreCommand[] = [
       });
     },
   },
+  ...MODULES_COMMANDS,
   {
     key: "version",
     help: "Mostra a versão",

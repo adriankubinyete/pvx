@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Manifest } from "@pvx/sdk";
 
-/** Reads and validates pvx-module.json. Throws a pt-BR Error; returns null when `applies` is not met (skip silently). */
-export function readManifest(dir: string, hostVersion: string): Manifest | null {
+/** Reads and shape-checks pvx-module.json without importing anything and without host checks (review uses it on fresh clones). */
+export function readManifestRaw(dir: string): Manifest {
   let m: Manifest;
   try {
     m = JSON.parse(readFileSync(join(dir, "pvx-module.json"), "utf8"));
@@ -16,6 +16,13 @@ export function readManifest(dir: string, hostVersion: string): Manifest | null 
     if (typeof m[f] !== "string" || !m[f]) throw bad(`campo "${f}" ausente`);
   }
   if (!/^[a-z0-9-]+$/.test(m.id)) throw bad(`id "${m.id}" deve ter só minúsculas, dígitos e hífen`);
+  return m;
+}
+
+/** Reads and validates pvx-module.json. Throws a pt-BR Error; returns null when `applies` is not met (skip silently). */
+export function readManifest(dir: string, hostVersion: string): Manifest | null {
+  const m = readManifestRaw(dir);
+  const bad = (msg: string) => new Error(`manifest inválido: ${msg}`);
   if (m.id !== basename(dir)) throw bad(`id "${m.id}" difere do diretório "${basename(dir)}"`);
   if (m.pvx !== undefined && !Bun.semver.satisfies(hostVersion, m.pvx)) {
     throw new Error(`requer pvx ${m.pvx} (instalado: ${hostVersion}); instale um pvx nessa faixa`);

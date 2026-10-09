@@ -3,6 +3,7 @@ import { fg, setColorEnabled } from "../ansi.ts";
 import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
+import type { ModuleRow } from "../modules/index.ts";
 import type { PlanStep } from "../plan/index.ts";
 import { CORE } from "./core.ts";
 import { pathHelp, rootHelp } from "./help.ts";
@@ -34,6 +35,10 @@ export interface CliIO {
   ask?: (question: string) => Promise<string>;
   /** TTY only: reads a secret without echo. */
   askSecret?: (name: string) => Promise<string | undefined>;
+  /** Tests only: lets `modules add` accept file:// URLs. The entrypoint never sets it. */
+  allowFile?: boolean;
+  /** First words of the core commands (a module id equal to one is refused). Default: derived from CORE. */
+  reservedWords?: string[];
   /** Aborts `logs -f`. */
   signal?: AbortSignal;
 }
@@ -43,6 +48,8 @@ export interface CoreLine extends OutLine {
   fix?: string;
   /** `plano` only: the step this line lists (JSON mode only shows it). */
   step?: PlanStep;
+  /** `modules` listing only: the row, with its `state` (JSON mode only shows it). */
+  module?: ModuleRow;
 }
 
 export interface Output {
@@ -79,7 +86,7 @@ export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}) }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;
@@ -100,6 +107,7 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
     else return true;
     return false;
   });
+  io = { ...io, reservedWords: io.reservedWords ?? [...new Set(CORE.map((c) => c.key.split(" ")[0]!))] };
   const o = createOutput(io, json);
   const catalog = [
     ...CORE,

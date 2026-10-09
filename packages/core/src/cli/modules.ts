@@ -1,0 +1,136 @@
+import { EXIT, type ArgSpec, type OutLine } from "@pvx/sdk";
+import { resolveModuleRef } from "../catalog/index.ts";
+import { parseArgs } from "../engine/args.ts";
+import { addModule, listModules, listTrust, removeModule, reviewLines, reviewModule, revokeTrust, setEnabled, trustModule, type ModuleRow, type Result } from "../modules/index.ts";
+import { join } from "node:path";
+import { usermodulesDir } from "../engine/paths.ts";
+import type { CoreCommand } from "./core.ts";
+
+const sha7 = (s?: string) => s?.slice(0, 7);
+
+export function rowLine(r: ModuleRow): OutLine & { module: ModuleRow } {
+  const extra = [r.official && "◆", r.ref && r.sha && `${r.ref}@${sha7(r.sha)}`, r.behind && `↓${r.behind}`, r.dirty && `✎${r.dirty}`, r.error].filter(Boolean).join(" ");
+  const kind = r.state === "carregado" || r.state === "atras" ? "success" : "warning";
+  const text = r.state === "erro" ? `${r.id} erro: ${r.error}` : `${r.id} ${r.version ?? "?"} ${r.state}${extra ? ` ${extra}` : ""}`;
+  return { kind, text, module: r };
+}
+
+/** `pvx modules` and `pvx modules list`. */
+export const listCommand: CoreCommand["run"] = async ({ io, o }) => {
+  const rows = await listModules(io.registry);
+  if (!rows.length) o.line({ kind: "info", text: "nenhum módulo instalado" });
+  for (const r of rows) o.line(rowLine(r));
+  return EXIT.OK;
+};
+
+const done = (o: { line(l: OutLine): void }, r: Result) => {
+  o.line(r.ok ? { kind: "success", text: r.text } : { kind: "error", text: r.error });
+  return r.ok ? EXIT.OK : EXIT.ERROR;
+};
+
+const approveHint = (id: string, sha: string) => `para aprovar, rode \`pvx modules trust ${id} --sha ${sha}\``;
+
+const addArgs: ArgSpec[] = [
+  { name: "url", help: "URL https ou ssh do repositório, ou id do catálogo", kind: "positional", required: true },
+  { name: "ref", help: "Branch, tag ou commit", kind: "option" },
+  { name: "trust", help: "Aprova este commit sem revisão em tela", kind: "option" },
+];
+const trustArgs: ArgSpec[] = [
+  { name: "id", help: "Módulo", kind: "positional" },
+  { name: "sha", help: "Commit a aprovar (deve ser o HEAD)", kind: "option" },
+  { name: "list", help: "Lista as aprovações", kind: "flag" },
+  { name: "revoke", help: "Revoga a aprovação deste módulo", kind: "option" },
+];
+const idArgs: ArgSpec[] = [{ name: "id", help: "Módulo", kind: "positional", required: true }];
+
+export const MODULES_COMMANDS: CoreCommand[] = [
+  { key: "modules list", help: "Lista módulos, versão e estado (igual a `modules`)", run: listCommand },
+  {
+    key: "modules add",
+    help: "Clona um módulo git, mostra a revisão e só aprova com --trust",
+    root: true,
+    args: addArgs,
+    async run({ io, o, rest }) {
+      const p = await parseArgs(addArgs, rest, { env: io.env });
+      if (!p.ok) return usage(o, p.message);
+      let url: string;
+      try {
+        url = io.allowFile && String(p.args.url).startsWith("file://") ? String(p.args.url) : await resolveModuleRef(String(p.args.url));
+      } catch (e) {
+        return usage(o, (e as Error).message);
+      }
+      const r = await addModule(url, {
+        hostVersion: io.version,
+        ref: p.args.ref as string | undefined,
+        trust: p.args.trust as string | undefined,
+        allowFile: io.allowFile,
+        registry: io.registry,
+        reserved: io.reservedWords,
+      });
+      if (!r.ok) {
+        if (r.review) reviewLines(r.review, "").slice(0, -1).forEach((l) => o.line(l));
+        return done(o, r);
+      }
+      if (r.status === "ja-instalado") return o.line({ kind: "info", text: `${r.id}: já instalado (${r.state})` }), EXIT.OK;
+      reviewLines(r.review!, r.state === "aguardando-confianca" ? approveHint(r.id, r.sha!) : "commit aprovado; o módulo carrega na próxima execução").forEach((l) => o.line(l));
+      o.line({ kind: r.state === "aguardando-confianca" ? "warning" : "success", text: `${r.id} instalado: ${r.state}` });
+      return EXIT.OK;
+    },
+  },
+  {
+    key: "modules remove",
+    help: "Remove o módulo e a aprovação; o estado fica, salvo com --purge",
+    root: true,
+    destructive: true,
+    args: [...idArgs, { name: "purge", help: "Apaga também o estado do módulo", kind: "flag" }],
+    async run({ io, o, rest, yes }) {
+      const p = await parseArgs(this.args, rest, { env: io.env });
+      if (!p.ok) return usage(o, p.message);
+      if (!yes) {
+        if (!(io.isTTY && io.ask)) return usage(o, "fora de um terminal, `modules remove` exige --yes");
+        const a = (await io.ask(`remover \`${p.args.id}\`? [s/N] `)).trim().toLowerCase();
+        if (a !== "s" && a !== "sim") return o.line({ kind: "error", text: "cancelado" }), EXIT.ERROR;
+      }
+      return done(o, removeModule(String(p.args.id), { purge: Boolean(p.args.purge) }));
+    },
+  },
+  { key: "modules enable", help: "Liga um módulo desativado", root: true, args: idArgs, run: (c) => toggle(c, true) },
+  { key: "modules disable", help: "Desliga um módulo sem removê-lo", root: true, args: idArgs, run: (c) => toggle(c, false) },
+  {
+    key: "modules trust",
+    help: "Aprova o commit de um módulo, lista (--list) ou revoga (--revoke <id>)",
+    root: true,
+    args: trustArgs,
+    async run({ io, o, rest }) {
+      const p = await parseArgs(trustArgs, rest, { env: io.env });
+      if (!p.ok) return usage(o, p.message);
+      if (p.args.list) {
+        const all = Object.entries(listTrust());
+        if (!all.length) o.line({ kind: "info", text: "nenhuma aprovação" });
+        for (const [id, t] of all) o.line({ kind: "plain", text: `${id} ${sha7(t.sha)} ${t.approvedBy} ${t.at} ${t.url}` });
+        return EXIT.OK;
+      }
+      if (p.args.revoke) return done(o, revokeTrust(String(p.args.revoke)));
+      if (!p.args.id) return usage(o, "informe o módulo: `modules trust <id> --sha <sha>`");
+      const id = String(p.args.id);
+      if (p.args.sha) return done(o, await trustModule(id, String(p.args.sha)));
+      try {
+        const r = await reviewModule(join(usermodulesDir(), id), { hostVersion: io.version, registry: io.registry, reserved: io.reservedWords });
+        reviewLines(r, approveHint(id, r.sha)).forEach((l) => o.line(l));
+        return EXIT.OK;
+      } catch (e) {
+        return done(o, { ok: false, error: (e as Error).message });
+      }
+    },
+  },
+];
+
+async function toggle({ io, o, rest }: Parameters<CoreCommand["run"]>[0], on: boolean) {
+  const p = await parseArgs(idArgs, rest, { env: io.env });
+  return p.ok ? done(o, setEnabled(String(p.args.id), on)) : usage(o, p.message);
+}
+
+function usage(o: { line(l: OutLine): void }, text: string) {
+  o.line({ kind: "error", text });
+  return EXIT.USAGE;
+}

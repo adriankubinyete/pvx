@@ -5,3 +5,5 @@ export * from "./plan/index.ts";
 export * from "./logs/index.ts";
 export * from "./cli/index.ts";
 export * from "./host/machine.ts";
+export * from "./modules/index.ts";
+export * from "./catalog/index.ts";

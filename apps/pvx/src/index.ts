@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { theme, ui } from "@pvx/tui";
 import { EXIT, type Logger } from "@pvx/sdk";
-import { createLogger, createRegistry, loadModules, logsDir, runCli } from "@pvx/core";
+import { createLogger, createRegistry, loadModules, logsDir, runCli, trustGate } from "@pvx/core";
 import { builtin } from "../../../packages/builtin/index.ts";
 import { ask, askSecret } from "./prompt.ts";
 
@@ -22,7 +22,9 @@ const makeLogger = (name: string): Logger => {
 
 async function main(): Promise<number> {
   const registry = createRegistry();
-  await loadModules(registry, { hostVersion: VERSION, makeLogger, ui, builtin });
+  // PVX_USERMODULES is a developer override of the directory (and what the CLI tests use): it skips per-commit trust.
+  const canImport = process.env.PVX_USERMODULES ? undefined : trustGate({ warn: (m) => makeLogger("core").warn(m) });
+  await loadModules(registry, { hostVersion: VERSION, makeLogger, ui, builtin, canImport });
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const abort = new AbortController();
   // Only `logs -f` handles Ctrl+C; a global listener would swallow the first Ctrl+C of a hung command.

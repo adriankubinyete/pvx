@@ -22,7 +22,7 @@ export interface LoadOpts {
   ui?: SdkUi;
   /** Modules that ship with pvx (the app's static barrel): registered first, trusted, official. Not read from disk. */
   builtin?: readonly BuiltinModule[];
-  /** Trust hook (Fase 4 plugs in here). Default: allow everything. Return false to refuse the import. */
+  /** Trust hook (`trustGate`). Default: allow everything. Returning false skips the module silently: its state comes from `listModules`, not from an error. */
   canImport?: (dir: string, manifest: Manifest) => boolean | Promise<boolean>;
 }
 
@@ -40,11 +40,11 @@ export async function loadModules(registry: Registry, opts: LoadOpts): Promise<v
   if (!existsSync(root)) return;
   for (const id of readdirSync(root).sort()) {
     const dir = join(root, id);
-    if (!statSync(dir).isDirectory()) continue;
+    if (id.startsWith(".") || !statSync(dir).isDirectory()) continue; // dot dirs: clones in progress
     try {
       const manifest = readManifest(dir, opts.hostVersion);
       if (!manifest) continue;
-      if (!(await (opts.canImport ?? (() => true))(dir, manifest))) throw new Error("importação não permitida");
+      if (!(await (opts.canImport ?? (() => true))(dir, manifest))) continue;
       const base = realpathSync(dir);
       let entry: string;
       try {

@@ -4,47 +4,106 @@
   "lines": [
     {
       "kind": "warning",
-      "text": "bad-range erro: requer pvx >=99.0.0 (instalado: 1.0.0); instale um pvx nessa faixa"
+      "text": "bad-range erro: requer pvx >=99.0.0 (instalado: 1.0.0); instale um pvx nessa faixa",
+      "module": {
+        "id": "bad-range",
+        "state": "erro",
+        "error": "requer pvx >=99.0.0 (instalado: 1.0.0); instale um pvx nessa faixa",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "warning",
-      "text": "broken-entry erro: entry \"../demo/index.ts\" fora do diretório do módulo"
+      "text": "broken-entry erro: entry \"../demo/index.ts\" fora do diretório do módulo",
+      "module": {
+        "id": "broken-entry",
+        "state": "erro",
+        "error": "entry \"../demo/index.ts\" fora do diretório do módulo",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "success",
-      "text": "cap-fixture 1.0.0 carregado"
+      "text": "cap-fixture 1.0.0 carregado",
+      "module": {
+        "id": "cap-fixture",
+        "state": "carregado",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "success",
-      "text": "demo 1.0.0 carregado"
+      "text": "demo 1.0.0 carregado",
+      "module": {
+        "id": "demo",
+        "state": "carregado",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "success",
-      "text": "echoer 1.0.0 carregado"
+      "text": "echoer 1.0.0 carregado",
+      "module": {
+        "id": "echoer",
+        "state": "carregado",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "warning",
-      "text": "no-default erro: entry não exporta uma função por padrão (export default)"
+      "text": "no-default erro: entry não exporta uma função por padrão (export default)",
+      "module": {
+        "id": "no-default",
+        "state": "erro",
+        "error": "entry não exporta uma função por padrão (export default)",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "warning",
-      "text": "no-entry erro: manifest inválido: campo \"entry\" ausente"
+      "text": "no-entry erro: manifest inválido: campo \"entry\" ausente",
+      "module": {
+        "id": "no-entry",
+        "state": "erro",
+        "error": "manifest inválido: campo \"entry\" ausente"
+      }
     },
     {
       "kind": "warning",
-      "text": "throws-on-load erro: boom na fábrica"
+      "text": "throws-on-load erro: boom na fábrica",
+      "module": {
+        "id": "throws-on-load",
+        "state": "erro",
+        "error": "boom na fábrica",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "success",
-      "text": "throws-on-run 1.0.0 carregado"
+      "text": "throws-on-run 1.0.0 carregado",
+      "module": {
+        "id": "throws-on-run",
+        "state": "carregado",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "success",
-      "text": "ui-demo 1.0.0 carregado"
+      "text": "ui-demo 1.0.0 carregado",
+      "module": {
+        "id": "ui-demo",
+        "state": "carregado",
+        "version": "1.0.0"
+      }
     },
     {
       "kind": "success",
-      "text": "widget-demo 1.0.0 carregado"
+      "text": "widget-demo 1.0.0 carregado",
+      "module": {
+        "id": "widget-demo",
+        "state": "carregado",
+        "version": "1.0.0"
+      }
     }
   ]
 }
