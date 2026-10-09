@@ -17,7 +17,7 @@ export interface DiaryEntry {
   user?: string;
   /** Masked line, note text, change text, `SSH de ...`, or the module action. */
   text: string;
-  /** What `nota add --ref` links to: `nota:<note id>`, `cap:<capability id>`, or `<kind>:<at>`. */
+  /** What the `addNote` command's `--ref` links to: `nota:<note id>`, `cap:<capability id>`, or `<kind>:<at>`. */
   ref: string;
   /** Kind-specific fields: cmd `exit ms destructive`, conf `cap from to`, login `from`, nota `ev tags`. */
   data: Record<string, unknown>;

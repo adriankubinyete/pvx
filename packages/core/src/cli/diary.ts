@@ -40,13 +40,15 @@ export const DIARY_COMMANDS: CoreCommand[] = [
       if (!reason) return usageError(o, "o motivo não pode ser vazio");
       const ig = addIgnore(id, reason);
       o.line({ kind: "success", text: `${id} ignorada até ${new Date(ig.until).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` });
-      // The note goes through the normal command path (log, audit, scrollback). Without the notas module the reason stays here.
-      const argv = ["nota", "add", "--tag", "ignorado", "--ref", `cap:${id}`, reason];
-      if (!resolveCommand(io.registry, argv)) o.line({ kind: "warning", text: "módulo de notas não carregado: o motivo ficou só no registro de ignorados" });
+      // The note goes through the normal command path (log, audit, scrollback), by the command a module declared as role `addNote`.
+      // Without one the reason stays here.
+      const addNote = io.registry.roles.get("addNote")?.name.split(" ") ?? [];
+      const argv = [...addNote, "--tag", "ignorado", "--ref", `cap:${id}`, reason];
+      if (!addNote.length || !resolveCommand(io.registry, argv)) o.line({ kind: "warning", text: "módulo de notas não carregado: o motivo ficou só no registro de ignorados" });
       else {
         const r = await execute(io.registry, argv, { makeLogger: io.makeLogger, confirmed: true, env: io.env });
         if (!r.ok) o.line({ kind: "warning", text: `a nota não foi criada (${r.lines.find((l) => l.kind === "error")?.text ?? `exit ${r.exit}`}); o motivo ficou no registro de ignorados` });
-        else o.line({ kind: "info", text: `nota criada: ${lineOf(argv.slice(0, 2))} --ref cap:${id}` });
+        else o.line({ kind: "info", text: `nota criada: ${lineOf(addNote)} --ref cap:${id}` });
       }
       return EXIT.OK;
     },

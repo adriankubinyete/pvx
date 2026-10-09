@@ -7,9 +7,10 @@ import { createStore } from "../engine/store.ts";
 import { followLogs, readLogs } from "../logs/index.ts";
 import { applyPlan, buildPlan, evaluate, loadProfiles, selectProfile, type EvalResult } from "../plan/index.ts";
 import type { Entry } from "./help.ts";
-import { recordDrift, partitionIgnored } from "../diary/index.ts";
+import { recordDrift, recordSnapshot, partitionIgnored } from "../diary/index.ts";
 import { DIARY_COMMANDS } from "./diary.ts";
 import { catalogSearchCommand } from "../catalog/search-command.ts";
+import { BANNER_COMMAND } from "./banner.ts";
 import { listCommand, MODULES_COMMANDS } from "./modules.ts";
 import type { CliIO, Output } from "./run.ts";
 
@@ -51,6 +52,7 @@ async function profileResults(io: CliIO): Promise<{ title: string; results: Eval
     return { log: io.makeLogger(m), store: createStore(m), query: io.registry.query };
   });
   recordDrift(results); // every evaluation (CLI or TUI refresh) appends the level changes
+  recordSnapshot(profile.title, results); // and leaves the result the login banner shows
   return { title: profile.title, results };
 }
 
@@ -158,6 +160,7 @@ export const CORE: CoreCommand[] = [
       });
     },
   },
+  BANNER_COMMAND,
   ...DIARY_COMMANDS,
   ...MODULES_COMMANDS,
   {

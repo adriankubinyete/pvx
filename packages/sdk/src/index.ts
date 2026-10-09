@@ -9,7 +9,7 @@ export interface Manifest {
   /** Host semver range. */
   pvx?: string;
   applies?: { file?: string };
-  /** `fs` entries may start with `$PVX_HOME`, expanded by the host. */
+  /** `fs` entries may start with `$PVX_HOME` (the central's data dir) or `$PVX_PROFILED_DIR` (`/etc/profile.d`), expanded by the host. */
   permissions?: { exec?: string[]; net?: string[]; fs?: string[] };
   contributes?: { commands?: string[]; pages?: string[]; widgets?: string[]; capabilities?: string[] };
   /** Modules this one queries via ctx.query. */
@@ -32,6 +32,21 @@ export interface ModuleDef {
   /** Key = page name; opened by `#<module>.<name>` (or `#<name>` when unique). */
   pages?: Record<string, PageDef>;
   widgets?: Record<string, WidgetDef>;
+  /** Jobs the host asks for by role, never by module name. At most one module may fill each role. */
+  roles?: Roles;
+}
+
+/**
+ * Host-defined roles. `compose` and `notesState` name one of this module's queries, `addNote` one of its commands
+ * (a key of `commands`, with the module id first on the line: `"<id> add"`).
+ */
+export interface Roles {
+  /** Query that opens the note composer (Início `n`). */
+  compose?: string;
+  /** Query that returns the folded notes (`{id, author, at, text, pinned, resolved, login}[]`), for the login banner. */
+  notesState?: string;
+  /** Command that adds a note: `<line> --tag T --ref R <text>` (`conformidade ignorar` records its reason with it). */
+  addNote?: string;
 }
 
 export interface CommandDef {
@@ -55,7 +70,7 @@ export interface ArgSpec {
   secret?: boolean;
   /** Completion candidates. */
   values?: string[];
-  /** Positional only, free text: when missing and stdin is not a TTY, the value is read from stdin (`echo txt | pvx nota add`); extra words on the line are joined into it. */
+  /** Positional only, free text: when missing and stdin is not a TTY, the value is read from stdin (`echo txt | pvx <module> add`); extra words on the line are joined into it. */
   stdin?: boolean;
   /** Option only: may be given several times; the module receives the values joined by a comma. */
   repeat?: boolean;
@@ -106,6 +121,8 @@ export interface ModuleFs {
   write(path: string, data: string): Promise<void>;
   exists(path: string): Promise<boolean>;
   list(path: string): Promise<string[]>;
+  /** Deletes a file (no error when it is missing). Needs `rw:`. */
+  remove(path: string): Promise<void>;
   /** One write call with O_APPEND (file mode 0644 when created): concurrent appenders never interleave a line. Needs `rw:`. */
   append(path: string, text: string): Promise<void>;
 }
@@ -188,6 +205,8 @@ export interface PageDef {
   keys?: KeySpec[];
   /** Also a tab in the tab bar, after the core tabs (sorted by `order`, then label). */
   tab?: boolean | { label: string; order?: number };
+  /** What the host may open without naming a module: the diary's `p` goes to the page with role `plan`, Início goes to `notes`. */
+  role?: "plan" | "notes";
 }
 
 export interface KeySpec {

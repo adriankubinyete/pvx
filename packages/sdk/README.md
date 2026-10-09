@@ -294,6 +294,38 @@ const factory: ModuleFactory = () => ({
 export default factory;
 ```
 
+## Papéis: o host pede pelo papel, nunca pelo nome do módulo
+
+O host não cita módulo pelo nome (nem `nota`, nem `conformidade`). Quando precisa de algo que um módulo oficial fornece, ele pede por **papel**, e o módulo o declara:
+
+| Papel | Onde se declara | O que o host faz com ele |
+| --- | --- | --- |
+| `role: "plan"` | `PageDef.role` | O `p` do Diário abre a aba dessa página (precisa de `tab`). |
+| `role: "notes"` | `PageDef.role` | O Início abre essa página no `n` e no painel de notas. |
+| `roles.compose` | `ModuleDef.roles` | Nome de uma consulta: o `n` do Início a chama para abrir o editor de nota. |
+| `roles.notesState` | `ModuleDef.roles` | Nome de uma consulta que devolve as notas dobradas (`{ author, at, text, pinned, login?, resolved }[]`): o banner de login lê as fixadas por ela. |
+| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, aceita `--tag`, `--ref` e o texto): `conformidade ignorar` grava o motivo com ele e o `n` do Diário o põe no rascunho. |
+
+Cada papel tem um dono só: um segundo módulo que o declare é recusado ("conflito"). Sem dono, a função some em silêncio (sem notas, o `n` do Início não faz nada).
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+import type { ModuleFactory } from "@pvx/sdk";
+
+const factory: ModuleFactory = (sdk) => ({
+  commands: { add: { help: "Cria uma nota", run: (ctx) => ctx.out.success("criada") } },
+  queries: {
+    "notas.compose": () => undefined,
+    "notas.state": () => [],
+  },
+  pages: { notas: { title: "notas", render: () => <sdk.ui.Text>notas</sdk.ui.Text>, tab: true, role: "notes" } },
+  roles: { compose: "notas.compose", notesState: "notas.state", addNote: "doc add" },
+});
+export default factory;
+```
+
 ## Permissões: `ctx.exec`, `ctx.net`, `ctx.fs`
 
 Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest listou em `permissions`. Fora disso, lançam um erro claro e o host registra a violação no log do módulo e no `core.log`.
@@ -303,9 +335,10 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão), e devolve `{ code, stdout, stderr }`. |
 | `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. |
 | `ctx.fs.read / write / exists / list` | O caminho (resolvido, com symlinks) fica sob um prefixo de `permissions.fs`. O prefixo `rw:` libera escrita; sem ele, só leitura. O diretório de estado do próprio módulo é sempre permitido. |
+| `ctx.fs.remove(path)` | Mesma regra de `rw:`. Apaga o arquivo; não erra se ele não existe. |
 | `ctx.fs.append(path, texto)` | Mesma regra de `rw:`. Uma única chamada de escrita com `O_APPEND` (arquivo criado com modo 0644): dois processos acrescentando linhas ao mesmo arquivo nunca as misturam. |
 
-`$PVX_HOME` vale em `permissions.fs` e nos caminhos de `ctx.fs` (o host o expande). Fora de um comando (consultas, widgets) use `sdk.fs`, que segue as mesmas regras.
+`$PVX_HOME` (dados da central) e `$PVX_PROFILED_DIR` (`/etc/profile.d`, onde ficam ganchos de login) valem em `permissions.fs` e nos caminhos de `ctx.fs` (o host os expande). Fora de um comando (consultas, widgets) use `sdk.fs`, que segue as mesmas regras.
 
 Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário com `area`, `line` e `toggle`; `ctrl+s` envia, `esc` cancela), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
 

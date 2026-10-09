@@ -1,13 +1,13 @@
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, writeSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import type { CommandCtx, Logger, Manifest } from "@pvx/sdk";
-import { moduleStateDir, pvxHome } from "./paths.ts";
+import { moduleStateDir, profiledDir, pvxHome } from "./paths.ts";
 
 type Perms = NonNullable<Manifest["permissions"]>;
 type Granted = Pick<CommandCtx, "exec" | "net" | "fs">;
 
-/** `$PVX_HOME` in a manifest path stands for the central's data directory (read when checked, so a test home applies). */
-const expand = (e: string) => e.replaceAll("$PVX_HOME", pvxHome());
+/** `$PVX_HOME` (data dir) and `$PVX_PROFILED_DIR` (login hooks) in a manifest path; read when checked, so a test dir applies. */
+const expand = (e: string) => e.replaceAll("$PVX_HOME", pvxHome()).replaceAll("$PVX_PROFILED_DIR", profiledDir());
 
 /** realpath of the nearest existing ancestor + the rest: a symlink cannot walk a path out of its prefix. */
 function real(p: string): string {
@@ -83,6 +83,7 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
       },
       exists: async (p) => existsSync(path(p, false)),
       list: async (p) => readdirSync(path(p, false)).sort(),
+      remove: async (p) => rmSync(path(p, true), { force: true }),
       async append(p, text) {
         const r = path(p, true);
         mkdirSync(dirname(r), { recursive: true });

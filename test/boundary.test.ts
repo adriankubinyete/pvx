@@ -40,3 +40,32 @@ test("built-in modules are written like usermodules: only `import type` from the
     if (f.endsWith(".tsx")) expect(src, f).toContain("@jsxRuntime classic");
   }
 });
+
+// Host code reaches a built-in by ROLE (`PageDef.role`, `ModuleDef.roles`), never by its id. The ids come from the
+// manifests, so a new built-in is covered without editing this test. A bare id is not searched: `conformidade` is also a
+// core command and `nota` is the diary's own kind and an ordinary word. What gives a reference away is its shape:
+// `<id>.<name>` (page key, query, tab id), a command line of the module, or `motd` as a whole word (only ever a module).
+function builtinRefs(): RegExp {
+  const dirs = readdirSync(join(root, "packages", "builtin")).filter((n) => statSync(join(root, "packages", "builtin", n)).isDirectory());
+  const manifests = dirs.map((d) => JSON.parse(readFileSync(join(root, "packages", "builtin", d, "pvx-module.json"), "utf8")) as { id: string; contributes?: { commands?: string[] } });
+  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const ids = [...new Set([...manifests.map((m) => m.id), ...dirs])]; // `notas` (directory and query namespace) too
+  const sep = "[\\s\"'`,]+";
+  const patterns = [
+    ...ids.map((id) => `(?:page:|["'\`])${esc(id)}\\.[a-z]`), // "nota.notas", "page:conformidade.plano", "notas.compose"
+    ...manifests.flatMap((m) => m.contributes?.commands ?? []).map((c) => `(?<![\\w-])${c.split(" ").map(esc).join(sep)}(?![\\w-])`), // `nota add`, ["nota", "add"]
+    "(?<![\\w-])motd(?![\\w-])",
+  ];
+  expect(ids).toEqual(expect.arrayContaining(["conformidade", "nota", "notas", "motd"]));
+  return new RegExp(patterns.join("|"));
+}
+
+test("the host names no built-in module: only roles (core command names are not references)", () => {
+  expect(grep(walk(join(root, "packages"), ["test", "builtin"]), builtinRefs())).toEqual([]);
+});
+
+test("the built-in check catches the references it exists for, and lets core command names through", () => {
+  const re = builtinRefs();
+  for (const bad of ['registry.pages.has("nota.notas")', 'goto("page:conformidade.plano")', 'query("notas.compose")', 'const argv = ["nota", "add"]', "run `nota add --ref x`", "motd install-hook"]) expect(re.test(bad), bad).toBe(true);
+  for (const ok of ['key: "conformidade ignorar"', "conformidade.lines", 'kinds: ["nota"]', "a nota foi criada", "pvx plano apply"]) expect(re.test(ok), ok).toBe(false);
+});

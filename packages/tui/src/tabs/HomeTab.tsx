@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from "react";
 import { hostname } from "node:os";
-import { primaryIp, readMachine, type Registry } from "@pvx/core";
+import { pageWithRole, primaryIp, readMachine, type Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
@@ -18,8 +18,6 @@ import type { TabsNav } from "./Tabs.tsx";
 
 const BASE_PANELS = ["conformidade", "atividade"] as const;
 export type HomePanel = (typeof BASE_PANELS)[number] | "notas";
-/** The one place the host names the notes module: `n` on Início opens its composer (query, then its tab). */
-const NOTES = { tab: "page:nota.notas", compose: "notas.compose" } as const;
 /** Which panel has the cursor and the selected row of each; lives in `TabsNav` (the tab unmounts on a switch). */
 export interface HomeNav {
   panel: HomePanel;
@@ -141,8 +139,11 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     tabs?.goto("comando");
   };
   const refresh = () => (conf.refresh(), void slots.refresh());
-  const hasNotes = registry.pages.has("nota.notas") && registry.queries.has(NOTES.compose);
-  const goNotes = () => tabs?.goto(NOTES.tab);
+  // `n` on Início opens the composer of whichever module declared the roles: the page with role `notes` and the `compose` query.
+  const notesPage = pageWithRole(registry, "notes");
+  const compose = registry.roles.get("compose")?.name;
+  const hasNotes = Boolean(notesPage && compose);
+  const goNotes = () => notesPage && tabs?.goto(`page:${notesPage.key}`);
 
   useKeys((k) => {
     if (!focused) return;
@@ -161,7 +162,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     const n = PANELS[Number(k.sequence) - 1];
     if (n && !k.ctrl) return nav.home.panel = n, bump(), true;
     if (matchKey(k, "enter")) return p === "notas" ? goNotes() : use(cur(p)), true;
-    if (matchKey(k, "n") && hasNotes) return void registry.query(NOTES.compose), goNotes(), true;
+    if (matchKey(k, "n") && hasNotes) return void registry.query(compose!), goNotes(), true;
     if (matchKey(k, "r")) return refresh(), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
   });

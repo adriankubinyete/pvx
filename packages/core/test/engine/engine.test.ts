@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
 import { execute } from "../../src/engine/execute.ts";
 import { loadModules } from "../../src/engine/loader.ts";
-import { createRegistry } from "../../src/engine/registry.ts";
+import { createRegistry, pageWithRole } from "../../src/engine/registry.ts";
 import { tokenize } from "../../src/engine/tokenize.ts";
 
 process.env.PVX_USERMODULES = join(import.meta.dir, "../fixtures/usermodules");
@@ -106,5 +106,30 @@ describe("execute", () => {
     expect(readdirSync(process.env.PVX_HOME!)).toEqual([]);
     await run("demo remember");
     expect(await Bun.file(join(process.env.PVX_HOME!, "modules/demo/state/state.json")).json()).toEqual({ k: 1 });
+  });
+});
+
+describe("roles", () => {
+  const m = (id: string) => ({ id, version: "1", entry: "x" });
+  const page = { title: "t", render: () => null };
+
+  test("a page role and a module role resolve without the module name; unregister drops them", () => {
+    const r = createRegistry();
+    r.register(m("a"), { pages: { one: { ...page, role: "plan" }, two: page }, roles: { compose: "q.compose" } });
+    expect(pageWithRole(r, "plan")?.key).toBe("a.one");
+    expect(pageWithRole(r, "notes")).toBeUndefined();
+    expect(r.roles.get("compose")).toEqual({ moduleId: "a", name: "q.compose" });
+    r.unregister("a");
+    expect(pageWithRole(r, "plan")).toBeUndefined();
+    expect(r.roles.size).toBe(0);
+  });
+
+  test("two modules cannot fill the same role; a reload of the owner can", () => {
+    const r = createRegistry();
+    r.register(m("a"), { roles: { addNote: "a add" } });
+    expect(() => r.register(m("b"), { roles: { addNote: "b add" } })).toThrow(/papel "addNote" já pertence ao módulo "a"/);
+    expect(r.modules.has("b")).toBe(false);
+    r.register(m("a"), { roles: { addNote: "a add2" } }, { replace: true });
+    expect(r.roles.get("addNote")?.name).toBe("a add2");
   });
 });

@@ -1,0 +1,7 @@
+{
+  "id": "motd",
+  "version": "1.0.0",
+  "entry": "src/index.ts",
+  "permissions": { "fs": ["rw:$PVX_PROFILED_DIR/"] },
+  "contributes": { "commands": ["motd install-hook", "motd remove-hook"] }
+}

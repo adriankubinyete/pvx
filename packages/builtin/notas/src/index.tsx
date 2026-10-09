@@ -309,6 +309,7 @@ export default (sdk: Sdk): ModuleDef => {
         },
       },
     },
-    pages: { notas: { title: "notas", render: () => <Notas />, tab: { label: "Notas", order: 3 } } },
+    pages: { notas: { title: "notas", render: () => <Notas />, tab: { label: "Notas", order: 3 }, role: "notes" } },
+    roles: { compose: "notas.compose", notesState: "notas.state", addNote: "nota add" },
   };
 };

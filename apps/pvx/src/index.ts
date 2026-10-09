@@ -23,7 +23,8 @@ const makeLogger = (name: string): Logger => {
 async function main(): Promise<number> {
   const registry = createRegistry();
   // No env var bypasses trust: PVX_USERMODULES only moves the directory. Built-ins ship with pvx and skip the gate.
-  const canImport = trustGate({ warn: (m) => makeLogger("core").warn(m) });
+  // The login banner has 1 s: built-ins only (no git probe per usermodule); the notes it shows come from a built-in.
+  const canImport = process.argv[2] === "banner" ? () => false : trustGate({ warn: (m) => makeLogger("core").warn(m) });
   await loadModules(registry, { hostVersion: VERSION, makeLogger, ui, builtin, canImport });
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const abort = new AbortController();

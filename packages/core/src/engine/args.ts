@@ -28,7 +28,7 @@ export async function parseArgs(specs: ArgSpec[] = [], argv: string[], opts: Par
     if (!a.startsWith("--") || a === "--") {
       const spec = positionals[pi++];
       const rest = positionals.at(-1);
-      // The free-text positional (`stdin`) takes the remaining words, so `nota add texto sem aspas` works.
+      // The free-text positional (`stdin`) takes the remaining words, so `<cmd> texto sem aspas` works.
       if (!spec && rest?.stdin && typeof args[rest.name] === "string") {
         args[rest.name] += ` ${a}`;
         continue;

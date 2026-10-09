@@ -37,6 +37,24 @@ export function recordDrift(results: { id: string; level: Level; text: string }[
   } catch {}
 }
 
+/** The last evaluation as the login banner reads it: it never evaluates, it shows this and its age. */
+export interface Snapshot {
+  at: number;
+  profile: string;
+  results: { id: string; level: Level; text: string; fix?: string }[];
+}
+const snapshotFile = () => join(pvxHome(), "conformity-snapshot.json");
+/** Best effort, like `recordDrift`. */
+export function recordSnapshot(profile: string, results: { id: string; title: string; level: Level; text: string; fix?: string }[], now = Date.now()): void {
+  try {
+    writeJsonAtomic(snapshotFile(), { at: now, profile, results: results.map((r) => ({ id: r.id, level: r.level, text: `${r.title}: ${r.text}`, ...(r.fix ? { fix: r.fix } : {}) })) } satisfies Snapshot);
+  } catch {}
+}
+export const readSnapshot = (): Snapshot | undefined => {
+  const s = readJson<Partial<Snapshot>>(snapshotFile(), {});
+  return typeof s.at === "number" && Array.isArray(s.results) ? (s as Snapshot) : undefined;
+};
+
 /** The latest level change of a capability, for the evidence ("piorou hoje 09:02"). */
 export function driftOf(id: string, now = Date.now()): (Drift & { worse: boolean; label: string }) | undefined {
   const d = readJsonl<Drift>(conformityFile(), { limit: 1000 }).find((e) => e.id === id);

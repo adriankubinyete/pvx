@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
-import type { Pending, Registry } from "@pvx/core";
+import { pageWithRole, type Pending, type Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { createMenuNav, Menu, type MenuNav } from "../menu/Menu.tsx";
@@ -15,7 +15,7 @@ import { useTheme } from "../theme-context.tsx";
 import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { fitBar } from "./bar.ts";
-import { createDiaryNav, DiaryTab, PLAN_TAB, type DiaryNav } from "./DiaryTab.tsx";
+import { createDiaryNav, DiaryTab, type DiaryNav } from "./DiaryTab.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 
@@ -143,7 +143,7 @@ export function Tabs({ store, registry, nav, version, profile, modules }: { stor
         <TabBar nav={nav} tabs={bar} active={active} version={version} onPick={(id) => update({ active: id, bar: true })} />
         <box flexGrow={1} minHeight={0} flexDirection="column">
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} /> : null}
-          {active === "diario" ? <DiaryTab nav={nav} planTab={modTabs.some((t) => t.id === PLAN_TAB)} /> : null}
+          {active === "diario" ? <DiaryTab nav={nav} planTab={modTabs.find((t) => t.page.key === pageWithRole(registry, "plan")?.key)?.id} addNote={registry.roles.get("addNote")?.name} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}

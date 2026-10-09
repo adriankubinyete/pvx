@@ -143,7 +143,7 @@ export default (sdk: Sdk) => {
   return {
     pages: {
       conformidade: { title: "conformidade", render: () => <Resultados />, tab: { label: "Conformidade", order: 1 } },
-      plano: { title: "plano", render: () => <Plano />, tab: { label: "Plano", order: 2 } },
+      plano: { title: "plano", render: () => <Plano />, tab: { label: "Plano", order: 2 }, role: "plan" as const },
     },
   };
 };

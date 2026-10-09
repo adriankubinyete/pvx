@@ -20,13 +20,11 @@ export interface DiaryNav {
 }
 export const createDiaryNav = (): DiaryNav => ({ filter: "tudo", seenAt: lastSeen(currentUser()) });
 
-/** The Plano tab belongs to the conformidade module; the diary's `p` goes there. */
-export const PLAN_TAB = "page:conformidade.plano" as TabId;
 const LIMIT = 300;
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s);
 
 /** The Diário tab: every source merged, chips, list by day, detail panel. `n` note, `r` repeat, `p` plan. */
-export function DiaryTab({ nav, planTab }: { nav: TabsNav; planTab: boolean }) {
+export function DiaryTab({ nav, planTab, addNote }: { nav: TabsNav; /** The tab of the page with role `plan`, when there is one. */ planTab?: TabId; /** Command line of the role `addNote`. */ addNote?: string }) {
   const { c, g, box } = useTheme();
   const { narrow } = useLayout();
   const tabs = useTabs();
@@ -64,9 +62,9 @@ export function DiaryTab({ nav, planTab }: { nav: TabsNav; planTab: boolean }) {
       return to ? select(to.id) : nudge("fim da lista"), true;
     }
     if (matchKey(k, "u")) return load(), true;
-    if (matchKey(k, "n")) return cur ? goto("comando", `nota add --ref ${cur.ref} `) : nudge("nada aqui"), true;
+    if (matchKey(k, "n")) return cur ? (addNote ? goto("comando", `${addNote} --ref ${cur.ref} `) : nudge("sem módulo de notas")) : nudge("nada aqui"), true;
     if (matchKey(k, "r")) return cur?.kind === "cmd" ? goto("comando", cur.text) : nudge("só comandos repetem"), true;
-    if (matchKey(k, "p")) return cur?.kind !== "conf" ? nudge("só conformidade") : planTab ? tabs?.goto(PLAN_TAB) : nudge("sem aba Plano"), true;
+    if (matchKey(k, "p")) return cur?.kind !== "conf" ? nudge("só conformidade") : planTab ? tabs?.goto(planTab) : nudge("sem aba Plano"), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
   });
 

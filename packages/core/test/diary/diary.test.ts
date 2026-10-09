@@ -25,7 +25,7 @@ function build(withNotas = false): Registry {
       capabilities: [{ id: "t.cap", title: "cap", goal: "g", fix: "t read", prove: () => ({ level, text: `nível ${level}` }) }],
     },
   );
-  if (withNotas) r.register({ id: "nota", version: "1", entry: "x" }, { commands: { add: { help: "h", args: [{ name: "tag", help: "", kind: "option" }, { name: "ref", help: "", kind: "option" }, { name: "text", help: "", kind: "positional" }], run: (c) => void notes.push([String(c.args.tag), String(c.args.ref), String(c.args.text)]) } } });
+  if (withNotas) r.register({ id: "nota", version: "1", entry: "x" }, { roles: { addNote: "nota add" }, commands: { add: { help: "h", args: [{ name: "tag", help: "", kind: "option" }, { name: "ref", help: "", kind: "option" }, { name: "text", help: "", kind: "positional" }], run: (c) => void notes.push([String(c.args.tag), String(c.args.ref), String(c.args.text)]) } } });
   return r;
 }
 const withEnv = async (env: Record<string, string | undefined>, fn: () => Promise<void> | void) => {

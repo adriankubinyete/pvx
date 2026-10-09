@@ -1,5 +1,5 @@
 import { createSlotHub, type SlotHub, type SlotOpts } from "./slots.ts";
-import type { CapabilityDef, CommandDef, Manifest, ModuleDef, PageDef, QueryFn } from "@pvx/sdk";
+import type { CapabilityDef, CommandDef, Manifest, ModuleDef, PageDef, QueryFn, Roles } from "@pvx/sdk";
 
 export interface LoadError {
   id: string;
@@ -20,6 +20,8 @@ export interface Registry {
   modules: Map<string, Manifest>;
   /** Ids of the modules that ship with pvx (marked ◆). */
   official: Set<string>;
+  /** Role -> the query or command name that fills it (see `ModuleDef.roles`). */
+  roles: Map<keyof Roles, { moduleId: string; name: string }>;
   /** Widgets of every module, collected per home slot. */
   slots: SlotHub;
   errors: LoadError[];
@@ -42,6 +44,7 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     for (const [k, c] of r.commands) if (c.moduleId === id) r.commands.delete(k);
     for (const [k, q] of r.queries) if (q.moduleId === id) r.queries.delete(k);
     for (const [k, p] of r.pages) if (p.moduleId === id) r.pages.delete(k);
+    for (const [k, v] of r.roles) if (v.moduleId === id) r.roles.delete(k);
     r.capabilities = r.capabilities.filter((c) => c.moduleId !== id);
     r.slots.remove(id);
   };
@@ -52,6 +55,7 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     pages: new Map(),
     modules: new Map(),
     official: new Set(),
+    roles: new Map(),
     slots: createSlotHub(opts.slots),
     errors: [],
     rev: 0,
@@ -79,11 +83,16 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
         const other = r.queries.get(name);
         if (other && other.moduleId !== id) throw new Error(`conflito: consulta "${name}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
       }
+      for (const k of Object.keys(def.roles ?? {}) as (keyof Roles)[]) {
+        const other = r.roles.get(k);
+        if (other && other.moduleId !== id) throw new Error(`conflito: papel "${k}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
+      }
       if (r.modules.has(id)) drop(id);
       r.modules.set(id, manifest);
       for (const [key, c] of cmds) r.commands.set(key, { ...c, moduleId: id });
       for (const [name, fn] of Object.entries(def.queries ?? {})) r.queries.set(name, { moduleId: id, fn });
       for (const c of def.capabilities ?? []) r.capabilities.push({ ...c, moduleId: id });
+      for (const [k, name] of Object.entries(def.roles ?? {})) if (name) r.roles.set(k as keyof Roles, { moduleId: id, name });
       for (const [name, w] of Object.entries(def.widgets ?? {})) r.slots.add(id, name, w);
       for (const [name, p] of Object.entries(def.pages ?? {})) r.pages.set(`${id}.${name}`, { ...p, key: `${id}.${name}`, moduleId: id, name });
       r.changed();
@@ -118,3 +127,7 @@ export function resolvePage(registry: Registry, ref: string): RegisteredPage | u
   const named = [...registry.pages.values()].filter((p) => p.name === ref);
   return named.length === 1 ? named[0] : undefined;
 }
+
+/** The page a module declared with this role (`PageDef.role`): how the host reaches a page without naming its module. */
+export const pageWithRole = (registry: Pick<Registry, "pages">, role: NonNullable<PageDef["role"]>): RegisteredPage | undefined =>
+  [...registry.pages.values()].find((p) => p.role === role);
