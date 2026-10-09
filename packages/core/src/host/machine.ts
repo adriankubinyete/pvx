@@ -23,6 +23,7 @@ export function readMachine(diskPath = "/"): Machine {
   return {
     load: loadavg()[0] ?? 0,
     cpus: cpus().length || 1,
+    // darwin: freemem() leaves out reclaimable cache, so RAM reads near 100%; on Linux it is MemAvailable (correct).
     ramPct: ((totalmem() - freemem()) / totalmem()) * 100,
     diskPct,
     uptime: uptime(),

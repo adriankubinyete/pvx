@@ -1,11 +1,8 @@
-import { hostname } from "node:os";
 import { useReducer, useState } from "react";
 import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
-import { useLayout } from "../layout.ts";
 import { createMenuNav, Menu, type MenuNav } from "../menu/Menu.tsx";
-import { clean } from "../palette/search.ts";
 import { useScreenScope } from "../router.tsx";
 import { Session } from "../session/Session.tsx";
 import type { SessionApi } from "../session/store.ts";
@@ -49,11 +46,6 @@ function Tab({ label, errors, active, focused, onPick }: { label: string; errors
 
 function TabBar({ nav, errors, version, onPick }: { nav: TabsNav; errors: number; version: string; onPick: (id: TabId) => void }) {
   const { c } = useTheme();
-  const { cols } = useLayout();
-  const used = TAB_IDS.reduce((n, id) => n + LABELS[id].length + 2 + (id === "modulos" && errors ? `${errors}`.length + 2 : 0), 0);
-  const room = cols - 2 - used - 1; // 1 = gap before the host
-  const host = clean(hostname());
-  const right = room > version.length + 4 ? `${host.slice(0, room - version.length - 1)} ${version}` : "";
   return (
     <box height={1} flexShrink={0} overflow="hidden" flexDirection="row" justifyContent="space-between">
       <box flexDirection="row" flexShrink={0}>
@@ -61,7 +53,7 @@ function TabBar({ nav, errors, version, onPick }: { nav: TabsNav; errors: number
           <Tab key={id} label={LABELS[id]} errors={id === "modulos" ? errors : 0} active={id === nav.active} focused={nav.bar} onPick={() => onPick(id)} />
         ))}
       </box>
-      <text fg={c.dim} wrapMode="none" flexShrink={0}>{right}</text>
+      <text fg={c.dim} wrapMode="none" flexShrink={0}>{`pvx ${version} `}</text>
     </box>
   );
 }
@@ -95,7 +87,7 @@ export function Tabs({ store, registry, nav, version, profile }: { store: Sessio
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} errors={registry.errors.length} version={version} onPick={(id) => update({ active: id, bar: true })} />
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          {nav.active === "inicio" ? <HomeTab store={store} nav={nav} version={version} profile={profile} /> : null}
+          {nav.active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} /> : null}
           {nav.active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} /> : null}
           {CORE.includes(nav.active) ? <CoreTab key={nav.active} store={store} line={nav.active} cache={nav.core} /> : null}
           {nav.active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}

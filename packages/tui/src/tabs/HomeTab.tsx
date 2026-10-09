@@ -22,7 +22,8 @@ export interface HomeNav {
 }
 export const createHomeNav = (): HomeNav => ({ panel: "conformidade", sel: {} });
 
-const SIDE_W = 44;
+const SIDE_W = 40;
+const hms = (t: number) => new Date(t).toTimeString().slice(0, 8);
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s);
 
 interface Row {
@@ -36,10 +37,11 @@ interface Row {
   use?: string;
 }
 
-function Panel({ title, focused, height, grow, children }: { title: string; focused: boolean; height?: number; grow?: boolean; width?: number; children: React.ReactNode }) {
+/** Clips its content (never pushes siblings); `width`/`height` fix it, otherwise it grows. */
+function Panel({ title, focused, width, height, children }: { title: string; focused: boolean; width?: number; height?: number; children: React.ReactNode }) {
   const { c, box, g } = useTheme();
   return (
-    <box flexDirection="column" paddingX={1} flexShrink={grow ? 1 : 0} flexGrow={grow ? 1 : 0} minHeight={0} height={height}
+    <box flexDirection="column" paddingX={1} overflow="hidden" minHeight={0} width={width} height={height} flexShrink={width || height ? 0 : 1} flexGrow={width || height ? 0 : 1}
       {...box(focused ? c.accent : undefined)} title={`${g.query} ${title}${focused ? ` ${g.active}` : ""}`}>
       {children}
     </box>
@@ -68,8 +70,8 @@ function Rows({ rows, sel, focused, w, onPick }: { rows: Row[]; sel?: string; fo
   );
 }
 
-/** The Início tab: a dashboard. Header, machine, conformidade (pending items) and activity; enter on an item puts its command in the Comando input. */
-export function HomeTab({ store, nav, version, profile }: { store: SessionApi; nav: TabsNav; version: string; profile?: string | null }) {
+/** The Início tab: a dashboard. Machine, conformidade (pending items) and activity; enter on an item puts its command in the Comando input. */
+export function HomeTab({ store, nav, profile }: { store: SessionApi; nav: TabsNav; profile?: string | null }) {
   const { c, g } = useTheme();
   const { cols, narrow } = useLayout();
   const tabs = useTabs();
@@ -77,10 +79,11 @@ export function HomeTab({ store, nav, version, profile }: { store: SessionApi; n
   const { history, blocks } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [m, setM] = useState(readMachine);
+  const [readAt, setReadAt] = useState(Date.now);
   const [now, setNow] = useState(Date.now);
   // The only timer: it exists while Início is mounted.
   useEffect(() => {
-    const t = setInterval(() => (setM(readMachine()), setNow(Date.now())), 5000);
+    const t = setInterval(() => (setM(readMachine()), setReadAt(Date.now()), setNow(Date.now())), 5000);
     return () => clearInterval(t);
   }, []);
   const favorites = useMemo(() => loadFavorites(), []);
@@ -139,7 +142,6 @@ export function HomeTab({ store, nav, version, profile }: { store: SessionApi; n
       </text>
     );
   };
-  const side = narrow ? cols - 2 : SIDE_W;
   const confW = narrow ? cols - 2 : cols - 2 - SIDE_W;
 
   const total = done?.total ?? 0;
@@ -147,7 +149,10 @@ export function HomeTab({ store, nav, version, profile }: { store: SessionApi; n
   const [cf, ce] = meter(pct, 10, g);
   const worst = done?.pending.some((p) => p.level === "error") ? c.error : c.warn;
   const conformidade = (
-    <Panel title="conformidade" focused={focused && nav.home.panel === "conformidade"} grow>
+    <Panel title="conformidade" focused={focused && nav.home.panel === "conformidade"}>
+      <text wrapMode="none" flexShrink={0}>
+        {profile ? <span fg={c.accent}>{`perfil ${profile}`}</span> : <span fg={c.dim}>sem perfil</span>}
+      </text>
       {cache === "running" ? <text fg={c.dim} flexShrink={0}>verificando…</text>
         : !done ? <text fg={c.dim} flexShrink={0}>não verificado · r verifica</text>
         : done.message ? <text fg={c.dim} flexShrink={0}>{cut(clean(done.message), confW - 4)}</text>
@@ -165,37 +170,35 @@ export function HomeTab({ store, nav, version, profile }: { store: SessionApi; n
     </Panel>
   );
   const maquina = (
-    <Panel title="máquina" focused={false} height={6}>
+    <Panel title="máquina" focused={false} width={narrow ? undefined : SIDE_W} height={narrow ? 8 : undefined}>
+      <text wrapMode="none" flexShrink={0}>
+        <span fg={c.text}><b>{cut(clean(hostname()), SIDE_W - 4 - (ip ? ip.length + 2 : 0))}</b></span>
+        <span fg={c.dim}>{ip ? `  ${ip}` : ""}</span>
+      </text>
       {gauge("carga", (m.load / m.cpus) * 100, m.load.toFixed(2))}
       {gauge("ram", m.ramPct, `${Math.round(m.ramPct)}%`)}
       {gauge("disco /", m.diskPct, `${Math.round(m.diskPct)}%`)}
-      <text fg={c.dim} flexShrink={0}>{`uptime ${fmtUptime(m.uptime)}`}</text>
+      <text fg={c.dim} wrapMode="none" flexShrink={0}>{`uptime ${fmtUptime(m.uptime)}`}</text>
+      <text fg={c.dim} wrapMode="none" flexShrink={0}>{`atualizado ${hms(readAt)}`}</text>
     </Panel>
   );
   const atividade = (
-    <Panel title="atividade" focused={focused && nav.home.panel === "atividade"} grow>
+    <Panel title="atividade" focused={focused && nav.home.panel === "atividade"}>
       {rows.atividade.length ? null : <text fg={c.dim} flexShrink={0}>nada executado ainda</text>}
-      <Rows rows={rows.atividade} sel={cur("atividade")?.id} focused={focused && nav.home.panel === "atividade"} w={side - 4} onPick={(r) => (select("atividade", r.id), use(r))} />
+      <Rows rows={rows.atividade} sel={cur("atividade")?.id} focused={focused && nav.home.panel === "atividade"} w={cols - 6} onPick={(r) => (select("atividade", r.id), use(r))} />
     </Panel>
   );
 
+  // Top row: máquina | conformidade; atividade below, full width. Narrow: one column. The areas share the height; each panel clips.
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column">
-      <box height={1} flexShrink={0} flexDirection="row" overflow="hidden">
-        <text wrapMode="none">
-          <span fg={c.text}><b>{clean(hostname())}</b></span>
-          <span fg={c.dim}>{ip ? `  ${ip}  ` : "  "}</span>
-          {profile ? <span fg={c.accent} bg={c.panel}>{` ${profile} `}</span> : <span fg={c.dim}>sem perfil</span>}
-          <span fg={c.dim}>{`  pvx ${version}`}</span>
-        </text>
-      </box>
       {narrow ? (
-        <box flexGrow={1} minHeight={0} flexDirection="column">{maquina}{conformidade}{atividade}</box>
+        <>{maquina}{conformidade}{atividade}</>
       ) : (
-        <box flexGrow={1} minHeight={0} flexDirection="row">
-          {conformidade}
-          <box width={SIDE_W} flexShrink={0} flexDirection="column">{maquina}{atividade}</box>
-        </box>
+        <>
+          <box flexGrow={1} flexBasis={0} minHeight={8} flexDirection="row">{maquina}{conformidade}</box>
+          <box flexGrow={1} flexBasis={0} minHeight={6} flexDirection="column">{atividade}</box>
+        </>
       )}
     </box>
   );

@@ -375,7 +375,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[2]).toMatch(/^ ╭─› conformidade ●─/); // row 1 is the home header
+  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› conformidade ●─/); // row 0 is the bar
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos─/);

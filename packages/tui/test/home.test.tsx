@@ -33,7 +33,7 @@ async function mount(opts: { cols?: number; rows?: number; profile?: string } = 
 test("Início renders the four zones at 120x40 and stays one column at 80x24", async () => {
   const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
   const f = t.frame();
-  for (const s of [hostname().slice(0, 12), "Principal", "pvx 0.1.0", "› máquina", "carga", "ram", "disco /", "uptime", "› conformidade", "› atividade", "▰", "▱"]) expect(f).toContain(s);
+  for (const s of [hostname().slice(0, 12), "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "carga", "ram", "disco /", "uptime", "› conformidade", "› atividade", "▰", "▱"]) expect(f).toContain(s);
   const row = f.split("\n").find((l) => l.includes("› máquina"))!;
   expect(row).toContain("› conformidade"); // two columns
   t.destroy();
@@ -95,4 +95,26 @@ test("focus: the focused panel has the dot, left/right move between panels, up g
   expect(t.frame()).toContain("› atividade ●");
   await t.press("RETURN");
   expect(t.frame()).toContain("❯ demo greet");
+});
+
+// Each fixed row (bar, panel titles, footer) must sit alone on its own line, whole.
+test.each([[230, 24], [120, 40], [100, 30], [80, 24]] as const)("rows never overlap at %ix%i", async (cols, rows) => {
+  const { t } = await mount({ cols, rows, profile: "Principal" });
+  const lines = t.frame().split("\n");
+  const at = (s: string) => lines.map((l, i) => (l.includes(s) ? i : -1)).filter((i) => i >= 0);
+  expect(at("Início")).toEqual([0]);
+  expect(lines[0]).toContain("pvx 0.1.0");
+  expect(at("› máquina")).toHaveLength(1);
+  expect(at("› conformidade")).toHaveLength(1);
+  expect(at("perfil Principal")).toHaveLength(1);
+  expect(at("› atividade")).toHaveLength(1);
+  expect(at("↑↓ move")).toEqual([rows - 1]);
+  expect(lines.filter((l) => l.includes("pvx 0.1.0"))).toHaveLength(1); // the version only in the bar
+  expect(lines.filter((l) => l.includes(hostname().slice(0, 12)))).toHaveLength(1); // the host only in máquina
+});
+
+test("below the minimum size only the notice shows (no half-drawn layout)", async () => {
+  const { t } = await mount({ cols: 230, rows: 20 });
+  const lines = t.frame().split("\n").filter((l) => l.trim());
+  expect(lines).toEqual([expect.stringContaining("terminal pequeno")]);
 });
