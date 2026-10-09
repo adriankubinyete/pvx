@@ -1,4 +1,4 @@
-import type { CapabilityDef, CommandDef, Manifest, ModuleDef, QueryFn } from "@pvx/sdk";
+import type { CapabilityDef, CommandDef, Manifest, ModuleDef, PageDef, QueryFn } from "@pvx/sdk";
 
 export interface LoadError {
   id: string;
@@ -6,12 +6,16 @@ export interface LoadError {
   error: string;
 }
 export type RegisteredCommand = CommandDef & { moduleId: string };
+/** `key` = "<module>.<name>". */
+export type RegisteredPage = PageDef & { key: string; moduleId: string; name: string };
 
 export interface Registry {
   /** Key = "<module> <path...>". */
   commands: Map<string, RegisteredCommand>;
   queries: Map<string, { moduleId: string; fn: QueryFn }>;
   capabilities: (CapabilityDef & { moduleId: string })[];
+  /** Key = "<module>.<name>". */
+  pages: Map<string, RegisteredPage>;
   modules: Map<string, Manifest>;
   errors: LoadError[];
   /** Refuses the whole module (nothing registered) on id, command or query conflict. */
@@ -25,6 +29,7 @@ export function createRegistry(): Registry {
     commands: new Map(),
     queries: new Map(),
     capabilities: [],
+    pages: new Map(),
     modules: new Map(),
     errors: [],
     register(manifest, def) {
@@ -43,6 +48,7 @@ export function createRegistry(): Registry {
       for (const [key, c] of cmds) r.commands.set(key, { ...c, moduleId: id });
       for (const [name, fn] of Object.entries(def.queries ?? {})) r.queries.set(name, { moduleId: id, fn });
       for (const c of def.capabilities ?? []) r.capabilities.push({ ...c, moduleId: id });
+      for (const [name, p] of Object.entries(def.pages ?? {})) r.pages.set(`${id}.${name}`, { ...p, key: `${id}.${name}`, moduleId: id, name });
     },
     addError(id, error) {
       r.errors.push({ id, state: "error", error });
@@ -64,4 +70,12 @@ export function resolveCommand(registry: Registry, argv: string[]) {
     if (cmd) return { key, cmd, n };
   }
   return undefined;
+}
+
+/** `#<module>.<name>` exactly, or `<name>` when only one module has a page of that name. */
+export function resolvePage(registry: Registry, ref: string): RegisteredPage | undefined {
+  const exact = registry.pages.get(ref);
+  if (exact) return exact;
+  const named = [...registry.pages.values()].filter((p) => p.name === ref);
+  return named.length === 1 ? named[0] : undefined;
 }

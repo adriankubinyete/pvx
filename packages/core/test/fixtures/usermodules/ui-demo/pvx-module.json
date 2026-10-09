@@ -1,0 +1,1 @@
+{"id":"ui-demo","version":"1.0.0","entry":"index.tsx","pvx":">=0.0.1","contributes":{"commands":["status"],"pages":["counter","overview","board","boom"]}}

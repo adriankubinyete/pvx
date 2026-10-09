@@ -1,7 +1,9 @@
 import { createContext, useContext } from "react";
 
 export const TAB_IDS = ["inicio", "modulos", "conformidade", "plano", "logs", "comando"] as const;
-export type TabId = (typeof TAB_IDS)[number];
+export type CoreTabId = (typeof TAB_IDS)[number];
+/** A core tab, or `page:<module>.<page>` for a tab a module contributes. */
+export type TabId = CoreTabId | `page:${string}`;
 
 export interface TabsApi {
   /** True when the tab content owns the keyboard; false while the tab bar is focused. */

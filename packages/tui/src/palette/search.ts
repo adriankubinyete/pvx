@@ -10,6 +10,8 @@ export interface Hit {
   origin: Origin;
   help: string;
   destructive: boolean;
+  /** A page (the `#` scope): enter opens it. */
+  page?: boolean;
   /** Matched range in `key` (start inclusive, end exclusive); null when nothing to highlight. */
   range: [number, number] | null;
 }
@@ -36,16 +38,21 @@ function rank(key: string, term: string): { r: number; range: [number, number] |
 }
 
 /**
- * Scopes by prefix: `@mod` module, `>cmd` commands, `#page` pages (none yet), `!` destructive only.
+ * Scopes by prefix: `@mod` module, `>cmd` commands, `#page` pages, `!` destructive only.
  * Result is sorted by rank, then grouped by module in first-appearance order.
  */
 export function search(registry: Registry, query: string): Hit[] {
   const q = query.trim();
   const scope = "@>#!".includes(q[0] ?? " ") ? q[0] : "";
   const term = scope ? q.slice(1).trim() : q;
-  if (scope === "#") return []; // pages arrive with Fase 3; the scope is kept
   const hits: (Hit & { r: number })[] = [];
-  for (const [key, cmd] of registry.commands) {
+  if (scope === "#") {
+    for (const p of registry.pages.values()) {
+      const m = rank(p.key, term);
+      if (m.r >= 0) hits.push({ key: p.key, moduleId: p.moduleId, origin: originOf(registry.modules.get(p.moduleId)), help: clean(p.title), destructive: false, page: true, range: m.range, r: m.r });
+    }
+  }
+  for (const [key, cmd] of scope === "#" ? [] : registry.commands) {
     if (scope === "!" && !cmd.destructive) continue;
     const m = scope === "@" ? rank(cmd.moduleId, term) : rank(key, term);
     if (m.r < 0) continue;

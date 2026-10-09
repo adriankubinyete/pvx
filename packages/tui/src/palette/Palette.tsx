@@ -94,10 +94,10 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const items = lines.filter((l) => l.kind === "item");
   const cur = items.find((l) => l.id === selId) ?? items[0];
   const hit = cur?.kind === "item" ? cur.hit : undefined;
-  const cmd = hit ? registry.commands.get(hit.key) : undefined;
+  const cmd = hit && !hit.page ? registry.commands.get(hit.key) : undefined;
   const specs = cmd?.args ?? [];
   const values = (hit && forms[hit.key]) || {};
-  const built = hit ? buildLine(hit.key, specs, values) : undefined;
+  const built = hit ? (hit.page ? { argv: [], display: `#${hit.key}`, secrets: {}, missing: [] } : buildLine(hit.key, specs, values)) : undefined;
   const last = hit ? [...session.history].reverse().find((l) => l === hit.key || l.startsWith(`${hit.key} `)) : undefined;
 
   const pick = useCallback((id: string) => (setSelId(id), setFocus(-1)), []);
@@ -177,7 +177,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
           <>
             <text fg={c.text}>{`${hit.key}${hit.destructive ? " !" : ""}`}</text>
             <text fg={c.dim}>{hit.help}</text>
-            <Form specs={specs} values={values} focus={focus} line={built} last={last} />
+            {hit.page ? null : <Form specs={specs} values={values} focus={focus} line={built} last={last} />}
           </>
         ) : null}
       </box>

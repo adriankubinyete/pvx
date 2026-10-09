@@ -8,3 +8,5 @@ export { useLayout } from "./layout.ts";
 export * from "./session/index.ts";
 export * from "./menu/index.ts";
 export { createTabsNav, Tabs, type TabsNav } from "./tabs/Tabs.tsx";
+export { ui, type PageDeps } from "./sdk-ui/index.tsx";
+export { setPageRows } from "./keymap.ts";

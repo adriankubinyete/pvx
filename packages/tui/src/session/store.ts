@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
-import { execute, requiresRoot, type CoreLine, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
+import { execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
 
 export const MAX_BLOCKS = 500;
 const MAX_HISTORY = 500;
@@ -44,6 +44,8 @@ export interface SessionApi {
   /** Answers a pending confirm (boolean) or secret (string, or undefined to cancel). */
   answer(id: number, value: boolean | string | undefined): void;
   subscribe(fn: () => void): () => void;
+  /** Called with a page key ("<module>.<name>") when `#page` is run or a command with `page` finishes ok. The App's page host pushes the screen. */
+  onPage(fn: (key: string) => void): () => void;
   getSnapshot(): SessionState;
 }
 
@@ -85,6 +87,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
   const { registry, makeLogger, historyPath, isRoot, core } = opts;
   let state: SessionState = { blocks: [], history: loadHistory(historyPath), pending: [] };
   const subs = new Set<() => void>();
+  const pageSubs = new Set<(key: string) => void>();
   const waiting = new Map<number, (v: boolean | string | undefined) => void>();
   let seq = 0;
   // Real lines of masked blocks. Memory only: the masked line is all that reaches blocks, history and disk.
@@ -106,6 +109,9 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     let line = raw.trim();
     if (line === "!!") line = lastRaw ?? state.history.at(-1) ?? "";
     if (!line) return { exit: 0 };
+    // `#page` is navigation, not a command: no block and no history. An unknown page falls through to an error block.
+    const page = line.startsWith("#") ? resolvePage(registry, line.slice(1).trim()) : undefined;
+    if (page) return pageSubs.forEach((f) => f(page.key)), { exit: 0 };
     const shown = maskLine(registry, line);
     const id = ++seq;
     const t0 = Date.now();
@@ -126,6 +132,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
       const denied = !isRoot && requiresRoot(registry, argv);
       const confirmed = !denied && found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", cmd: found.key }) : false;
       if (denied) lines = [{ kind: "error", text: rootMessage() }];
+      else if (line.startsWith("#")) lines = [{ kind: "error", text: `página não encontrada: ${line.slice(1).trim()}` }];
       else if (found?.cmd.destructive && !confirmed) lines = [{ kind: "warning", text: "cancelado" }];
       else {
         const r = !found && core && argv.length
@@ -145,6 +152,8 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     const status = exit !== 0 ? "error" : lines.some((l) => l.kind === "warning") ? "warn" : "ok";
     const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
     patchBlock(id, { status, ms: Date.now() - t0, lines: clean });
+    const opens = found && exit === 0 && found.cmd.page ? `${found.cmd.moduleId}.${found.cmd.page}` : undefined;
+    if (opens && registry.pages.has(opens)) pageSubs.forEach((f) => f(opens));
     return { exit };
   }
 
@@ -194,6 +203,10 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     subscribe(fn) {
       subs.add(fn);
       return () => void subs.delete(fn);
+    },
+    onPage(fn) {
+      pageSubs.add(fn);
+      return () => void pageSubs.delete(fn);
     },
     getSnapshot: () => state,
   };

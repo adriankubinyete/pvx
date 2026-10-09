@@ -160,7 +160,8 @@ test("full flow without mouse: type, complete, run, fail, repeat, palette, queue
   await t.press("ESCAPE");
   await t.press("r");
   expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(2);
-  await t.press("ESCAPE");
+  expect(t.frame().split("\n").filter((l) => l.trim()).at(-1)).toContain("esc abas"); // block scope footer
+  await t.press("ESCAPE"); // standalone Session: no tab bar to go up to
 
   await t.press("k", { ctrl: true });
   expect(t.frame()).toContain("fila vazia");

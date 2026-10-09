@@ -1,13 +1,25 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import type { Logger, Manifest, ModuleDef, ModuleFactory, Sdk } from "@pvx/sdk";
+import type { Logger, Manifest, ModuleDef, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
 import { readManifest } from "./manifest.ts";
 import { usermodulesDir } from "./paths.ts";
 import type { Registry } from "./registry.ts";
 
+/** Destructuring works (factories do it at load time); calling anything throws. */
+const unavailableUi = new Proxy({}, {
+  get: (_, k) =>
+    typeof k === "string"
+      ? () => {
+          throw new Error("UI indisponível na CLI");
+        }
+      : undefined,
+}) as SdkUi;
+
 export interface LoadOpts {
   hostVersion: string;
   makeLogger: (name: string) => Logger;
+  /** `sdk.ui` for the factories (the TUI package builds it; core has no React). Default: calls throw "UI indisponível". */
+  ui?: SdkUi;
   /** Trust hook (Fase 4 plugs in here). Default: allow everything. Return false to refuse the import. */
   canImport?: (dir: string, manifest: Manifest) => boolean | Promise<boolean>;
 }
@@ -33,7 +45,7 @@ export async function loadModules(registry: Registry, opts: LoadOpts): Promise<v
       if (!entry.startsWith(base + sep)) throw new Error(`entry "${manifest.entry}" fora do diretório do módulo`);
       const factory = (await import(entry)).default as ModuleFactory | undefined;
       if (typeof factory !== "function") throw new Error("entry não exporta uma função por padrão (export default)");
-      const sdk: Sdk = { version: 1, log: opts.makeLogger(id) };
+      const sdk: Sdk = { version: 1, log: opts.makeLogger(id), ui: opts.ui ?? unavailableUi };
       const def: ModuleDef = factory(sdk);
       registry.register(manifest, def);
     } catch (e) {

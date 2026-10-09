@@ -58,7 +58,8 @@ export function useScreenScope(scope: Scope, rank = 0) {
 
 type Entry = Screen & { uid: number };
 
-class Boundary extends Component<{ onCatch(err: Error): void; children: ReactNode }, { err: Error | null }> {
+/** `fallback` replaces the default crash view (a pane inside a tab shows its error inline). */
+export class Boundary extends Component<{ onCatch(err: Error): void; fallback?: (err: Error) => ReactNode; children: ReactNode }, { err: Error | null }> {
   override state = { err: null as Error | null };
   static getDerivedStateFromError(err: Error) {
     return { err };
@@ -67,7 +68,8 @@ class Boundary extends Component<{ onCatch(err: Error): void; children: ReactNod
     this.props.onCatch(err);
   }
   override render() {
-    return this.state.err ? <CrashView err={this.state.err} /> : this.props.children;
+    const { err } = this.state;
+    return err ? this.props.fallback?.(err) ?? <CrashView err={err} /> : this.props.children;
   }
 }
 

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { theme } from "@pvx/tui";
+import { theme, ui } from "@pvx/tui";
 import { EXIT, type Logger } from "@pvx/sdk";
 import { createLogger, createRegistry, loadModules, logsDir, runCli } from "@pvx/core";
 import { ask, askSecret } from "./prompt.ts";
@@ -21,7 +21,7 @@ const makeLogger = (name: string): Logger => {
 
 async function main(): Promise<number> {
   const registry = createRegistry();
-  await loadModules(registry, { hostVersion: VERSION, makeLogger });
+  await loadModules(registry, { hostVersion: VERSION, makeLogger, ui });
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const abort = new AbortController();
   // Only `logs -f` handles Ctrl+C; a global listener would swallow the first Ctrl+C of a hung command.

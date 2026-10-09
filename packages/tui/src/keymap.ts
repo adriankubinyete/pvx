@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "search" | "modal";
+export type Scope = "global" | "menu" | "home" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -57,6 +57,7 @@ const base: readonly Shortcut[] = [
   { keys: "enter", label: "voltar", scope: "result", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "log", footer: true },
   { keys: "↑↓", label: "move blocos", scope: "block", footer: true },
+  { keys: "esc", label: "abas", scope: "block", footer: true },
   { keys: "r", label: "repetir", scope: "block", footer: true, hint: true },
   { keys: "l", label: "log", scope: "block", footer: true, hint: true },
   { keys: "c", label: "copiar", scope: "block", footer: true, hint: true },
@@ -65,13 +66,18 @@ const base: readonly Shortcut[] = [
 /** Base rows plus the palette's own, one row per keys + scope (the first one wins). */
 export const shortcuts: readonly Shortcut[] = [...new Map([...base, ...paletteShortcuts].map((s) => [`${s.scope}:${s.keys}`, s])).values()];
 
+/** Rows a module's page adds to its own scope (`page:<key>`): the table stays the one source for footer and help. */
+const pageRows = new Map<Scope, Shortcut[]>();
+export const setPageRows = (scope: Scope, rows: Shortcut[]) => void pageRows.set(scope, rows);
+const rowsOf = (scope: Scope) => [...shortcuts, ...(pageRows.get(scope) ?? [])];
+
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] =>
-  [...shortcuts.filter((s) => s.footer && s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.footer && s.scope === "global")];
+  [...rowsOf(scope).filter((s) => s.footer && s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.footer && s.scope === "global")];
 
 /** Help rows: all rows of the scope (footer or not), then the global ones. */
 export const helpFor = (scope: Scope): Shortcut[] =>
-  [...shortcuts.filter((s) => s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.scope === "global")];
+  [...rowsOf(scope).filter((s) => s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.scope === "global")];
 
 /** Inline hint text from table rows: `hintText("session", "tab", "enter")` -> `tab completa · enter roda`. */
 export const hintText = (scope: Scope, ...keys: string[]) =>

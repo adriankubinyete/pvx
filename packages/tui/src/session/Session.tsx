@@ -113,7 +113,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       const i = blocks.indexOf(focus);
       if (k.name === "up") return i > 0 ? setFb(blocks[i - 1]!.id) : (setFb(null), tabs?.focusBar()), true;
       if (k.name === "down") return setFb(blocks[i + 1]?.id ?? null), true;
-      if (k.name === "escape") return setFb(null), true;
+      if (k.name === "escape") return tabs?.focusBar(), true; // one level up: input -> blocks -> tab bar
       if (matchKey(k, "enter")) return recall(store.lineOf(focus.id)), setFb(null), true;
       if (matchKey(k, "r")) return void store.repeat(focus.id), true;
       if (matchKey(k, "l")) return router.push({ id: "log", element: <LogScreen moduleId={focus.moduleId} /> }), true;
