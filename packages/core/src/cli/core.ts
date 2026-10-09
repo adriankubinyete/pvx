@@ -96,7 +96,7 @@ export const CORE: CoreCommand[] = [
       if (!p.ok) return usageError(o, p.message);
       return withProfile(io, o, (r) => {
         o.line({ kind: "info", text: `perfil: ${r.title}` });
-        for (const x of r.results) o.line({ kind: level[x.level], text: `${x.title}: ${x.text}` });
+        for (const x of r.results) o.line({ kind: level[x.level], text: `${x.title}: ${x.text}`, fix: x.level === "ok" ? undefined : x.fix });
         const n = (l: string) => r.results.filter((x) => x.level === l).length;
         o.line({ kind: "info", text: `${n("ok")} ok, ${n("warn")} avisos, ${n("error")} erros` });
         return p.args.strict && n("ok") < r.results.length ? EXIT.ERROR : EXIT.OK;

@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 export interface Profile {
@@ -32,4 +32,13 @@ export function selectProfile(
     return p;
   }
   return profiles.find((p) => !p.when?.file || fileExists(p.when.file)) ?? null;
+}
+
+/** The profile the TUI shows: like `selectProfile`, but a bad `PVX_PROFILE` or none at all gives null. */
+export async function activeProfile(dir: string, env: Record<string, string | undefined>): Promise<Profile | null> {
+  try {
+    return selectProfile(await loadProfiles(dir), env, existsSync);
+  } catch {
+    return null;
+  }
 }

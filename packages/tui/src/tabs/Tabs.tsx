@@ -12,7 +12,7 @@ import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { TAB_IDS, TabsProvider, type TabId } from "./context.ts";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
-import { ModulesTab } from "./ModulesTab.tsx";
+import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 
 const LABELS: Record<TabId, string> = { inicio: "Início", modulos: "Módulos", conformidade: "Conformidade", plano: "Plano", logs: "Logs", comando: "Comando" };
 /** Tabs that show a core command's output (the id is also the command). */
@@ -23,14 +23,15 @@ export interface TabsNav {
   active: TabId;
   /** True while the tab bar has the keyboard. */
   bar: boolean;
+  /** Módulos: the module menu. */
   menu: MenuNav;
-  modulesSel?: string;
+  home: HomeNav;
   /** Last result of each core tab: memory only, for the TUI session. */
   core: CoreCache;
   /** Comando input draft: memory only (a secret never goes in the line; it goes through the modal). */
   draft: string;
 }
-export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, menu: createMenuNav(), core: {}, draft: "" });
+export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, menu: createMenuNav(), home: createHomeNav(), core: {}, draft: "" });
 
 function Tab({ label, errors, active, focused, onPick }: { label: string; errors: number; active: boolean; focused: boolean; onPick: () => void }) {
   const { c, g } = useTheme();
@@ -70,7 +71,7 @@ function TabBar({ nav, errors, version, onPick }: { nav: TabsNav; errors: number
  * for completing); with the bar focused, left/right switch and down enters the tab. The tab handler is `base`, so
  * content that consumes a key (a form's `tab`) wins.
  */
-export function Tabs({ store, registry, nav, version }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string }) {
+export function Tabs({ store, registry, nav, version, profile }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null }) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const update = (p: Partial<TabsNav>) => (Object.assign(nav, p), bump());
   // A tab with nothing to select never holds focus.
@@ -79,7 +80,7 @@ export function Tabs({ store, registry, nav, version }: { store: SessionApi; reg
     const id = TAB_IDS[(TAB_IDS.indexOf(nav.active) + d + TAB_IDS.length) % TAB_IDS.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
   };
-  useScreenScope(nav.bar ? "tabs" : nav.active === "comando" ? "session" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
+  useScreenScope(nav.bar ? "tabs" : nav.active === "comando" ? "session" : nav.active === "inicio" ? "home" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
   useKeys((k) => {
     if (matchKey(k, "tab")) return step(1), true;
     if (matchKey(k, "shift+tab")) return step(-1), true;
@@ -94,8 +95,8 @@ export function Tabs({ store, registry, nav, version }: { store: SessionApi; reg
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} errors={registry.errors.length} version={version} onPick={(id) => update({ active: id, bar: true })} />
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          {nav.active === "inicio" ? <Menu store={store} registry={registry} nav={nav.menu} version={version} /> : null}
-          {nav.active === "modulos" ? <ModulesTab registry={registry} nav={nav} /> : null}
+          {nav.active === "inicio" ? <HomeTab store={store} nav={nav} version={version} profile={profile} /> : null}
+          {nav.active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} /> : null}
           {CORE.includes(nav.active) ? <CoreTab key={nav.active} store={store} line={nav.active} cache={nav.core} /> : null}
           {nav.active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}
         </box>

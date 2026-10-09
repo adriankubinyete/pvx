@@ -54,7 +54,7 @@ export function buildRoot(registry: Registry): Item[] {
     const entries = [...registry.commands]
       .filter(([, cmd]) => cmd.moduleId === id)
       .map(([key, cmd]) => ({ key, cmd, path: key.split(" ").slice(1).filter(Boolean) }));
-    return { id: `m:${id}`, label: id, help: plural(entries.length), children: group(id, entries, 0) };
+    return { id: `m:${id}`, label: id, help: `${registry.modules.get(id)?.version ?? ""} carregado · ${plural(entries.length)}`, children: group(id, entries, 0) };
   });
   return modules;
 }

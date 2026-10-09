@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
-import { execute, requiresRoot, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
+import { execute, requiresRoot, type CoreLine, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
 
 export const MAX_BLOCKS = 500;
 const MAX_HISTORY = 500;
@@ -16,6 +16,8 @@ export interface Block {
   ms?: number;
   moduleId: string;
   lines: OutLine[];
+  /** When it started (ms); absent on synthetic blocks. */
+  at?: number;
 }
 
 /** A question the host asks the user; answered with `answer`. */
@@ -33,7 +35,7 @@ export interface SessionApi {
   /** Never rejects: a throw becomes an error block. `!!` runs the last history entry. */
   run(line: string, opts?: { secrets?: Record<string, string> }): Promise<{ exit: number }>;
   /** Runs a core command on the side: no block, no history (the core tabs). Same root rule as `run`. */
-  capture(line: string): Promise<{ exit: number; lines: OutLine[] }>;
+  capture(line: string): Promise<{ exit: number; lines: CoreLine[] }>;
   /** Re-runs a block; a secret is asked again through the modal. */
   repeat(blockId: number): Promise<{ exit: number }>;
   /** The line to recall for a block: the real one (memory only) when the shown one is masked. */
@@ -76,7 +78,7 @@ export interface SessionOpts {
   /** Real uid 0 (strict root: injected so tests can pass true). */
   isRoot: boolean;
   /** Runs the core commands (`plano`, `logs`...) that are not in the registry. */
-  core?: (argv: string[]) => Promise<{ exit: number; lines: OutLine[] }>;
+  core?: (argv: string[]) => Promise<{ exit: number; lines: CoreLine[] }>;
 }
 
 export function createSessionStore(opts: SessionOpts): SessionApi {
@@ -114,7 +116,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     const found = resolveCommand(registry, argv);
     if (shown !== line) raws.set(id, line);
     lastRaw = shown !== line ? line : undefined;
-    const block: Block = { id, line: shown, status: "running", moduleId: found?.cmd.moduleId ?? "core", lines: [] };
+    const block: Block = { id, line: shown, status: "running", moduleId: found?.cmd.moduleId ?? "core", lines: [], at: t0 };
     set({ blocks: [...state.blocks, block].slice(-MAX_BLOCKS) });
     addHistory(shown);
 
@@ -146,8 +148,8 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     return { exit };
   }
 
-  async function capture(line: string): Promise<{ exit: number; lines: OutLine[] }> {
-    let r: { exit: number; lines: OutLine[] };
+  async function capture(line: string): Promise<{ exit: number; lines: CoreLine[] }> {
+    let r: { exit: number; lines: CoreLine[] };
     try {
       const argv = tokenize(line);
       if (!isRoot && requiresRoot(registry, argv)) r = { exit: 1, lines: [{ kind: "error", text: rootMessage() }] };
@@ -155,7 +157,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     } catch (e) {
       r = { exit: 1, lines: [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }] };
     }
-    return { exit: r.exit, lines: r.lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text }))) };
+    return { exit: r.exit, lines: r.lines.flatMap((l) => sanitize(l.text).map((text) => ({ ...l, text }))) };
   }
 
   function addHistory(line: string) {

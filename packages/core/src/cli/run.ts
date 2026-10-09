@@ -37,8 +37,13 @@ export interface CliIO {
   signal?: AbortSignal;
 }
 
+/** An output line that may carry the command that fixes it (conformidade; JSON mode only shows it). */
+export interface CoreLine extends OutLine {
+  fix?: string;
+}
+
 export interface Output {
-  line(l: OutLine): void;
+  line(l: CoreLine): void;
   finish(exit: number): number;
 }
 
@@ -61,17 +66,17 @@ export const requiresRoot = (registry: Registry, argv: string[]): boolean => {
 export const rootMessage = () => `grava em ${pvxHome()}: rode com sudo`;
 
 /** Runs a line through `runCli` in `--json` mode and returns its lines: how the TUI reaches the core commands. */
-export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv: string[]): Promise<{ exit: number; lines: OutLine[] }> {
+export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv: string[]): Promise<{ exit: number; lines: CoreLine[] }> {
   let text = "";
   const exit = await runCli({ ...io, argv: [...argv, "--json"], isTTY: false, out: (l) => void (text += l) });
-  return { exit: exit === "tui" ? EXIT.OK : exit, lines: (JSON.parse(text) as { lines: OutLine[] }).lines };
+  return { exit: exit === "tui" ? EXIT.OK : exit, lines: (JSON.parse(text) as { lines: CoreLine[] }).lines };
 }
 
 /** Text mode streams lines as they come; --json prints one object at the end and nothing else. */
 function createOutput(io: CliIO, json: boolean): Output {
-  const lines: OutLine[] = [];
+  const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;

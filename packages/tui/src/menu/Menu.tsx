@@ -1,9 +1,7 @@
-import { hostname } from "node:os";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import type { Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
-import { clean } from "../palette/search.ts";
 import { useRouter } from "../router.tsx";
 import { LogScreen } from "../session/LogScreen.tsx";
 import { SessionModals } from "../session/Modals.tsx";
@@ -22,34 +20,15 @@ export interface MenuNav {
 }
 export const createMenuNav = (): MenuNav => ({ path: [], sel: {} });
 
-const PANEL_W = 34;
-const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s);
-
-function SidePanel({ registry, history, version }: { registry: Registry; history: readonly string[]; version: string }) {
-  const { c, box, g } = useTheme();
-  const n = registry.modules.size;
-  return (
-    <box width={PANEL_W} flexShrink={0} flexDirection="column" paddingX={1} {...box()} title={`${g.query} central`}>
-      <text fg={c.text}>{clean(hostname())}</text>
-      <text fg={c.dim}>{`pvx ${version}`}</text>
-      <text fg={c.dim}>{`${n} ${n === 1 ? "módulo" : "módulos"}`}</text>
-      {registry.errors.length ? <text fg={c.error}>{`${g.error} ${registry.errors.length} com erro`}</text> : null}
-      <text fg={c.dim}>{" "}</text>
-      <text fg={c.dim}>últimos comandos</text>
-      {history.slice(-5).reverse().map((l, i) => <text key={i} fg={c.text}>{cut(clean(l), PANEL_W - 4)}</text>)}
-    </box>
-  );
-}
-
 type View = { kind: "list" } | { kind: "form"; item: Item } | { kind: "result"; id: number };
 
-/** The Início tab: lists generated from the registry (modules, then command groups). Arrows and enter; `/` goes to the Comando tab. */
-export function Menu({ store, registry, nav, version }: { store: SessionApi; registry: Registry; nav: MenuNav; version: string }) {
+/** The Módulos tab: the registry as a menu (modules, then command groups, then the form and the result). Arrows and enter; esc goes up; `/` goes to the Comando tab. */
+export function Menu({ store, registry, nav }: { store: SessionApi; registry: Registry; nav: MenuNav }) {
   const router = useRouter();
   const { g } = useTheme();
   const tabs = useTabs();
-  const { cols, narrow } = useLayout();
-  const { history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const { cols } = useLayout();
+  const { pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [path, setPath] = useState(nav.path);
   const [sel, setSel] = useState(nav.sel);
   const [view, setView] = useState<View>({ kind: "list" });
@@ -79,16 +58,15 @@ export function Menu({ store, registry, nav, version }: { store: SessionApi; reg
   });
 
   const back = () => setView({ kind: "list" });
-  const helpW = cols - 2 - (narrow ? 0 : PANEL_W) - 4 - LABEL_W - 2;
+  const helpW = cols - 2 - 4 - LABEL_W - 2;
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {view.kind === "form" ? <MenuForm item={view.item} onRun={runLine} onBack={back} /> : null}
       {view.kind === "result" ? <Result store={store} id={view.id} onBack={back} /> : null}
       {view.kind === "list" ? (
         <ItemList items={items} sel={sel[level]} onSel={select} onActivate={activate} onTop={tabs?.focusBar} focused={tabs?.focused ?? true}
-          title={`${g.query} ${["início", ...crumbs(root, path)].join(" › ")}`} helpW={helpW} />
+          title={`${g.query} ${["módulos", ...crumbs(root, path)].join(" › ")}`} helpW={helpW} />
       ) : null}
-      {narrow ? null : <SidePanel registry={registry} history={history} version={version} />}
       {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}
     </box>
   );

@@ -42,7 +42,7 @@ export interface ItemListProps {
   helpW: number;
 }
 
-/** Selectable rows with a cursor: arrows, enter, mouse, scroll to the cursor. The one list of the menu and the modules tab. */
+/** Selectable rows with a cursor: arrows, enter, mouse, scroll to the cursor. The one list of the Módulos tab. */
 export function ItemList({ items, sel, onSel, onActivate, onTop, focused, title, helpW }: ItemListProps) {
   const { box } = useTheme();
   const scroll = useRef<ScrollBoxRenderable>(null);

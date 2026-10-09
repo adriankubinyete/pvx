@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "search" | "modal";
+export type Scope = "global" | "menu" | "home" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "search" | "modal";
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -25,6 +25,12 @@ const base: readonly Shortcut[] = [
   { keys: "ctrl+k", label: "palette", scope: "menu", footer: true },
   { keys: "tab", label: "abas", scope: "menu", footer: true },
   { keys: "esc", label: "sobe um nível", scope: "menu" },
+  { keys: "↑↓", label: "move", scope: "home", footer: true },
+  { keys: "←→", label: "painel", scope: "home", footer: true },
+  { keys: "enter", label: "usa", scope: "home", footer: true },
+  { keys: "r", label: "atualiza", scope: "home", footer: true },
+  { keys: "ctrl+k", label: "palette", scope: "home" },
+  { keys: "tab", label: "abas", scope: "home" },
   { keys: "←→", label: "troca aba", scope: "tabs", footer: true },
   { keys: "↓/enter", label: "entra na aba", scope: "tabs", footer: true },
   { keys: "tab", label: "próxima aba", scope: "tabs", footer: true },

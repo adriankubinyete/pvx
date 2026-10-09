@@ -1,5 +1,5 @@
 import { useReducer, useEffect } from "react";
-import type { OutLine } from "@pvx/sdk";
+import type { CoreLine } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { BlockView } from "../session/Blocks.tsx";
@@ -12,11 +12,22 @@ const noop = () => {};
 export interface CoreResult {
   at: number;
   exit: number;
-  lines: OutLine[];
+  lines: CoreLine[];
 }
 export type CoreCache = Record<string, CoreResult | "running" | undefined>;
 
-const hhmm = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+export const hhmm = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+/** Runs `line` into `cache` (no-op while running); `done` fires on start and on finish. */
+export function refreshCore(store: SessionApi, cache: CoreCache, line: string, done: () => void) {
+  if (cache[line] === "running") return;
+  cache[line] = "running";
+  done();
+  void store.capture(line).then((r) => {
+    cache[line] = { at: Date.now(), exit: r.exit, lines: r.lines };
+    done(); // no-op if the tab was left meanwhile; the result waits in the cache
+  });
+}
 
 /**
  * Output of a core command (`conformidade`, `plano`, `logs`). Runs on the first visit; after that only on `r`.
@@ -25,15 +36,7 @@ const hhmm = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-d
 export function CoreTab({ store, line, cache }: { store: SessionApi; line: string; cache: CoreCache }) {
   const { c, box, g } = useTheme();
   const [, bump] = useReducer((n: number) => n + 1, 0);
-  const refresh = () => {
-    if (cache[line] === "running") return;
-    cache[line] = "running";
-    bump();
-    void store.capture(line).then((r) => {
-      cache[line] = { at: Date.now(), exit: r.exit, lines: r.lines };
-      bump(); // no-op if the tab was left meanwhile; the result waits in the cache
-    });
-  };
+  const refresh = () => refreshCore(store, cache, line, bump);
   useEffect(() => {
     if (!cache[line]) refresh();
   }, []);
