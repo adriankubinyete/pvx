@@ -94,6 +94,7 @@ export function createSlotHub(opts: SlotOpts = {}): SlotHub {
     add: (moduleId, name, def) => void entries.push({ id: `${moduleId}.${name}`, def, running: false, next: 0 }),
     remove(moduleId) {
       for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.id.startsWith(`${moduleId}.`)) entries.splice(i, 1);
+      notify(); // a module that left must leave the Início
     },
     setHost: (slot, data) => void (data === undefined ? host.delete(slot) : host.set(slot, data)),
     read(slot) {

@@ -12,6 +12,7 @@ import { approve, getTrust, revoke } from "./trust.ts";
 export * from "./trust.ts";
 export * from "./dev.ts";
 export * from "./update.ts";
+export * from "./live.ts";
 export { audit, invalidateUpdateCache, type Result };
 export { GitError, checkUrl } from "./git.ts";
 export { analyze };

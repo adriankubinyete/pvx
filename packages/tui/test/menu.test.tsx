@@ -343,7 +343,7 @@ test("log screen footer comes from the log scope and its keys work", async () =>
 test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab; enter on the bar acts like down", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
   const foot = () => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
-  const expectScope = (scope: "tabs" | "menu" | "home") => {
+  const expectScope = (scope: "tabs" | "modules" | "home") => {
     for (const s of footerFor(scope)) expect(foot()).toContain(`${s.keys} ${s.label}`);
     expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : "↑↓ move");
     expect(foot()).not.toContain(scope === "tabs" ? "↑↓ move" : "troca aba");
@@ -358,7 +358,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expect(t.frame()).toContain("› módulos");
   expectScope("tabs");
   await t.press("RETURN");
-  expectScope("menu");
+  expectScope("modules"); // the Módulos list: a module row has its own footer
   expect(t.frame()).toMatch(/» /);
   await t.press("ARROW_UP");
   await t.press("TAB"); // Logs: nothing to select, enter does nothing
@@ -372,7 +372,7 @@ test("every tab content and pushed screen uses the same title convention", async
   expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› 1 conformidade ●─/); // row 0 is the bar
   await t.press("ARROW_UP");
   await t.press("TAB");
-  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos─/);
+  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos( · c catálogo)?─/);
 });
 
 /** The help is fully visible at 80x24: title, first row, last row (the hint), and no row cut by the frame. */
@@ -399,7 +399,7 @@ test("? help fits 80x24 from every main context and esc returns to the same focu
     expect(t.frame(), scope).toBe(before);
     expect(t.frame().split("\n").filter((l) => l.trim()).at(-1)).toContain(footerKey);
   };
-  await check("menu", "tab abas"); // Módulos list
+  await check("modules", "u atualiza"); // Módulos list: a module row has its own scope
   await t.press("ARROW_UP"); // first row -> bar
   await check("tabs", "↓/enter entra na aba");
   await t.press("TAB", { shift: true });
@@ -418,7 +418,7 @@ test("? help fits 80x24 from every main context and esc returns to the same focu
  * so those scopes are checked by rendering the overlay itself.
  */
 test("help overlay of the text-input scopes fits 80x24", async () => {
-  for (const scope of ["home", "menu", "form", "session", "palette", "block", "tabs"] as const) {
+  for (const scope of ["home", "menu", "form", "session", "palette", "block", "tabs", "modules", "modwait", "catalog", "review", "files"] as const) {
     h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><HelpOverlay scope={scope} onClose={() => {}} /></KeyRouter></ThemeProvider>, { cols: 80, rows: 24 });
     seeHelp(h, scope);
     h.destroy();

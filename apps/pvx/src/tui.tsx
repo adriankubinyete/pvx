@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { activeProfile, pvxHome, runCapture, watchDevModules, type CliIO } from "@pvx/core";
+import { activeProfile, CORE, pvxHome, runCapture, trustGate, watchDevModules, type CliIO } from "@pvx/core";
 import { App, createSessionStore, createTabsNav, Tabs, ui } from "@pvx/tui";
 import { join } from "node:path";
 
@@ -20,10 +20,15 @@ export async function openTui(io: Omit<CliIO, "argv" | "out" | "isTTY">): Promis
     ({ id, result }) => store.notice(`recarga de ${id}`, result.ok ? "ok" : "error", [{ kind: result.ok ? "success" : "error", text: result.ok ? result.text : `${id}: ${result.error}` }], id),
     { hostVersion: version, makeLogger, ui },
   );
+  // Live load after trust/update/enable: same gate as the startup load, so nothing unapproved is ever imported.
+  const modules = {
+    load: { hostVersion: version, makeLogger, ui, canImport: trustGate({ warn: (m) => makeLogger("core").warn(m) }) },
+    reserved: [...new Set(CORE.map((c) => c.key.split(" ")[0]!))],
+  };
   const profile = (await activeProfile(io.profilesDir, io.env))?.title ?? null;
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const closed = new Promise<void>((resolve) => renderer.once("destroy", resolve));
-  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version={version} profile={profile} /> };
+  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version={version} profile={profile} modules={modules} /> };
   createRoot(renderer).render(<App root={root} logger={makeLogger("core")} onExit={() => renderer.destroy()} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />);
   await closed;
   stopWatch();

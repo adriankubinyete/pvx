@@ -23,6 +23,13 @@ export interface Registry {
   /** Widgets of every module, collected per home slot. */
   slots: SlotHub;
   errors: LoadError[];
+  /** Bumps on every change (register, unregister, error, `changed()`): the UI re-reads on it. */
+  rev: number;
+  subscribe(fn: () => void): () => void;
+  /** For code that mutates the registry by hand (a dev reload clearing errors). */
+  changed(): void;
+  /** Drops everything a module contributed, plus its load errors: remove, disable, a trust that no longer holds. */
+  unregister(id: string): void;
   /** Refuses the whole module (nothing registered) on id, command or query conflict. `replace` swaps an already registered module atomically (reload). */
   register(manifest: Manifest, def: ModuleDef, o?: { replace?: boolean }): void;
   addError(id: string, error: string): void;
@@ -30,6 +37,14 @@ export interface Registry {
 }
 
 export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
+  const subs = new Set<() => void>();
+  const drop = (id: string) => {
+    for (const [k, c] of r.commands) if (c.moduleId === id) r.commands.delete(k);
+    for (const [k, q] of r.queries) if (q.moduleId === id) r.queries.delete(k);
+    for (const [k, p] of r.pages) if (p.moduleId === id) r.pages.delete(k);
+    r.capabilities = r.capabilities.filter((c) => c.moduleId !== id);
+    r.slots.remove(id);
+  };
   const r: Registry = {
     commands: new Map(),
     queries: new Map(),
@@ -39,6 +54,19 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     official: new Set(),
     slots: createSlotHub(opts.slots),
     errors: [],
+    rev: 0,
+    subscribe: (fn) => (subs.add(fn), () => void subs.delete(fn)),
+    changed() {
+      r.rev++;
+      subs.forEach((f) => f());
+    },
+    unregister(id) {
+      drop(id);
+      r.modules.delete(id);
+      r.official.delete(id);
+      r.errors = r.errors.filter((e) => e.id !== id);
+      r.changed();
+    },
     register(manifest, def, o) {
       const id = manifest.id;
       if (r.modules.has(id) && !o?.replace) throw new Error(`id "${id}" já registrado`);
@@ -51,22 +79,18 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
         const other = r.queries.get(name);
         if (other && other.moduleId !== id) throw new Error(`conflito: consulta "${name}" já pertence ao módulo "${other.moduleId}" (novo: "${id}")`);
       }
-      if (r.modules.has(id)) {
-        for (const [k, c] of r.commands) if (c.moduleId === id) r.commands.delete(k);
-        for (const [k, q] of r.queries) if (q.moduleId === id) r.queries.delete(k);
-        for (const [k, p] of r.pages) if (p.moduleId === id) r.pages.delete(k);
-        r.capabilities = r.capabilities.filter((c) => c.moduleId !== id);
-        r.slots.remove(id);
-      }
+      if (r.modules.has(id)) drop(id);
       r.modules.set(id, manifest);
       for (const [key, c] of cmds) r.commands.set(key, { ...c, moduleId: id });
       for (const [name, fn] of Object.entries(def.queries ?? {})) r.queries.set(name, { moduleId: id, fn });
       for (const c of def.capabilities ?? []) r.capabilities.push({ ...c, moduleId: id });
       for (const [name, w] of Object.entries(def.widgets ?? {})) r.slots.add(id, name, w);
       for (const [name, p] of Object.entries(def.pages ?? {})) r.pages.set(`${id}.${name}`, { ...p, key: `${id}.${name}`, moduleId: id, name });
+      r.changed();
     },
     addError(id, error) {
       r.errors.push({ id, state: "error", error });
+      r.changed();
     },
     query(name, ...args) {
       const q = r.queries.get(name);

@@ -43,6 +43,11 @@ export interface SessionApi {
   clear(): void;
   /** Pushes a synthetic block (host news such as a dev-module reload error); no history, no run. */
   notice(line: string, status: Block["status"], lines: OutLine[], moduleId?: string): void;
+  /**
+   * A host mutation (trust, update, remove, add...) as a block, so it reaches the scrollback like any command: same strict root
+   * rule, `confirm` asks the host question first. `line` is the CLI line it stands for. Never rejects.
+   */
+  act(line: string, fn: () => Promise<{ exit: number; lines: OutLine[] }>, o?: { confirm?: boolean }): Promise<{ exit: number; id: number }>;
   /** Answers a pending confirm (boolean) or secret (string, or undefined to cancel). */
   answer(id: number, value: boolean | string | undefined): void;
   subscribe(fn: () => void): () => void;
@@ -151,12 +156,33 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     } catch (e) {
       lines = [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }];
     }
-    const status = exit !== 0 ? "error" : lines.some((l) => l.kind === "warning") ? "warn" : "ok";
-    const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
-    patchBlock(id, { status, ms: Date.now() - t0, lines: clean });
+    settle(id, t0, exit, lines);
     const opens = found && exit === 0 && found.cmd.page ? `${found.cmd.moduleId}.${found.cmd.page}` : undefined;
     if (opens && registry.pages.has(opens)) pageSubs.forEach((f) => f(opens));
     return { exit };
+  }
+
+  /** Closes a running block: status from the exit code and the lines, output sanitized. */
+  function settle(id: number, t0: number, exit: number, lines: OutLine[]) {
+    const status = exit !== 0 ? "error" : lines.some((l) => l.kind === "warning") ? "warn" : "ok";
+    const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
+    patchBlock(id, { status, ms: Date.now() - t0, lines: clean });
+  }
+
+  async function act(line: string, fn: () => Promise<{ exit: number; lines: OutLine[] }>, o: { confirm?: boolean } = {}) {
+    const id = ++seq;
+    const t0 = Date.now();
+    set({ blocks: [...state.blocks, { id, line, status: "running", moduleId: "core", lines: [], at: t0 } as Block].slice(-MAX_BLOCKS) });
+    let r: { exit: number; lines: OutLine[] };
+    try {
+      if (!isRoot) r = { exit: 1, lines: [{ kind: "error", text: rootMessage() }] };
+      else if (o.confirm && !(await ask<boolean>({ kind: "confirm", cmd: line }))) r = { exit: 1, lines: [{ kind: "warning", text: "cancelado" }] };
+      else r = await fn();
+    } catch (e) {
+      r = { exit: 1, lines: [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }] };
+    }
+    settle(id, t0, r.exit, r.lines);
+    return { exit: r.exit, id };
   }
 
   async function capture(line: string): Promise<{ exit: number; lines: CoreLine[] }> {
@@ -191,6 +217,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     },
     run,
     capture,
+    act,
     repeat: async (id) => {
       const b = state.blocks.find((x) => x.id === id);
       return b ? run(raws.get(id) ?? b.line) : { exit: 1 };

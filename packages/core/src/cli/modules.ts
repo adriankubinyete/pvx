@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { usermodulesDir } from "../engine/paths.ts";
 import type { CoreCommand } from "./core.ts";
 
-const sha7 = (s?: string) => s?.slice(0, 7);
+export const sha7 = (s?: string) => s?.slice(0, 7);
 
 export function rowLine(r: ModuleRow): OutLine & { module: ModuleRow } {
   const extra = [r.official && "◆", r.ref && r.sha && `${r.ref}@${sha7(r.sha)}`, r.behind && `↓${r.behind}`, r.dirty && `✎${r.dirty}`, r.error].filter(Boolean).join(" ");
@@ -51,7 +51,7 @@ const permLines = (d: PermDiff): OutLine[] =>
     Object.entries(d[w]).map(([k, v]): OutLine => ({ kind: w === "added" ? "warning" : "info", text: `permissões ${w === "added" ? "ADICIONADAS" : "removidas"} (${k}): ${v.join(", ")}` })),
   );
 
-function updateLines(r: UpdateResult): OutLine[] {
+export function updateLines(r: UpdateResult): OutLine[] {
   if (!r.ok) {
     const f = r.check;
     return [...(f?.behind ? [...f.commits.map((x): OutLine => ({ kind: "plain", text: `  ${sha7(x.sha)} ${x.subject}` })), ...permLines(f.permissions)] : []), { kind: "error", text: `${r.id}: ${r.error}` }];

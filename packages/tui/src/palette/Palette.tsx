@@ -13,6 +13,7 @@ import { useTheme } from "../theme-context.tsx";
 import { favoritesPath, loadFavorites, saveFavorites } from "./favorites.ts";
 import { Form } from "./Form.tsx";
 import { buildLine, type FormValues } from "./form.ts";
+import { useRegistryRev } from "../modules/deps.ts";
 import { requestTab } from "../tabs/context.ts";
 import { clean, search, type Hit } from "./search.ts";
 
@@ -78,7 +79,8 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const hits = useMemo(() => search(registry, query), [registry, query]);
+  const rev = useRegistryRev(registry); // a module added or removed while the palette is open
+  const hits = useMemo(() => search(registry, query), [registry, rev, query]);
   const lines = useMemo<Line[]>(() => {
     const out: Line[] = [];
     const section = (id: string, text: string, list: Hit[]) => {
@@ -95,7 +97,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     }
     for (const m of new Set(hits.map((h) => h.moduleId))) section(`m:${m}`, clean(m), hits.filter((h) => h.moduleId === m));
     return out;
-  }, [hits, query, favs, registry, session.history]);
+  }, [hits, query, favs, registry, rev, session.history]);
 
   const items = lines.filter((l) => l.kind === "item");
   const cur = items.find((l) => l.id === selId) ?? items[0];

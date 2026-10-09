@@ -1,6 +1,16 @@
 import type { ArgSpec } from "@pvx/sdk";
-import type { Registry, RegisteredCommand } from "@pvx/core";
+import type { CatalogEntry, ModuleRow, ModuleState, Pending, Registry, RegisteredCommand } from "@pvx/core";
 import { clean } from "../palette/search.ts";
+
+export type Tone = "ok" | "warn" | "error" | "info" | "dim";
+/** A piece of a row's help line with its own color (the state, `↓n`, `✎n`). */
+export interface Cell {
+  text: string;
+  tone?: Tone;
+}
+
+/** Where a module comes from: the mark after its id. */
+export type Origin = "official" | "usermodule" | "dev";
 
 /** One menu row. Exactly one of `children` (submenu), `line` (runs) or `errorOf` (opens a module's log) is set. */
 export interface Item {
@@ -14,9 +24,15 @@ export interface Item {
   /** Args of the command: any of them opens the form. */
   args?: ArgSpec[];
   destructive?: boolean;
-  /** A module that ships with pvx (◆). */
-  official?: boolean;
+  /** Origin mark after the label (◆ official, ◇ usermodule, dev mark). */
+  origin?: Origin;
+  /** `help` split in colored pieces; `help` is always their concatenation. */
+  cells?: Cell[];
   errorOf?: string;
+  /** Módulos root only: the module this row stands for, what the actions act on. */
+  module?: { id: string; state: ModuleState; loaded: boolean; behind: number };
+  /** Catálogo rows only. */
+  catalog?: CatalogEntry;
 }
 
 interface Entry {
@@ -47,18 +63,47 @@ function group(moduleId: string, entries: Entry[], depth: number): Item[] {
   return items.sort(byLabel);
 }
 
-/** The root menu, generated from the registry: modules (sorted; failed ones open their log). */
-export function buildRoot(registry: Registry): Item[] {
+export const STATE_TEXT: Record<ModuleState, string> = {
+  carregado: "carregado", "aguardando-confianca": "aguardando confiança", desativado: "desativado", erro: "erro", modificado: "modificado", atras: "atrás", dev: "dev",
+};
+const STATE_TONE: Record<ModuleState, Tone> = { carregado: "ok", "aguardando-confianca": "warn", desativado: "dim", erro: "error", modificado: "warn", atras: "info", dev: "warn" };
+const withHelp = (cells: Cell[]) => ({ cells, help: cells.map((c) => c.text).join("") });
+
+/**
+ * The Módulos root, from the registry plus what the disk and the update check know (`rows`, `pending`; both optional: the
+ * first frame has only the registry). Loaded modules open their commands; the others have no children (the actions act on them).
+ */
+export function buildRoot(registry: Registry, rows: readonly ModuleRow[] = [], pending: readonly Pending[] = []): Item[] {
   const failed = new Map(registry.errors.map((e) => [e.id, e.error]));
-  const ids = [...new Set([...registry.modules.keys(), ...failed.keys()])].sort();
-  const modules = ids.map((id): Item => {
-    if (failed.has(id)) return { id: `m:${id}`, label: id, help: clean(failed.get(id)!), errorOf: id };
+  const ids = [...new Set([...registry.modules.keys(), ...failed.keys(), ...rows.map((r) => r.id)])].sort();
+  return ids.map((id): Item => {
+    const row = rows.find((r) => r.id === id);
+    const loaded = registry.modules.has(id) && !failed.has(id);
+    const behind = Math.max(row?.behind ?? 0, pending.find((p) => p.id === id)?.behind ?? 0);
+    let state: ModuleState = failed.has(id) ? "erro" : row?.state ?? "carregado";
+    if (loaded && state === "carregado" && behind) state = "atras";
+    const origin: Origin = registry.official.has(id) || row?.official ? "official" : row?.state === "dev" ? "dev" : "usermodule";
+    const module = { id, state, loaded, behind };
+    if (failed.has(id)) return { id: `m:${id}`, label: id, origin, module, ...withHelp([{ text: "erro: ", tone: "error" }, { text: clean(failed.get(id)!) }]), errorOf: id };
     const entries = [...registry.commands]
       .filter(([, cmd]) => cmd.moduleId === id)
       .map(([key, cmd]) => ({ key, cmd, path: key.split(" ").slice(1).filter(Boolean) }));
-    return { id: `m:${id}`, label: id, official: registry.official.has(id), help: `${registry.modules.get(id)?.version ?? ""} carregado · ${plural(entries.length)}`, children: group(id, entries, 0) };
+    const git = row?.ref && row.sha ? `${clean(row.ref)}@${row.sha.slice(0, 7)} ` : "";
+    const cells: Cell[] = [
+      ...(git ? [{ text: git }] : []),
+      ...(behind ? [{ text: `↓${behind} `, tone: "info" as const }] : []),
+      ...(row?.dirty ? [{ text: `✎${row.dirty} `, tone: "warn" as const }] : []),
+      { text: `${registry.modules.get(id)?.version ?? row?.version ?? ""} ` },
+      { text: STATE_TEXT[state], tone: STATE_TONE[state] },
+      ...(loaded ? [{ text: ` · ${plural(entries.length)}` }] : row?.error ? [{ text: ` · ${clean(row.error)}` }] : []),
+    ];
+    return { id: `m:${id}`, label: id, origin, module, ...withHelp(cells), ...(loaded ? { children: group(id, entries, 0) } : {}) };
   });
-  return modules;
+}
+
+/** The Catálogo rows: what the catalog lists and is not installed. */
+export function buildCatalog(entries: readonly CatalogEntry[]): Item[] {
+  return entries.map((e) => ({ id: `k:${e.id}`, label: e.id, origin: "official" as const, catalog: e, help: clean(e.descricao) + (e.versao ? ` · ${clean(e.versao)}` : "") }));
 }
 
 /** The rows shown after following `path` (item ids) from the root; a stale id stops the walk. */

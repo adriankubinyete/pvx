@@ -65,6 +65,7 @@ export async function reloadModule(registry: Registry, id: string, opts: LoadOpt
     evictModule(dir);
     await loadOne(registry, dir, { ...opts, canImport: undefined }, true);
     registry.errors = registry.errors.filter((e) => e.id !== id);
+    registry.changed();
     return { ok: true, text: `${id} recarregado` };
   } catch (e) {
     return { ok: false, error: msg(e) };
