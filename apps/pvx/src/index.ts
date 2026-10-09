@@ -24,9 +24,11 @@ async function main(): Promise<number> {
   await loadModules(registry, { hostVersion: VERSION, makeLogger });
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const abort = new AbortController();
-  process.once("SIGINT", () => abort.abort());
+  // Only `logs -f` handles Ctrl+C; a global listener would swallow the first Ctrl+C of a hung command.
+  const argv = process.argv.slice(2);
+  if (argv[0] === "logs" && argv.some((a) => a === "-f" || a === "--follow")) process.once("SIGINT", () => abort.abort());
   const r = await runCli({
-    argv: process.argv.slice(2),
+    argv,
     env: process.env,
     isTTY: tty,
     isRoot: canWritePvxHome(process.getuid?.()),

@@ -26,7 +26,8 @@ export async function parseArgs(specs: ArgSpec[] = [], argv: string[], opts: Par
     const a = argv[i]!;
     if (!a.startsWith("--") || a === "--") {
       const spec = positionals[pi++];
-      if (!spec) return fail(`argumento inesperado: \`${a}\``);
+      // A secret typed as a positional lands here: never echo the value back.
+      if (!spec) return fail(`argumento inesperado${specs.some((s) => s.secret) ? "" : `: \`${a}\``}`);
       args[spec.name] = a;
       continue;
     }

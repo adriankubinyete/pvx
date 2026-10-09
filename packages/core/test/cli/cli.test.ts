@@ -179,5 +179,6 @@ describe("core commands", () => {
     const r = await run("logs demo --tail 5");
     expect(r.text).toContain('INFO demo: run demo greet {"who":"bob"}');
     expect((await run("logs --tail x")).code).toBe(2);
+    expect((await run("logs ../../etc/x")).code).toBe(2); // module name must not escape logsDir
   });
 });

@@ -55,3 +55,13 @@ export function createRegistry(): Registry {
   };
   return r;
 }
+
+/** Longest-prefix command lookup: `n` is how many argv words form the command path. */
+export function resolveCommand(registry: Registry, argv: string[]) {
+  for (let n = argv.length; n > 0; n--) {
+    const key = argv.slice(0, n).join(" ");
+    const cmd = registry.commands.get(key);
+    if (cmd) return { key, cmd, n };
+  }
+  return undefined;
+}

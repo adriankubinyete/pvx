@@ -8,16 +8,6 @@ export interface Entry {
   destructive?: boolean;
 }
 
-/** Longest-prefix command lookup, the same rule `execute` uses. */
-export function resolveCommand(registry: Registry, argv: string[]) {
-  for (let n = argv.length; n > 0; n--) {
-    const key = argv.slice(0, n).join(" ");
-    const cmd = registry.commands.get(key);
-    if (cmd) return { key, cmd, n };
-  }
-  return undefined;
-}
-
 function usage(e: Entry): string {
   const parts = (e.args ?? []).map((a) => {
     if (a.kind === "positional") return a.secret ? "" : a.required ? `<${a.name}>` : `[${a.name}]`;

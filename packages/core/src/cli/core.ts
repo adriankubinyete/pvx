@@ -79,7 +79,9 @@ export const CORE: CoreCommand[] = [
       const tail = p.args.tail === undefined ? 50 : Number(p.args.tail);
       if (!Number.isInteger(tail) || tail < 0) return usageError(o, "`--tail` pede um número inteiro");
       if (p.args.follow && json) return usageError(o, "`-f` não combina com `--json`");
-      const q = { logsDir: logsDir(), modules: p.args.all ? ("all" as const) : [String(p.args.module ?? "core")], tail };
+      const mod = String(p.args.module ?? "core");
+      if (!p.args.all && !/^[a-z0-9-]+$/.test(mod)) return usageError(o, `módulo inválido: \`${mod}\``);
+      const q = { logsDir: logsDir(), modules: p.args.all ? ("all" as const) : [mod], tail };
       for (const l of readLogs(q)) o.line({ kind: "plain", text: l });
       if (p.args.follow) await followLogs(q, (l) => o.line({ kind: "plain", text: l }), io.signal ?? new AbortController().signal);
       return EXIT.OK;
@@ -110,10 +112,10 @@ export const CORE: CoreCommand[] = [
         steps.forEach((s, i) => {
           const tags = [s.implicit && `implícito: ${s.reason}`, s.optIn && "opt-in"].filter(Boolean).join("; ");
           o.line({ kind: "plain", text: `${i + 1}. ${s.cmd}${tags ? ` (${tags})` : ""} para ${s.for.join(", ")}` });
-      });
-      for (const m of manual) o.line({ kind: "warning", text: `manual: ${m.title}: ${m.text}` });
-      if (!steps.length && !manual.length) o.line({ kind: "success", text: "nada a fazer" });
-      return EXIT.OK;
+        });
+        for (const m of manual) o.line({ kind: "warning", text: `manual: ${m.title}: ${m.text}` });
+        if (!steps.length && !manual.length) o.line({ kind: "success", text: "nada a fazer" });
+        return EXIT.OK;
       }),
   },
   {

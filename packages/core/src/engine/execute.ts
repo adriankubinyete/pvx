@@ -1,7 +1,7 @@
 import { EXIT } from "@pvx/sdk";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
-import type { Registry } from "./registry.ts";
+import { resolveCommand, type Registry } from "./registry.ts";
 import { createStore } from "./store.ts";
 import { tokenize } from "./tokenize.ts";
 
@@ -28,14 +28,9 @@ export async function execute(registry: Registry, input: string | string[], opts
   } catch (e) {
     return err(EXIT.USAGE, (e as Error).message);
   }
-  let key = "";
-  let cmd;
-  let n = argv.length;
-  for (; n > 0; n--) {
-    key = argv.slice(0, n).join(" ");
-    if ((cmd = registry.commands.get(key))) break;
-  }
-  if (!cmd) return err(EXIT.NOT_FOUND, `comando não encontrado: ${argv.join(" ") || "(vazio)"}`);
+  const found = resolveCommand(registry, argv);
+  if (!found) return err(EXIT.NOT_FOUND, `comando não encontrado: ${argv.join(" ") || "(vazio)"}`);
+  const { key, cmd, n } = found;
 
   const parsed = await parseArgs(cmd.args, argv.slice(n), opts);
   if (!parsed.ok) return err(EXIT.USAGE, parsed.message);

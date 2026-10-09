@@ -95,6 +95,7 @@ describe("execute", () => {
       expect(JSON.stringify(res.masked)).not.toContain("s3cret");
     }
     expect(env.masked).toEqual({ token: "***" });
+    expect((await run("demo login s3cret")).lines[0]!.text).not.toContain("s3cret"); // stray value is not echoed
     expect(JSON.stringify(logs)).not.toContain("s3cret");
     const missing = await run("demo login", { env: {} });
     expect(missing.exit).toBe(2);

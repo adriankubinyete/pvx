@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { createLogger, defaultLogsDir } from "../../src/logs/logger.ts";
+import { logsDir } from "../../src/engine/paths.ts";
+import { createLogger } from "../../src/logs/logger.ts";
 import { followLogs, readLogs } from "../../src/logs/reader.ts";
 
-const dir = () => defaultLogsDir(); // temp PVX_HOME from preload
+const dir = () => logsDir(); // temp PVX_HOME from preload
 
 test("format, multi-line and rotation (max 3 backups)", () => {
   const d = dir();

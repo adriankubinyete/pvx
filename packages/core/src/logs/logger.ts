@@ -5,9 +5,6 @@ import type { Logger } from "@pvx/sdk";
 export const MAX_BYTES = 1024 * 1024;
 export const BACKUPS = 3;
 
-/** Default logs dir. Read at call time. */
-export const defaultLogsDir = () => join(process.env.PVX_HOME ?? "/etc/pvx", "logs");
-
 export interface LoggerOptions {
   maxBytes?: number;
   backups?: number;

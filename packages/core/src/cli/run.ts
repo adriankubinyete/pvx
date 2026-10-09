@@ -4,9 +4,9 @@ import { EXIT, type Logger, type OutLine } from "@pvx/sdk";
 import { fg, setColorEnabled } from "../ansi.ts";
 import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
-import type { Registry } from "../engine/registry.ts";
+import { resolveCommand, type Registry } from "../engine/registry.ts";
 import { CORE } from "./core.ts";
-import { pathHelp, resolveCommand, rootHelp } from "./help.ts";
+import { pathHelp, rootHelp } from "./help.ts";
 
 export interface Palette {
   text: string;
