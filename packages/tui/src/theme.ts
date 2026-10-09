@@ -31,12 +31,12 @@ export const glyphs = {
   unicode: {
     ok: "✓", warn: "▲", warnTag: "!", error: "✗", info: "i", active: "●", inactive: "○",
     meterFull: "▰", meterEmpty: "▱", prompt: "❯", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
-    official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═", moreLeft: "‹", moreRight: "›",
+    core: "■", page: "§", official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═", moreLeft: "‹", moreRight: "›",
   },
   ascii: {
     ok: "+", warn: "^", warnTag: "!", error: "x", info: "i", active: "*", inactive: "o",
     meterFull: "#", meterEmpty: "-", prompt: ">", query: ">", cursor: ">", spinner: "|/-\\",
-    official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=", moreLeft: "<", moreRight: ">",
+    core: "=", page: "#", official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=", moreLeft: "<", moreRight: ">",
   },
 } as const;
 export type Symbols = keyof typeof glyphs;

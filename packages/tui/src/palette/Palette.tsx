@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
-import { resolveCommand, tokenize, type Registry } from "@pvx/core";
+import type { Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { matchKey } from "../keymap.ts";
@@ -13,6 +13,7 @@ import { useTheme } from "../theme-context.tsx";
 import { favoritesPath, loadFavorites, saveFavorites } from "./favorites.ts";
 import { Form } from "./Form.tsx";
 import { buildLine, type FormValues } from "./form.ts";
+import { requestTab } from "../tabs/context.ts";
 import { clean, search, type Hit } from "./search.ts";
 
 /** What the palette needs from the session. `secrets` go to `execute` as env/promptSecret, never argv. */
@@ -36,7 +37,7 @@ interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; onPi
 const Row = memo(function Row({ id, hit, selected, fav, onPick }: RowProps) {
   const { c, g } = useTheme();
   const [hover, setHover] = useState(false);
-  const mark = hit.origin === "official" ? [g.official, c.accent] : hit.origin === "dev" ? [g.dev, c.warn] : [g.thirdParty, c.thirdParty];
+  const mark = hit.core ? [g.core, c.info] : hit.page ? [g.page, c.dim] : hit.origin === "official" ? [g.official, c.accent] : hit.origin === "dev" ? [g.dev, c.warn] : [g.thirdParty, c.thirdParty];
   const key = hit.key.length > 30 ? `${hit.key.slice(0, 29)}…` : hit.key;
   const [a, b] = hit.range && hit.range[1] <= key.length ? hit.range : [0, 0];
   return (
@@ -86,9 +87,9 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
       for (const hit of list) out.push({ kind: "item", id: `${id}:${hit.key}`, hit });
     };
     if (!query.trim()) {
-      const recent = [...new Set([...session.history].reverse().map((l) => {
-        try { return resolveCommand(registry, tokenize(l))?.key ?? ""; } catch { return ""; }
-      }).filter(Boolean))].slice(0, 3);
+      // Longest command key that prefixes the line (core or module).
+      const keyOf = (l: string) => hits.filter((h) => !h.page && (l === h.key || l.startsWith(`${h.key} `))).sort((a, b) => b.key.length - a.key.length)[0]?.key;
+      const recent = [...new Set([...session.history].reverse().map(keyOf).filter((k): k is string => !!k))].slice(0, 3);
       section("fav", "favoritos", hits.filter((h) => favs.includes(h.key)));
       section("rec", "recentes", recent.map((k) => hits.find((h) => h.key === k)).filter((h): h is Hit => !!h));
     }
@@ -100,7 +101,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const cur = items.find((l) => l.id === selId) ?? items[0];
   const hit = cur?.kind === "item" ? cur.hit : undefined;
   const cmd = hit && !hit.page ? registry.commands.get(hit.key) : undefined;
-  const specs = cmd?.args ?? [];
+  const specs = hit?.args ?? cmd?.args ?? [];
   const values = (hit && forms[hit.key]) || {};
   const built = hit ? (hit.page ? { argv: [], display: `#${hit.key}`, secrets: {}, missing: [] } : buildLine(hit.key, specs, values)) : undefined;
   const last = hit ? [...session.history].reverse().find((l) => l === hit.key || l.startsWith(`${hit.key} `)) : undefined;
@@ -143,6 +144,8 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     }
     if (matchKey(k, "ctrl+n")) return enqueue();
     if (matchKey(k, "enter")) {
+      // A page that is also a tab switches to it; otherwise `#page` goes through the session (pushes the screen).
+      if (hit?.page && registry.pages.get(hit.key)?.tab && requestTab(`page:${hit.key}`)) return onClose();
       const it = ready();
       return it ? void runAll([it]) : undefined;
     }

@@ -1,4 +1,4 @@
-import { useMemo, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
@@ -11,7 +11,7 @@ import { PagePane, pageScope } from "../sdk-ui/index.tsx";
 import { Session } from "../session/Session.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
-import { LEAD_TABS, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
+import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { fitBar } from "./bar.ts";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
@@ -113,6 +113,7 @@ export function Tabs({ store, registry, nav, version, profile }: { store: Sessio
   }, { base: true });
 
   const api = { focused: !nav.bar, focusBar: () => update({ bar: true }), goto: (id: TabId) => update({ active: id, bar: false }) };
+  useEffect(() => onTabRequest((id) => ids.includes(id) && api.goto(id)));
   const core = (id: CoreTabId) => ({ id, label: LABELS[id], errors: id === "modulos" ? registry.errors.length : 0 });
   const bar: BarTab[] = [
     ...LEAD_TABS.map(core),

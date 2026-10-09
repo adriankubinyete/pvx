@@ -1,5 +1,9 @@
-import type { Registry } from "@pvx/core";
+import { CORE, type Registry } from "@pvx/core";
+import type { ArgSpec } from "@pvx/sdk";
 import { sanitize } from "../session/store.ts";
+
+/** Group of the core commands. */
+export const CORE_ID = "núcleo";
 
 export type Origin = "official" | "usermodule" | "dev";
 
@@ -12,6 +16,9 @@ export interface Hit {
   destructive: boolean;
   /** A page (the `#` scope): enter opens it. */
   page?: boolean;
+  /** A core command (group "núcleo"); its `args` come from the CORE list, not from the registry. */
+  core?: boolean;
+  args?: ArgSpec[];
   /** Matched range in `key` (start inclusive, end exclusive); null when nothing to highlight. */
   range: [number, number] | null;
 }
@@ -25,11 +32,14 @@ const originOf = (m: object | undefined): Origin => {
   return o === "official" || o === "dev" ? o : "usermodule";
 };
 
+/** Lowercase without accents, same length: `@nucleo` finds "núcleo". */
+const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
 /** Rank: 0 prefix of the key, 1 prefix of a word, 2 contains; -1 no match. Empty term matches all (rank 0). */
 function rank(key: string, term: string): { r: number; range: [number, number] | null } {
   if (!term) return { r: 0, range: null };
-  const k = key.toLowerCase();
-  const t = term.toLowerCase();
+  const k = fold(key);
+  const t = fold(term);
   if (k.startsWith(t)) return { r: 0, range: [0, t.length] };
   const w = k.search(new RegExp(`[ -]${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   if (w >= 0) return { r: 1, range: [w + 1, w + 1 + t.length] };
@@ -38,7 +48,7 @@ function rank(key: string, term: string): { r: number; range: [number, number] |
 }
 
 /**
- * Scopes by prefix: `@mod` module, `>cmd` commands, `#page` pages, `!` destructive only.
+ * Without scope: core commands, module commands and pages. Scopes by prefix: `@mod` module (`@núcleo` the core), `>cmd` commands (core and module), `#page` pages, `!` destructive only.
  * Result is sorted by rank, then grouped by module in first-appearance order.
  */
 export function search(registry: Registry, query: string): Hit[] {
@@ -46,10 +56,16 @@ export function search(registry: Registry, query: string): Hit[] {
   const scope = "@>#!".includes(q[0] ?? " ") ? q[0] : "";
   const term = scope ? q.slice(1).trim() : q;
   const hits: (Hit & { r: number })[] = [];
-  if (scope === "#") {
+  if (scope !== ">" && scope !== "!") {
     for (const p of registry.pages.values()) {
-      const m = rank(p.key, term);
-      if (m.r >= 0) hits.push({ key: p.key, moduleId: p.moduleId, origin: originOf(registry.modules.get(p.moduleId)), help: clean(p.title), destructive: false, page: true, range: m.range, r: m.r });
+      const m = scope === "@" ? rank(p.moduleId, term) : rank(p.key, term);
+      if (m.r >= 0) hits.push({ key: p.key, moduleId: p.moduleId, origin: originOf(registry.modules.get(p.moduleId)), help: clean(p.title), destructive: false, page: true, range: scope === "@" ? null : m.range, r: m.r });
+    }
+  }
+  if (scope !== "#" && scope !== "!") {
+    for (const c of CORE) {
+      const m = scope === "@" ? rank(CORE_ID, term) : rank(c.key, term);
+      if (m.r >= 0) hits.push({ key: c.key, moduleId: CORE_ID, origin: "official", help: clean(c.help), destructive: !!c.destructive, core: true, args: c.args, range: scope === "@" ? null : m.range, r: m.r });
     }
   }
   for (const [key, cmd] of scope === "#" ? [] : registry.commands) {
@@ -61,7 +77,7 @@ export function search(registry: Registry, query: string): Hit[] {
       destructive: !!cmd.destructive, range: scope === "@" ? null : m.range, r: m.r,
     });
   }
-  hits.sort((a, b) => a.r - b.r || a.key.localeCompare(b.key));
+  hits.sort((a, b) => a.r - b.r || +!!b.core - +!!a.core || a.key.localeCompare(b.key));
   const order = [...new Set(hits.map((h) => h.moduleId))];
   return hits.sort((a, b) => order.indexOf(a.moduleId) - order.indexOf(b.moduleId)); // stable: keeps rank inside a module
 }

@@ -20,3 +20,8 @@ const Ctx = createContext<TabsApi | null>(null);
 export const TabsProvider = Ctx.Provider;
 /** Null outside the tabs (a screen mounted alone): content then owns the keyboard. */
 export const useTabs = () => useContext(Ctx);
+
+const requests = new Set<(id: TabId) => void>();
+/** The tab host listens here, so the palette (outside the tabs) can switch tab. False when no tabs are mounted. */
+export const onTabRequest = (fn: (id: TabId) => void) => (requests.add(fn), () => void requests.delete(fn));
+export const requestTab = (id: TabId) => (requests.forEach((f) => f(id)), requests.size > 0);
