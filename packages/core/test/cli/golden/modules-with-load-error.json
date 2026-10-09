@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "exit": 0,
+  "lines": [
+    {
+      "kind": "warning",
+      "text": "bad-range erro: requer pvx >=99.0.0 (instalado: 1.0.0); instale um pvx nessa faixa"
+    },
+    {
+      "kind": "warning",
+      "text": "broken-entry erro: entry \"../demo/index.ts\" fora do diretório do módulo"
+    },
+    {
+      "kind": "success",
+      "text": "cap-fixture 1.0.0 carregado"
+    },
+    {
+      "kind": "success",
+      "text": "demo 1.0.0 carregado"
+    },
+    {
+      "kind": "warning",
+      "text": "no-default erro: entry não exporta uma função por padrão (export default)"
+    },
+    {
+      "kind": "warning",
+      "text": "no-entry erro: manifest inválido: campo \"entry\" ausente"
+    },
+    {
+      "kind": "warning",
+      "text": "throws-on-load erro: boom na fábrica"
+    },
+    {
+      "kind": "success",
+      "text": "throws-on-run 1.0.0 carregado"
+    }
+  ]
+}

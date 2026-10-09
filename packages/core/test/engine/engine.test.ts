@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
-import type { Logger } from "../../../sdk/src/index.ts";
+import type { Logger } from "@pvx/sdk";
 import { execute } from "../../src/engine/execute.ts";
 import { loadModules } from "../../src/engine/loader.ts";
 import { createRegistry } from "../../src/engine/registry.ts";

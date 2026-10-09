@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "exit": 3,
+  "lines": [
+    {
+      "kind": "error",
+      "text": "comando não encontrado: demo nope"
+    }
+  ]
+}

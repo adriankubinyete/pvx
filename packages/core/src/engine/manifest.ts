@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { Manifest } from "../../../sdk/src/index.ts";
+import type { Manifest } from "@pvx/sdk";
 
 /** Reads and validates pvx-module.json. Throws a pt-BR Error; returns null when `applies` is not met (skip silently). */
 export function readManifest(dir: string, hostVersion: string): Manifest | null {

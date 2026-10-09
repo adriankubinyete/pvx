@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "exit": 0,
+  "lines": [
+    {
+      "kind": "success",
+      "text": "oi warn"
+    },
+    {
+      "kind": "warning",
+      "text": "cuidado"
+    }
+  ]
+}

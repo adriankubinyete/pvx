@@ -1,4 +1,4 @@
-import type { ModuleFactory } from "../../../../../sdk/src/index.ts";
+import type { ModuleFactory } from "@pvx/sdk";
 
 const factory: ModuleFactory = (sdk) => ({
   commands: {

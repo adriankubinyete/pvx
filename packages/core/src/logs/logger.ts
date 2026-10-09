@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import type { Logger } from "../../../sdk/src/index.ts";
+import type { Logger } from "@pvx/sdk";
 
 export const MAX_BYTES = 1024 * 1024;
 export const BACKUPS = 3;

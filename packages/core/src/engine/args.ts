@@ -1,4 +1,4 @@
-import type { ArgSpec } from "../../../sdk/src/index.ts";
+import type { ArgSpec } from "@pvx/sdk";
 
 export type ArgValues = Record<string, string | boolean | undefined>;
 export type ParseResult =

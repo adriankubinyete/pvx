@@ -10,12 +10,11 @@ export interface EvalResult {
   fix?: string;
   affects?: string[];
   needs?: string[];
-  /** Step must never be auto-applied with --yes. Not in SDK v1 yet; read off the def if present. */
+  /** Step must never be auto-applied with --yes. */
   optIn?: boolean;
 }
 
 type ProveCtx = Pick<CommandCtx, "log" | "store" | "query">;
-type Def = CapabilityDef & { optIn?: boolean };
 
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
   new Promise((resolve, reject) => {
@@ -30,7 +29,7 @@ export async function evaluate(
   { timeoutMs = 5000 }: { timeoutMs?: number } = {},
 ): Promise<EvalResult[]> {
   const run = async (id: string): Promise<EvalResult> => {
-    const def = capabilities.get(id) as Def | undefined;
+    const def = capabilities.get(id);
     if (!def) return { id, title: id, goal: "", level: "warn", text: "módulo ausente" };
     const base = { id, title: def.title, goal: def.goal, affects: def.affects, needs: def.needs, optIn: def.optIn };
     try {

@@ -94,6 +94,8 @@ export interface CapabilityDef {
   affects?: string[];
   /** Capabilities that must be ok first. */
   needs?: string[];
+  /** Fix step is never auto-applied with --yes. */
+  optIn?: boolean;
   /** Read-only. */
   prove(ctx: Pick<CommandCtx, "log" | "store" | "query">): Proof | Promise<Proof>;
 }

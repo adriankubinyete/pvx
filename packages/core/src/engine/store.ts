@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Store } from "../../../sdk/src/index.ts";
+import type { Store } from "@pvx/sdk";
 import { moduleStateDir } from "./paths.ts";
 
 /** state.json per module. Created lazily: nothing is written until set. Atomic write (temp + rename). */

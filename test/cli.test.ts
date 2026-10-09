@@ -1,0 +1,56 @@
+import { expect, test } from "bun:test";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+
+const root = join(import.meta.dir, "..");
+
+async function pvx(args: string[], env: Record<string, string> = {}) {
+  const { NO_COLOR: _drop, ...base } = process.env;
+  const p = Bun.spawn(["bun", join(root, "apps/pvx/src/index.ts"), ...args], {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...base, PVX_USERMODULES: join(root, "packages/core/test/fixtures/usermodules"), ...env },
+  });
+  const [stdout, stderr, exit] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  return { stdout, stderr, exit };
+}
+
+const files = (dir: string): string[] =>
+  readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? files(join(dir, n)) : [join(dir, n)]));
+
+test("no args and no TTY: prints the help and exits 2 (never hangs, never opens the TUI)", async () => {
+  const r = await pvx([]);
+  expect(r.exit).toBe(2);
+  expect(r.stdout).toContain("uso: pvx");
+  expect(r.stdout).toContain("demo greet");
+});
+
+test("NO_COLOR: no escape sequences, glyphs stay", async () => {
+  const r = await pvx(["demo", "greet", "bob"], { NO_COLOR: "1" });
+  expect(r.stdout).toBe("[✓] oi bob\n");
+  expect(r.stdout).not.toContain("\x1b");
+});
+
+test("--json prints exactly one object", async () => {
+  const r = await pvx(["demo", "greet", "bob", "--json"]);
+  expect(JSON.parse(r.stdout)).toEqual({ ok: true, exit: 0, lines: [{ kind: "success", text: "oi bob" }] });
+});
+
+test("PVX_SECRET_* reaches the command but appears in neither stdout nor any file under PVX_HOME", async () => {
+  const secret = "hunter2-s3cr3t-value";
+  const r = await pvx(["demo", "login"], { PVX_SECRET_TOKEN: secret });
+  expect(r.exit).toBe(0);
+  expect(r.stdout).toBe("[✓] token com 20 chars\n"); // the command did receive it
+  expect(r.stdout + r.stderr).not.toContain(secret);
+  const all = files(process.env.PVX_HOME!);
+  expect(all.some((f) => f.endsWith("demo.log"))).toBe(true); // the run was logged...
+  for (const f of all) expect(readFileSync(f, "utf8")).not.toContain(secret); // ...without the secret
+});
+
+test("a throwing command becomes an error line and its traceback goes to the module log", async () => {
+  const r = await pvx(["throws-on-run", "crash"]);
+  expect(r.exit).toBe(1);
+  expect(r.stdout).toContain("kaboom");
+  expect(readFileSync(join(process.env.PVX_HOME!, "logs/throws-on-run.log"), "utf8")).toContain("kaboom");
+});

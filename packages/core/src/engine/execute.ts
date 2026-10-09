@@ -1,5 +1,5 @@
-import { EXIT } from "../../../sdk/src/index.ts";
-import type { Logger, OutLine } from "../../../sdk/src/index.ts";
+import { EXIT } from "@pvx/sdk";
+import type { Logger, OutLine } from "@pvx/sdk";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
 import type { Registry } from "./registry.ts";
 import { createStore } from "./store.ts";

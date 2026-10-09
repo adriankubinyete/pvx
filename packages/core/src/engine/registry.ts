@@ -1,4 +1,4 @@
-import type { CapabilityDef, CommandDef, Manifest, ModuleDef, QueryFn } from "../../../sdk/src/index.ts";
+import type { CapabilityDef, CommandDef, Manifest, ModuleDef, QueryFn } from "@pvx/sdk";
 
 export interface LoadError {
   id: string;

@@ -1,0 +1,10 @@
+{
+  "ok": true,
+  "exit": 0,
+  "lines": [
+    {
+      "kind": "success",
+      "text": "oi bob"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import type { Logger, Manifest, ModuleDef, ModuleFactory, Sdk } from "../../../sdk/src/index.ts";
+import type { Logger, Manifest, ModuleDef, ModuleFactory, Sdk } from "@pvx/sdk";
 import { readManifest } from "./manifest.ts";
 import { usermodulesDir } from "./paths.ts";
 import type { Registry } from "./registry.ts";

@@ -1,0 +1,14 @@
+{
+  "ok": false,
+  "exit": 1,
+  "lines": [
+    {
+      "kind": "success",
+      "text": "oi bad"
+    },
+    {
+      "kind": "error",
+      "text": "falhou"
+    }
+  ]
+}
