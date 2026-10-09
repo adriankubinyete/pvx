@@ -1,6 +1,7 @@
 import { memo, useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { resolveCommand, tokenize, type Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
+import { useNudge } from "../nudge.tsx";
 import { matchKey } from "../keymap.ts";
 import { editLine } from "../lineedit.ts";
 import { LineText } from "../LineText.tsx";
@@ -61,6 +62,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const { c, g, box } = useTheme();
   const { cols, rows } = useLayout();
   useFooterScope("palette");
+  const nudge = useNudge();
   // A queued command may ask (confirm, secret) while only this overlay is on screen, so it renders the modals itself.
   const { pending } = useSyncExternalStore(session.subscribe, session.getSnapshot);
   const [query, setQuery] = useState("");
@@ -107,7 +109,9 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const focusField = (i: number) => (setFocus(i), setFcur(Infinity));
   const move = (d: number) => {
     const i = items.findIndex((l) => l.id === cur?.id);
-    setSelId(items[Math.max(0, Math.min(items.length - 1, i + d))]?.id ?? "");
+    const to = items[i + d];
+    if (to) setSelId(to.id);
+    else nudge(!items.length ? "nada aqui" : d < 0 ? "início da lista" : "fim da lista");
   };
   const edit = (name: string, v: string | boolean) => hit && setForms((f) => ({ ...f, [hit.key]: { ...f[hit.key], [name]: v } }));
 
@@ -151,18 +155,21 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     } else if (!(k.sequence === " " && !f && !query)) { // empty query: space enqueues (below)
       const r = editLine({ text, cursor }, k);
       if (r?.exit === "left" && f) return setFocus(-1), true; // the cursor tried to cross the start: back to the list, same command
-      if (r?.exit === "right" && !f) return specs.length ? focusField(0) : setMsg("sem argumentos"), true;
+      if (r?.exit === "left" && !f) return nudge(), true;
+      if (r?.exit === "right" && !f) return specs.length ? focusField(0) : nudge("sem argumentos"), true;
       if (r) {
         if (f) edit(f.name, r.text), setFcur(r.cursor);
         else r.text !== query && setSelId(""), setQuery(r.text), setQcur(r.cursor);
         return true;
       }
     }
-    if (k.name === "right" && focus < 0) return specs.length ? focusField(0) : setMsg("sem argumentos"), true;
+    if (k.name === "right" && focus < 0) return specs.length ? focusField(0) : nudge("sem argumentos"), true;
     if (matchKey(k, "tab")) return specs.length ? focusField((focus + 1) % specs.length) : setFocus(-1);
     if (k.name === "up" || k.name === "down") {
       const d = k.name === "up" ? -1 : 1;
-      return focus >= 0 ? focusField(Math.max(0, Math.min(specs.length - 1, focus + d))) : move(d);
+      if (focus < 0) return move(d);
+      const to = focus + d;
+      return to >= 0 && to < specs.length ? focusField(to) : nudge(d < 0 ? "início da lista" : "fim da lista"), true;
     }
     if (k.sequence === " " && !f && !query) return enqueue(); // once there is a query, space is part of it (ctrl+n enqueues)
   }, { modal: true });

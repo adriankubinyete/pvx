@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
+import { useNudge } from "../nudge.tsx";
 import { useTheme } from "../theme-context.tsx";
 import type { Item } from "./tree.ts";
 
@@ -46,6 +47,7 @@ export interface ItemListProps {
 /** Selectable rows with a cursor: arrows, enter, mouse, scroll to the cursor. The one list of the Módulos tab. */
 export function ItemList({ items, sel, onSel, onActivate, onTop, focused, title, helpW }: ItemListProps) {
   const { box } = useTheme();
+  const nudge = useNudge();
   const scroll = useRef<ScrollBoxRenderable>(null);
   const cur = items.find((i) => i.id === sel) ?? items[0];
   useEffect(() => {
@@ -67,7 +69,9 @@ export function ItemList({ items, sel, onSel, onActivate, onTop, focused, title,
     if (k.name === "up" || k.name === "down") {
       const i = items.findIndex((x) => x.id === cur?.id);
       if (k.name === "up" && i <= 0 && onTop) return onTop(), true;
-      return onSel(items[Math.max(0, Math.min(items.length - 1, i + (k.name === "up" ? -1 : 1)))]?.id ?? ""), true;
+      const d = k.name === "up" ? -1 : 1;
+      const to = items[i + d];
+      return to ? onSel(to.id) : nudge(!items.length ? "nada aqui" : d < 0 ? "início da lista" : "fim da lista"), true;
     }
     if (matchKey(k, "enter")) return cur && onActivate(cur), true;
   });

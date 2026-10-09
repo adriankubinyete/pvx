@@ -6,6 +6,7 @@ import { MIN_COLS, MIN_ROWS, useLayout } from "./layout.ts";
 import { PageHost, PagesCtx, type PageDeps } from "./sdk-ui/index.tsx";
 import { RouterProvider, ScreenOutlet, useRouter, type Screen } from "./router.tsx";
 import { Footer, HelpOverlay } from "./Shortcuts.tsx";
+import { NudgeProvider } from "./nudge.tsx";
 import { ThemeProvider, useTheme } from "./theme-context.tsx";
 
 export interface AppProps {
@@ -65,7 +66,9 @@ export function App({ root, logger, onExit, palette, pages, statePath }: AppProp
     <ThemeProvider statePath={statePath}>
       <RouterProvider root={root} logger={logger}>
         <PagesCtx.Provider value={pages ?? null}>
-          <Root onExit={onExit} palette={palette} pages={pages} />
+          <NudgeProvider>
+            <Root onExit={onExit} palette={palette} pages={pages} />
+          </NudgeProvider>
         </PagesCtx.Provider>
       </RouterProvider>
     </ThemeProvider>

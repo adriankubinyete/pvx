@@ -27,6 +27,7 @@ const base: readonly Shortcut[] = [
   { keys: "esc", label: "sobe um nível", scope: "menu" },
   { keys: "↑↓", label: "move", scope: "home", footer: true },
   { keys: "←→", label: "painel", scope: "home", footer: true },
+  { keys: "1-2", label: "vai ao painel", scope: "home" },
   { keys: "enter", label: "usa", scope: "home", footer: true },
   { keys: "r", label: "atualiza", scope: "home", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "home" },
@@ -34,6 +35,7 @@ const base: readonly Shortcut[] = [
   { keys: "←→", label: "troca aba", scope: "tabs", footer: true },
   { keys: "↓/enter", label: "entra na aba", scope: "tabs", footer: true },
   { keys: "tab", label: "próxima aba", scope: "tabs", footer: true },
+  { keys: "/", label: "comando", scope: "tabs" },
   { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
   { keys: "ctrl+k", label: "palette", scope: "tabs", footer: true },
   { keys: "r", label: "atualiza", scope: "tabs" }, // core tabs only (conformidade, plano, logs); shown inline there, not in the footer

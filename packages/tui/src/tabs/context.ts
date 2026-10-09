@@ -1,6 +1,9 @@
 import { createContext, useContext } from "react";
 
-export const TAB_IDS = ["inicio", "modulos", "logs", "comando"] as const;
+/** Core tabs before the module tabs, and after them: Comando stays last, as the terminal tab. */
+export const LEAD_TABS = ["inicio", "modulos"] as const;
+export const TRAIL_TABS = ["logs", "comando"] as const;
+export const TAB_IDS = [...LEAD_TABS, ...TRAIL_TABS] as const;
 export type CoreTabId = (typeof TAB_IDS)[number];
 /** A core tab, or `page:<module>.<page>` for a tab a module contributes. */
 export type TabId = CoreTabId | `page:${string}`;

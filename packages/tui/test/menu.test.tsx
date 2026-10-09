@@ -187,7 +187,7 @@ test("Comando: esc focuses the last block, up on the first block focuses the bar
 
 test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", async () => {
   const { t } = await mount();
-  expect(t.frame()).toContain("› conformidade");
+  expect(t.frame()).toContain("› 1 conformidade");
   await t.press("TAB");
   expect(t.frame()).toContain("› módulos");
   await t.press("TAB"); // Logs
@@ -197,7 +197,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   expect(t.frame()).toContain("› logs");
   await t.press("TAB"); // Comando
   await t.press("TAB"); // wraps to Início
-  expect(t.frame()).toContain("› conformidade"); // the Início panel
+  expect(t.frame()).toContain("› 1 conformidade"); // the Início panel
 });
 
 test("tabs: up on the first row focuses the bar, right switches at once, down enters the first row", async () => {
@@ -369,7 +369,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› conformidade ●─/); // row 0 is the bar
+  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› 1 conformidade ●─/); // row 0 is the bar
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos─/);

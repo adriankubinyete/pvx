@@ -35,8 +35,8 @@ async function mount(opts: { cols?: number; rows?: number; registry?: Registry }
   return h;
 }
 const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
-/** Tabs from Início to the module tab `Demo` (the 5th), bar focused. */
-const toDemo = async (t: TuiHarness) => { for (let i = 0; i < 4; i++) await t.press("TAB"); };
+/** Tabs from Início to the module tab `Demo` (the 3rd), bar focused. */
+const toDemo = async (t: TuiHarness) => { for (let i = 0; i < 2; i++) await t.press("TAB"); };
 
 test("a page opens from the palette # scope; its useState updates on its key; the key is in the footer and in ?", async () => {
   const t = await mount();
@@ -58,7 +58,7 @@ test("a page opens from the palette # scope; its useState updates on its key; th
 
 test("#name works from the Comando input when the name is unique; an unknown page is an error block", async () => {
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); await t.press("TAB"); // Comando
+  for (let i = 0; i < 4; i++) await t.press("TAB"); // Comando
   await t.press("ARROW_DOWN");
   await t.type("#counter");
   await t.press("RETURN");
@@ -72,7 +72,7 @@ test("#name works from the Comando input when the name is unique; an unknown pag
 
 test("a command with `page` opens it after running, and the page runs its module's command through the session", async () => {
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); await t.press("TAB");
+  for (let i = 0; i < 4; i++) await t.press("TAB"); // Comando
   await t.press("ARROW_DOWN");
   await t.type("ui-demo status");
   await t.press("RETURN");
@@ -88,7 +88,7 @@ test("a command with `page` opens it after running, and the page runs its module
 
 test("a page tab sits after the core tabs and follows the tab focus rules; its state is kept", async () => {
   const t = await mount({ cols: 80, rows: 24 });
-  expect(t.frame().split("\n")[0]).toMatch(/Comando\s+Demo/);
+  expect(t.frame().split("\n")[0]).toMatch(/Módulos.*\s+Demo\s+Logs\s+Comando/);
   await toDemo(t);
   expect(t.frame()).toContain("estado: off");
   expect(lastLine(t)).toContain("↓/enter entra na aba"); // bar focused: the footer is the bar's
@@ -100,9 +100,9 @@ test("a page tab sits after the core tabs and follows the tab focus rules; its s
   expect(t.frame()).toContain("estado: on");
   await t.press("ESCAPE"); // back to the bar
   expect(lastLine(t)).toContain("↓/enter entra na aba");
-  await t.press("TAB"); // wraps to Início
+  for (let i = 0; i < 3; i++) await t.press("TAB"); // Logs, Comando, wraps to Início
   expect(t.frame()).not.toContain("estado:");
-  await t.press("TAB", { shift: true });
+  for (let i = 0; i < 3; i++) await t.press("TAB", { shift: true }); // Comando, Logs, Demo
   await t.press("RETURN");
   expect(t.frame()).toContain("estado: on"); // kept
 });
@@ -138,7 +138,7 @@ test("a module tab that throws shows the error inline and the tab bar keeps work
   const t = await mount({ registry: reg });
   const err = console.error;
   console.error = () => {};
-  for (let i = 0; i < 4; i++) await t.press("TAB");
+  for (let i = 0; i < 2; i++) await t.press("TAB");
   console.error = err;
   expect(t.frame()).toContain('página "P" falhou: tab quebrou');
   expect(logs.join("\n")).toContain("tab quebrou");
@@ -199,7 +199,7 @@ test("the tab bar overflows at 80 columns with a › and scrolls with ←/→", 
 
 test("esc from a focused block goes up to the tab bar (input -> blocks -> bar); down past the last block returns to the input", async () => {
   const t = await mount();
-  for (let i = 0; i < 3; i++) await t.press("TAB"); // Comando
+  for (let i = 0; i < 4; i++) await t.press("TAB"); // Comando
   await t.press("ARROW_DOWN");
   await t.type("#nope");
   await t.press("RETURN");

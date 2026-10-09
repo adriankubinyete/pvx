@@ -4,13 +4,14 @@ import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { createMenuNav, Menu, type MenuNav } from "../menu/Menu.tsx";
 import { useLayout } from "../layout.ts";
+import { useNudge } from "../nudge.tsx";
 import { useScreenScope } from "../router.tsx";
 import { usePages } from "../sdk-ui/host.tsx";
 import { PagePane, pageScope } from "../sdk-ui/index.tsx";
 import { Session } from "../session/Session.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
-import { TAB_IDS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
+import { LEAD_TABS, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { fitBar } from "./bar.ts";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
@@ -86,9 +87,10 @@ function TabBar({ nav, tabs, active, version, onPick }: { nav: TabsNav; tabs: Ba
 export function Tabs({ store, registry, nav, version, profile }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null }) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const update = (p: Partial<TabsNav>) => (Object.assign(nav, p), bump());
+  const nudge = useNudge();
   const hasPages = usePages() !== null; // module tabs need the page host
   const modTabs = useMemo(() => (hasPages ? pageTabs(registry) : []), [hasPages, registry]);
-  const ids: TabId[] = [...TAB_IDS, ...modTabs.map((t) => t.id)];
+  const ids: TabId[] = [...LEAD_TABS, ...modTabs.map((t) => t.id), ...TRAIL_TABS];
   const active = ids.includes(nav.active) ? nav.active : "inicio"; // the module went away
   const pageTab = modTabs.find((t) => t.id === active);
   // A visited module tab stays mounted (hidden) so its state survives a switch; it lives while this screen does.
@@ -106,13 +108,16 @@ export function Tabs({ store, registry, nav, version, profile }: { store: Sessio
     if (matchKey(k, "shift+tab")) return step(-1), true;
     if (!nav.bar) return;
     if (k.name === "left" || k.name === "right") return step(k.name === "left" ? -1 : 1), true;
-    if (k.name === "down" || matchKey(k, "enter")) return hasSel(active) && update({ bar: false }), true;
+    if (k.name === "down" || matchKey(k, "enter")) return hasSel(active) ? update({ bar: false }) : nudge("nada aqui"), true;
+    if (k.sequence === "/") return update({ active: "comando", bar: false }), true;
   }, { base: true });
 
   const api = { focused: !nav.bar, focusBar: () => update({ bar: true }), goto: (id: TabId) => update({ active: id, bar: false }) };
+  const core = (id: CoreTabId) => ({ id, label: LABELS[id], errors: id === "modulos" ? registry.errors.length : 0 });
   const bar: BarTab[] = [
-    ...TAB_IDS.map((id) => ({ id, label: LABELS[id], errors: id === "modulos" ? registry.errors.length : 0 })),
+    ...LEAD_TABS.map(core),
     ...modTabs.map((t) => ({ id: t.id, label: t.label, errors: 0 })),
+    ...TRAIL_TABS.map(core),
   ];
   return (
     <TabsProvider value={api}>

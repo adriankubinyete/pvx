@@ -37,18 +37,18 @@ async function mount(registry: Registry, opts: { cols?: number; rows?: number } 
   );
   return { t: h, store, calls };
 }
-/** Início, Módulos, Logs, Comando, then the module tabs: Conformidade, Plano. */
+/** Início, Módulos, the module tabs (Conformidade, Plano), then Logs and Comando. */
 const goto = async (t: TuiHarness, n: number, enter = true) => {
   for (let i = 0; i < n; i++) await t.press("TAB");
   if (enter) await t.press("ARROW_DOWN");
 };
-const CONF = 4;
-const PLANO = 5;
+const CONF = 2;
+const PLANO = 3;
 const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
 
 test("the tabs come from the built-in module; without it they are gone and the CLI still works", async () => {
   const { t } = await mount(await load());
-  expect(t.frame().split("\n")[0]).toMatch(/Comando\s+Conformidade\s+Plano/);
+  expect(t.frame().split("\n")[0]).toMatch(/Módulos.*\s+Conformidade\s+Plano\s+Demo\s+Logs\s+Comando/);
   t.destroy();
 
   const bare = await load(false);
@@ -91,8 +91,6 @@ test("Conformidade shows the cached results; r there and r in Início refresh th
   await t.press("ESCAPE");
   await t.press("TAB", { shift: true }); // ... back to Início, which reads the same cache
   await t.press("TAB", { shift: true });
-  await t.press("TAB", { shift: true });
-  await t.press("TAB", { shift: true });
   expect(t.frame()).toMatch(/1 de 5/);
   expect(calls).toHaveLength(4);
 });
@@ -103,7 +101,7 @@ test("the first visit to a module tab checks; Início sees the result without ch
   await goto(t, CONF, false);
   await t.flush();
   expect(t.frame()).toContain("cap-fixture.a: pendente");
-  await goto(t, 3, false); // Plano, Demo, Início
+  await goto(t, 5, false); // Plano, Demo, Logs, Comando, Início
   expect(t.frame()).toMatch(/1 de 5/);
   expect(calls).toHaveLength(2);
 });

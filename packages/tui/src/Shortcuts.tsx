@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { footerFor, helpFor, rowsRev, subscribeRows, type Scope, type Shortcut } from "./keymap.ts";
 import { useKeys } from "./keys.tsx";
+import { NudgeText } from "./nudge.tsx";
 import { useTheme } from "./theme-context.tsx";
 
 function Keys({ list, gap }: { list: Shortcut[]; gap: string }) {
@@ -21,8 +22,9 @@ function Keys({ list, gap }: { list: Shortcut[]; gap: string }) {
 export function Footer({ scope }: { scope: Scope }) {
   useSyncExternalStore(subscribeRows, rowsRev); // a page's `useKey` rows come and go
   return (
-    <box height={1} flexShrink={0}>
+    <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between" overflow="hidden">
       <Keys list={footerFor(scope)} gap="   " />
+      <NudgeText />
     </box>
   );
 }

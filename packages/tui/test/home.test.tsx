@@ -33,16 +33,16 @@ async function mount(opts: { cols?: number; rows?: number; profile?: string } = 
 test("Início renders the four zones at 120x40 and stays one column at 80x24", async () => {
   const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
   const f = t.frame();
-  for (const s of [hostname().slice(0, 12), "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "carga", "ram", "disco /", "uptime", "› conformidade", "› atividade", "▰", "▱"]) expect(f).toContain(s);
+  for (const s of [hostname().slice(0, 12), "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "carga", "ram", "disco /", "uptime", "› 1 conformidade", "› 2 atividade", "▰", "▱"]) expect(f).toContain(s);
   const row = f.split("\n").find((l) => l.includes("› máquina"))!;
-  expect(row).toContain("› conformidade"); // two columns
+  expect(row).toContain("› 1 conformidade"); // two columns
   t.destroy();
 
   const small = await mount({ cols: 80, rows: 24 });
   const lines = small.t.frame().split("\n");
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
-  for (const s of ["sem perfil", "› máquina", "› conformidade", "› atividade", "uptime", "não verificado", "r atualiza"]) expect(small.t.frame()).toContain(s);
-  expect(lines.some((l) => l.includes("› máquina") && l.includes("› conformidade"))).toBe(false);
+  for (const s of ["sem perfil", "› máquina", "› 1 conformidade", "› 2 atividade", "uptime", "não verificado", "r atualiza"]) expect(small.t.frame()).toContain(s);
+  expect(lines.some((l) => l.includes("› máquina") && l.includes("› 1 conformidade"))).toBe(false);
 });
 
 test("conformidade is not run on the first visit; r runs it and shows the pending items", async () => {
@@ -77,10 +77,10 @@ test("focus: the focused panel has the dot, left/right move between panels, up g
   const { t, store } = await mount({ cols: 120, rows: 40 });
   await store.run("demo remember");
   await t.flush();
-  expect(t.frame()).toContain("› conformidade ●");
-  expect(t.frame()).not.toContain("› atividade ●");
+  expect(t.frame()).toContain("› 1 conformidade ●");
+  expect(t.frame()).not.toContain("› 2 atividade ●");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toContain("› atividade ●");
+  expect(t.frame()).toContain("› 2 atividade ●");
   expect(t.frame()).toContain("★ demo greet");
   expect(t.frame()).toMatch(/✓ demo remember\s+agora/);
   expect(t.frame()).toMatch(/» ★ demo greet/);
@@ -92,7 +92,7 @@ test("focus: the focused panel has the dot, left/right move between panels, up g
   expect(t.frame()).not.toContain("●");
   expect(t.frame()).toContain("tab próxima aba");
   await t.press("ARROW_DOWN"); // back to the panel that had the cursor
-  expect(t.frame()).toContain("› atividade ●");
+  expect(t.frame()).toContain("› 2 atividade ●");
   await t.press("RETURN");
   expect(t.frame()).toContain("❯ demo greet");
 });
@@ -105,9 +105,9 @@ test.each([[230, 24], [120, 40], [100, 30], [80, 24]] as const)("rows never over
   expect(at("Início")).toEqual([0]);
   expect(lines[0]).toContain("pvx 0.1.0");
   expect(at("› máquina")).toHaveLength(1);
-  expect(at("› conformidade")).toHaveLength(1);
+  expect(at("› 1 conformidade")).toHaveLength(1);
   expect(at("perfil Principal")).toHaveLength(1);
-  expect(at("› atividade")).toHaveLength(1);
+  expect(at("› 2 atividade")).toHaveLength(1);
   expect(at("↑↓ move")).toEqual([rows - 1]);
   expect(lines.filter((l) => l.includes("pvx 0.1.0"))).toHaveLength(1); // the version only in the bar
   expect(lines.filter((l) => l.includes(hostname().slice(0, 12)))).toHaveLength(1); // the host only in máquina

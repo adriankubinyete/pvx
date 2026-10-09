@@ -3,6 +3,7 @@ import { hostname } from "node:os";
 import { primaryIp, readMachine, type SlotHub } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
+import { useNudge } from "../nudge.tsx";
 import { useLayout } from "../layout.ts";
 import { loadFavorites } from "../palette/favorites.ts";
 import { clean } from "../palette/search.ts";
@@ -77,6 +78,7 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
   const { c, g } = useTheme();
   const { cols, narrow } = useLayout();
   const tabs = useTabs();
+  const nudge = useNudge();
   const focused = tabs?.focused ?? true;
   const { history, blocks } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -137,15 +139,18 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
     if (!focused) return;
     const p = nav.home.panel;
     if (k.name === "left" || k.name === "right") {
-      const next = PANELS[Math.max(0, Math.min(PANELS.length - 1, PANELS.indexOf(p) + (k.name === "left" ? -1 : 1)))]!;
-      return nav.home.panel = next, bump(), true;
+      const next = PANELS[PANELS.indexOf(p) + (k.name === "left" ? -1 : 1)];
+      return next ? (nav.home.panel = next, bump()) : nudge("nada aqui"), true;
     }
     if (k.name === "up" || k.name === "down") {
       const i = rows[p].findIndex((r) => r.id === cur(p)?.id);
       if (k.name === "up" && i <= 0) return tabs?.focusBar(), true;
-      const to = rows[p][Math.max(0, Math.min(rows[p].length - 1, i + (k.name === "up" ? -1 : 1)))];
-      return to && select(p, to.id), true;
+      const d = k.name === "up" ? -1 : 1;
+      const to = rows[p][i + d];
+      return to ? select(p, to.id) : nudge(!rows[p].length ? "nada aqui" : d < 0 ? "início da lista" : "fim da lista"), true;
     }
+    const n = PANELS[Number(k.sequence) - 1];
+    if (n && !k.ctrl) return nav.home.panel = n, bump(), true;
     if (matchKey(k, "enter")) return use(cur(p)), true;
     if (matchKey(k, "r")) return refresh(), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
@@ -169,7 +174,7 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
   const [cf, ce] = meter(pct, 10, g);
   const worst = attention.some((p) => p.level === "error") ? c.error : c.warn;
   const conformidade = (
-    <Panel title="conformidade" focused={focused && nav.home.panel === "conformidade"}>
+    <Panel title={`${PANELS.indexOf("conformidade") + 1} conformidade`} focused={focused && nav.home.panel === "conformidade"}>
       <text wrapMode="none" flexShrink={0}>
         {profile ? <span fg={c.accent}>{`perfil ${profile}`}</span> : <span fg={c.dim}>sem perfil</span>}
       </text>
@@ -203,7 +208,7 @@ export function HomeTab({ store, nav, profile, slots }: { store: SessionApi; nav
     </Panel>
   );
   const atividade = (
-    <Panel title="atividade" focused={focused && nav.home.panel === "atividade"}>
+    <Panel title={`${PANELS.indexOf("atividade") + 1} atividade`} focused={focused && nav.home.panel === "atividade"}>
       {rows.atividade.length ? null : <text fg={c.dim} flexShrink={0}>nada executado ainda</text>}
       <Rows rows={rows.atividade} sel={cur("atividade")?.id} focused={focused && nav.home.panel === "atividade"} w={cols - 6} onPick={(r) => (select("atividade", r.id), use(r))} />
     </Panel>

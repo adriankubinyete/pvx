@@ -7,6 +7,7 @@ import { editLine } from "../lineedit.ts";
 import { LineText } from "../LineText.tsx";
 import { useLayout } from "../layout.ts";
 import { useKeys } from "../keys.tsx";
+import { useNudge } from "../nudge.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
@@ -45,6 +46,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const router = useRouter();
   const tabs = useTabs();
   const renderer = useRenderer();
+  const nudge = useNudge();
   const { blocks, history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [input, setInputRaw] = useState(draft?.draft ?? "");
   // The draft lives outside the component (memory only): the tab switch unmounts this screen.
@@ -164,7 +166,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     }
     if (k.sequence === "?" && !input && !searching) return;
     const r = editLine({ text: buffer, cursor }, k);
-    if (r) return edit(r.text, r.cursor), true; // ←/→ at the edges are a no-op here
+    if (r) return r.exit === "left" ? nudge() : edit(r.text, r.cursor), true; // `→` at the end is just the end of the line
 
   });
 

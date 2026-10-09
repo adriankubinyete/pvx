@@ -3,6 +3,7 @@ import { matchKey } from "../keymap.ts";
 import { editLine } from "../lineedit.ts";
 import { useScreenScope } from "../router.tsx";
 import { useKeys } from "../keys.tsx";
+import { useNudge } from "../nudge.tsx";
 import { Form } from "../palette/Form.tsx";
 import { buildLine, type FormValues } from "../palette/form.ts";
 import { useTheme } from "../theme-context.tsx";
@@ -17,6 +18,7 @@ export function MenuForm({ item, onRun, onBack }: { item: Item; onRun: (line: st
   const [cursor, setCursor] = useState(Infinity); // code points; clamped, so a new field lands at the end
   const setFocus = (i: number) => (setFocusRaw(i), setCursor(Infinity));
   const [msg, setMsg] = useState("");
+  const nudge = useNudge();
   const built = buildLine(item.line!, specs, values);
   useScreenScope("form", 1);
   const f = specs[focus]!;
@@ -32,6 +34,7 @@ export function MenuForm({ item, onRun, onBack }: { item: Item; onRun: (line: st
     const r = editLine({ text, cursor: Math.min(cursor, [...text].length) }, k);
     if (!r) return;
     if (!r.exit) edit(r.text), setCursor(r.cursor);
+    else if (r.exit === "left") nudge(); // esc is the way back
     return true;
   });
   return (

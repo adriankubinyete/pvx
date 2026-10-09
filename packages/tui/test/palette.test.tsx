@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { createRegistry, loadModules, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { KeyRouter, ThemeProvider } from "../src/index.ts";
+import { NudgeProvider, NudgeText } from "../src/nudge.tsx";
 import { Palette, type SessionLike } from "../src/palette/Palette.tsx";
 import { loadFavorites } from "../src/palette/favorites.ts";
 import { buildLine } from "../src/palette/form.ts";
@@ -39,7 +40,7 @@ function fake(failing = "") {
 async function open(session: SessionLike) {
   let closed = 0;
   h = await renderTui(
-    <ThemeProvider><KeyRouter onQuit={() => {}}><Palette session={session} registry={registry} onClose={() => closed++} /></KeyRouter></ThemeProvider>,
+    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={session} registry={registry} onClose={() => closed++} /><NudgeText /></KeyRouter></NudgeProvider></ThemeProvider>,
   );
   return { closes: () => closed };
 }
@@ -160,9 +161,12 @@ test("palette query: ← and → move the cursor and do not leave the query", as
   expect(h!.frame()).toContain("› >greet");
 });
 
-test("→ on a command without args shows a hint", async () => {
+test("→ on a command without args nudges \"sem argumentos\", and the notice goes away by itself", async () => {
   await open(fake().session);
   await h!.type(">wipe");
   await h!.press("ARROW_RIGHT");
   expect(h!.frame()).toContain("sem argumentos");
+  await Bun.sleep(1700);
+  await h!.flush();
+  expect(h!.frame()).not.toContain("sem argumentos");
 });
