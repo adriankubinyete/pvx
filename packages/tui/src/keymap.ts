@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "session" | "palette";
+export type Scope = "global" | "menu" | "tabs" | "session" | "palette";
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -19,9 +19,14 @@ const base: readonly Shortcut[] = [
   { keys: "ctrl+c", label: "sair", scope: "global" },
   { keys: "↑↓", label: "move", scope: "menu", footer: true },
   { keys: "enter", label: "abre", scope: "menu", footer: true },
-  { keys: "/", label: "comando", scope: "menu", footer: true },
+  { keys: "/", label: "comando", scope: "menu" },
   { keys: "ctrl+k", label: "palette", scope: "menu", footer: true },
+  { keys: "tab", label: "abas", scope: "menu", footer: true },
   { keys: "esc", label: "sobe um nível", scope: "menu" },
+  { keys: "←→", label: "troca aba", scope: "tabs", footer: true },
+  { keys: "↓", label: "entra na aba", scope: "tabs", footer: true },
+  { keys: "tab", label: "próxima aba", scope: "tabs", footer: true },
+  { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
   { keys: "!!", label: "repete", scope: "session", footer: true },
@@ -32,6 +37,7 @@ const base: readonly Shortcut[] = [
   { keys: "alt+l", label: "log do módulo", scope: "session" },
   { keys: "alt+c", label: "copiar erro", scope: "session" },
   { keys: "tab", label: "completa", scope: "session" },
+  { keys: "esc", label: "foca as abas", scope: "session" }, // empty input; shift+tab also leaves for the tab bar
   { keys: "enter", label: "roda", scope: "session" },
 ];
 

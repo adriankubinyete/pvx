@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { OutLine } from "@pvx/sdk";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCli, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { App, createSessionStore, ModuleChips, Session, theme } from "../src/index.ts";
+import { App, createSessionStore, Session, theme } from "../src/index.ts";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -22,7 +22,7 @@ async function mount(size?: { cols: number; rows: number }) {
   store = createSessionStore({ registry, makeLogger, historyPath: historyPath(), isRoot: true });
   const root = { id: "sessao", element: <Session store={store} registry={registry} /> };
   h = await renderTui(
-    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} chips={<ModuleChips registry={registry} />} />,
+    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     size,
   );
   return h;
@@ -165,17 +165,13 @@ test("a running block animates its spinner with one timer, and the timer stops a
   expect(f()).toBeUndefined();
 });
 
-test("layout at 80x24 and 120x40: chips, last block, input and footer stay visible", async () => {
+test("layout at 80x24 and 120x40: last block, input and footer stay visible", async () => {
   for (const size of [{ cols: 80, rows: 24 }, { cols: 120, rows: 40 }]) {
     const t = await mount(size);
     for (let i = 0; i < 12; i++) await store.run(`demo greet n${i}`);
     await t.flush();
     await t.type("demo gr");
     const lines = t.frame().split("\n");
-    expect(lines[0]).toMatch(/\d+ módulos/);
-    expect(lines[0]).toContain("✗ bad-range"); // load errors become chips, capped so the strip fits
-    expect(lines[0]).toContain("+3");
-    expect(lines[0]!.trimEnd()).toEndWith("pvx");
     expect(t.frame()).toContain("oi n11"); // the last block follows the input
     expect(t.frame()).not.toContain("oi n0\n");
     expect(t.frame()).toContain("❯ demo gr");

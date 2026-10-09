@@ -18,9 +18,10 @@ export interface RouterApi {
   pop(): void;
   /** Last crash message, cleared on the next push or pop. */
   notice: string | null;
-  /** Scope of the footer: an open overlay's (`useFooterScope`) or else the top screen's. */
+  /** Scope of the footer: an open overlay's (`useFooterScope`), else the one the screen set (`useScreenScope`), else the top screen's. */
   scope: Scope;
   setOverlay(scope: Scope | null): void;
+  setScreenScope(scope: Scope | null): void;
 }
 
 const Ctx = createContext<RouterApi | null>(null);
@@ -34,6 +35,12 @@ export function useRouter(): RouterApi {
 /** While mounted, the footer shows `scope` instead of the screen's. Does nothing outside a RouterProvider. */
 export function useFooterScope(scope: Scope) {
   const set = useContext(Ctx)?.setOverlay;
+  useEffect(() => (set?.(scope), () => set?.(null)), [set, scope]);
+}
+
+/** A screen whose footer depends on its state (the tabs): the scope applies while it is mounted, and an overlay still wins. */
+export function useScreenScope(scope: Scope) {
+  const set = useContext(Ctx)?.setScreenScope;
   useEffect(() => (set?.(scope), () => set?.(null)), [set, scope]);
 }
 
@@ -69,6 +76,7 @@ export function RouterProvider({ root, logger, children }: { root: Screen; logge
   const [stack, setStack] = useState<Entry[]>(() => [{ ...root, uid: 0 }]);
   const [notice, setNotice] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<Scope | null>(null);
+  const [screenScope, setScreenScope] = useState<Scope | null>(null);
   const push = useCallback((s: Screen) => {
     setNotice(null);
     setStack((st) => [...st, { ...s, uid: ++uid.current }]);
@@ -86,7 +94,7 @@ export function RouterProvider({ root, logger, children }: { root: Screen; logge
     setNotice(`tela "${e.id}" falhou: ${err.message}`);
   };
   return (
-    <Ctx.Provider value={{ top, depth: stack.length, push, pop, notice, scope: overlay ?? top.scope ?? "session", setOverlay }}>
+    <Ctx.Provider value={{ top, depth: stack.length, push, pop, notice, scope: overlay ?? screenScope ?? top.scope ?? "session", setOverlay, setScreenScope }}>
       <Outlet.Provider value={(
         <Boundary key={top.uid} onCatch={(err) => crash(top, err)}>
           {top.element}

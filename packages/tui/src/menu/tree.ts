@@ -9,20 +9,13 @@ export interface Item {
   label: string;
   help: string;
   children?: Item[];
-  /** Command line to run (a registry key or a core command). */
+  /** Command line to run (a registry key). */
   line?: string;
   /** Args of the command: any of them opens the form. */
   args?: ArgSpec[];
   destructive?: boolean;
   errorOf?: string;
 }
-
-const CORE_ACTIONS: Item[] = [
-  { id: "core:conformidade", label: "Conformidade", help: "Avalia a central contra o perfil", line: "conformidade" },
-  { id: "core:plano", label: "Plano", help: "Passos que levam a central ao perfil", line: "plano" },
-  { id: "core:modules", label: "Módulos", help: "Lista módulos, versão e estado", line: "modules" },
-  { id: "core:logs", label: "Logs", help: "Logs do núcleo, por horário", line: "logs" },
-];
 
 interface Entry {
   key: string;
@@ -52,7 +45,7 @@ function group(moduleId: string, entries: Entry[], depth: number): Item[] {
   return items.sort(byLabel);
 }
 
-/** The root menu, generated from the registry: modules (sorted; failed ones open their log), then the core actions. */
+/** The root menu, generated from the registry: modules (sorted; failed ones open their log). */
 export function buildRoot(registry: Registry): Item[] {
   const failed = new Map(registry.errors.map((e) => [e.id, e.error]));
   const ids = [...new Set([...registry.modules.keys(), ...failed.keys()])].sort();
@@ -63,7 +56,7 @@ export function buildRoot(registry: Registry): Item[] {
       .map(([key, cmd]) => ({ key, cmd, path: key.split(" ").slice(1).filter(Boolean) }));
     return { id: `m:${id}`, label: id, help: plural(entries.length), children: group(id, entries, 0) };
   });
-  return [...modules, ...CORE_ACTIONS];
+  return modules;
 }
 
 /** The rows shown after following `path` (item ids) from the root; a stale id stops the walk. */

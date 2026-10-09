@@ -1,10 +1,10 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import { pvxHome, runCapture, type CliIO } from "@pvx/core";
-import { App, createMenuNav, createSessionStore, Menu, ModuleChips } from "@pvx/tui";
+import { App, createSessionStore, createTabsNav, Tabs } from "@pvx/tui";
 import { join } from "node:path";
 
-/** Opens the TUI on the menu screen. Resolves after the renderer is destroyed. */
+/** Opens the TUI on the tabs screen. Resolves after the renderer is destroyed. */
 export async function openTui(io: Omit<CliIO, "argv" | "out" | "isTTY">): Promise<void> {
   const { registry, makeLogger, isRoot, version } = io;
   const store = createSessionStore({
@@ -16,7 +16,7 @@ export async function openTui(io: Omit<CliIO, "argv" | "out" | "isTTY">): Promis
   });
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
   const closed = new Promise<void>((resolve) => renderer.once("destroy", resolve));
-  const root = { id: "menu", scope: "menu" as const, element: <Menu store={store} registry={registry} nav={createMenuNav()} version={version} /> };
-  createRoot(renderer).render(<App root={root} logger={makeLogger("core")} onExit={() => renderer.destroy()} palette={{ session: store, registry }} chips={<ModuleChips registry={registry} />} />);
+  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version={version} /> };
+  createRoot(renderer).render(<App root={root} logger={makeLogger("core")} onExit={() => renderer.destroy()} palette={{ session: store, registry }} />);
   await closed;
 }

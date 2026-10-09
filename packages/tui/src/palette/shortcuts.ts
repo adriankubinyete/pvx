@@ -4,6 +4,8 @@ import type { Shortcut } from "../keymap.ts";
 export const paletteShortcuts: readonly Shortcut[] = [
   { keys: "↑↓", label: "move", scope: "palette" },
   { keys: "tab", label: "formulário", scope: "palette" },
+  { keys: "→", label: "vai aos campos", scope: "palette" },
+  { keys: "←", label: "volta à lista", scope: "palette" },
   { keys: "enter", label: "roda", scope: "palette", footer: true },
   { keys: "space", label: "enfileira", scope: "palette", footer: true },
   { keys: "ctrl+n", label: "enfileira (com busca)", scope: "palette" },

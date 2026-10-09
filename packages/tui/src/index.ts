@@ -7,4 +7,4 @@ export { RouterProvider, ScreenOutlet, useRouter, type Screen } from "./router.t
 export { useLayout } from "./layout.ts";
 export * from "./session/index.ts";
 export * from "./menu/index.ts";
-export { Chip, ModuleChips } from "./Chips.tsx";
+export { createTabsNav, Tabs, type TabsNav } from "./tabs/Tabs.tsx";

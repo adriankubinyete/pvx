@@ -63,12 +63,11 @@ test("? help lists every shortcut, owns the keyboard, and covers the footer", as
   expect(t.frame()).not.toContain("esc fecha");
 });
 
-test("frame fits 80x24 and 120x40 with chip strip, screen and footer", async () => {
+test("frame fits 80x24 and 120x40 with screen and footer", async () => {
   for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
     const t = await mount(cols, rows);
     const lines = t.frame().split("\n");
-    expect(lines[0]).toContain("pvx");
-    expect(lines[0]!.trimEnd().length).toBeLessThanOrEqual(cols);
+    for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
     expect(t.frame()).toContain("tela inicial");
     expect(lines.filter((l) => l.trim()).at(-1)).toContain("ctrl+k palette");
     t.destroy();

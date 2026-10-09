@@ -138,6 +138,12 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
       const it = ready();
       return it ? void runAll([it]) : undefined;
     }
+    // Fields have no text cursor (they append and backspace at the end), so `←` goes back to the list only on a flag or an empty field.
+    if (k.name === "right" && focus < 0) return specs.length ? setFocus(0) : setMsg("sem argumentos"), true;
+    if (k.name === "left" && focus >= 0) {
+      if (specs[focus]!.kind === "flag" || !values[specs[focus]!.name]) setFocus(-1);
+      return;
+    }
     if (matchKey(k, "tab")) return setFocus(specs.length ? (focus + 1) % specs.length : -1);
     if (k.name === "up" || k.name === "down") {
       const d = k.name === "up" ? -1 : 1;

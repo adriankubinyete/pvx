@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { App, buildRoot, createMenuNav, createSessionStore, itemsAt, Menu, ModuleChips, theme } from "../src/index.ts";
+import { App, buildRoot, createSessionStore, createTabsNav, itemsAt, Tabs, theme } from "../src/index.ts";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -30,17 +30,17 @@ async function mount(opts: { isRoot?: boolean; cols?: number; rows?: number } = 
     registry, makeLogger, isRoot, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
   });
-  const root = { id: "menu", scope: "menu" as const, element: <Menu store={store} registry={registry} nav={createMenuNav()} version="0.1.0" /> };
+  const root = { id: "menu", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" /> };
   h = await renderTui(
-    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} chips={<ModuleChips registry={registry} />} />,
+    <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     { cols: opts.cols, rows: opts.rows },
   );
   return { t: h, store };
 }
 /** Arrows until `label` has the cursor. */
 async function goto(t: TuiHarness, label: string, key: "ARROW_DOWN" | "ARROW_UP" = "ARROW_DOWN") {
-  for (let i = 0; i < 40 && !new RegExp(`» ${label}\\b`).test(t.frame()); i++) await t.press(key);
-  expect(t.frame()).toMatch(new RegExp(`» ${label}\\b`));
+  for (let i = 0; i < 40 && !new RegExp(`» ${label}(\\s|$)`).test(t.frame()); i++) await t.press(key);
+  expect(t.frame()).toMatch(new RegExp(`» ${label}(\\s|$)`));
 }
 
 test("tree: submenus by path prefix, destructive mark, failed modules open their log", () => {
@@ -52,15 +52,14 @@ test("tree: submenus by path prefix, destructive mark, failed modules open their
   expect(ip.children!.map((i) => i.line)).toEqual(["net ip accept", "net ip list"]);
   expect(itemsAt(root, ["m:net", ip.id]).map((i) => i.label)).toEqual(["accept", "list"]);
   expect(net.children![1]!.children![0]).toMatchObject({ label: "deny", destructive: true });
-  expect(root.slice(-4).map((i) => i.line)).toEqual(["conformidade", "plano", "modules", "logs"]);
   const labels = root.map((i) => i.label);
-  expect(labels.slice(0, -4)).toEqual([...labels.slice(0, -4)].sort());
+  expect(labels).toEqual([...labels].sort()); // modules only: the core actions are tabs now
   expect(root.find((i) => i.errorOf)).toBeDefined();
 });
 
-test("menu lists modules and core actions; enter into a module and a submenu, run a command, esc goes up", async () => {
+test("menu lists the modules; enter into a module and a submenu, run a command, esc goes up", async () => {
   const { t } = await mount();
-  for (const s of ["demo", "net", "3 comandos", "Conformidade", "Plano", "Módulos", "Logs", "✗ throws-on-load"]) expect(t.frame()).toContain(s);
+  for (const s of ["demo", "net", "3 comandos", "✗ throws-on-load"]) expect(t.frame()).toContain(s);
   await goto(t, "net");
   await t.press("RETURN");
   expect(t.frame()).toMatch(/ip\s+2 comandos/);
@@ -75,7 +74,7 @@ test("menu lists modules and core actions; enter into a module and a submenu, ru
   expect(t.frame()).toMatch(/port\s+1 comando/);
   expect(t.frame()).toContain("início › net");
   await t.press("ESCAPE");
-  expect(t.frame()).toContain("Conformidade");
+  expect(t.frame()).toContain("demo");
 });
 
 test("a command with args opens the form and shows the result; a secret field stays masked", async () => {
@@ -105,28 +104,101 @@ test("a command with args opens the form and shows the result; a secret field st
   expect(t.frame()).not.toContain("hunter2zz");
 });
 
-test("a core action runs the core command and shows its output", async () => {
+test("a core tab runs the core command and shows its output", async () => {
   const { t, store } = await mount();
-  await goto(t, "Módulos");
-  await t.press("RETURN");
+  await t.press("TAB"); // Módulos
+  await t.press("TAB"); // Conformidade
   await t.flush();
-  expect(t.frame()).toContain("[✓] demo 1.0.0 carregado");
-  expect(store.history.at(-1)).toBe("modules");
+  expect(store.history.at(-1)).toBe("conformidade");
+  expect(t.frame()).toContain("› conformidade");
 });
 
-test("/ opens the session, esc with an empty input returns to the menu; ctrl+k opens the palette from the menu", async () => {
+test("/ goes to the Comando tab, esc with an empty input focuses the bar, tab still completes there; ctrl+k opens the palette", async () => {
   const { t } = await mount();
   await t.press("/");
   expect(t.frame()).toContain("tab completa");
-  await t.type("x");
+  await t.type("demo gr");
+  await t.press("TAB");
+  expect(t.frame()).toContain("demo greet"); // tab completed, did not switch tab
+  expect(t.frame()).toContain("tab completa");
   await t.press("ESCAPE"); // clears the input
   expect(t.frame()).toContain("tab completa");
-  await t.press("ESCAPE");
-  expect(t.frame()).toContain("Conformidade");
+  await t.press("ESCAPE"); // empty: focus goes to the bar
+  expect(t.frame()).toContain("tab próxima aba"); // footer of the tabs scope
+  await t.press("ARROW_LEFT");
+  expect(t.frame()).toContain("› logs");
+  await t.press("ARROW_RIGHT");
+  await t.press("ARROW_DOWN"); // enters Comando: typing works again
+  await t.type("x");
+  expect(t.frame()).toContain("❯ x");
   await t.press("k", { ctrl: true });
   expect(t.frame()).toContain("fila vazia");
   await t.press("ESCAPE");
   expect(t.frame()).not.toContain("fila vazia");
+});
+
+test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", async () => {
+  const { t } = await mount();
+  expect(t.frame()).toContain("início");
+  await t.press("TAB");
+  expect(t.frame()).toContain("› módulos");
+  await t.press("TAB");
+  await t.press("TAB");
+  await t.press("TAB");
+  await t.press("TAB");
+  expect(t.frame()).toContain("tab completa"); // Comando
+  await t.press("TAB", { shift: true });
+  expect(t.frame()).toContain("› logs");
+  await t.press("TAB"); // wraps from Comando
+  await t.press("TAB", { shift: true });
+  await t.press("TAB", { shift: true });
+  await t.press("TAB", { shift: true });
+  await t.press("TAB", { shift: true });
+  await t.press("TAB", { shift: true });
+  expect(t.frame()).toContain("início");
+});
+
+test("tabs: up on the first row focuses the bar, right switches at once, down enters the first row", async () => {
+  const { t } = await mount();
+  await t.press("ARROW_UP");
+  expect(t.frame()).toContain("tab próxima aba");
+  await t.press("ARROW_RIGHT");
+  expect(t.frame()).toContain("› módulos");
+  expect(t.frame()).toContain("1.0.0 carregado");
+  await t.press("ARROW_DOWN"); // first row (bad-range: sorted)
+  expect(t.frame()).toMatch(/» /);
+  expect(t.frame()).toContain("↑↓ move");
+  await t.press("ARROW_UP");
+  await t.press("ARROW_RIGHT"); // Conformidade has nothing to select
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).toContain("tab próxima aba");
+});
+
+test("tabs: each tab keeps its state; a failed module in Módulos opens its log", async () => {
+  const { t } = await mount();
+  await goto(t, "net");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("início › net");
+  await t.press("TAB");
+  await t.press("TAB", { shift: true });
+  expect(t.frame()).toContain("início › net");
+  await t.press("TAB");
+  await goto(t, "✗ throws-on-load");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("log throws-on-load");
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("» ✗ throws-on-load");
+});
+
+test("tabs: Módulos shows the load error count and the bar fits 80 columns", async () => {
+  const { t } = await mount({ cols: 80, rows: 24 });
+  const n = registry.errors.length;
+  expect(n).toBeGreaterThan(1);
+  const bar = t.frame().split("\n")[0]!;
+  expect(bar).toContain(`Módulos ✗${n}`);
+  for (const l of ["Início", "Conformidade", "Plano", "Logs", "Comando"]) expect(bar).toContain(l);
+  expect(bar.length).toBeLessThanOrEqual(80);
+  expect(bar).toContain("0.1.0"); // host and version fit on the right
 });
 
 test("non-root: a module command gives an error block and does not run", async () => {

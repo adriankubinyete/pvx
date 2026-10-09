@@ -5,6 +5,7 @@ import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useRouter } from "../router.tsx";
+import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
 import { BlockView } from "./Blocks.tsx";
 import { complete, rank, type Candidate } from "./complete.ts";
@@ -39,6 +40,7 @@ function Popup({ items, sel }: { items: Candidate[]; sel: number }) {
 export function Session({ store, registry }: { store: SessionApi; registry: Registry }) {
   const { c, g, box, axes } = useTheme();
   const router = useRouter();
+  const tabs = useTabs();
   const renderer = useRenderer();
   const { blocks, history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [input, setInput] = useState("");
@@ -91,10 +93,12 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   };
 
   useKeys((k) => {
+    if (tabs?.focused === false) return;
     setNote(null);
     if (matchKey(k, "ctrl+l")) return store.clear(), true;
     if (matchKey(k, "ctrl+r")) return setSearch(search ?? ""), setSel(0), true;
     if (k.name === "escape" && (searching || input)) return searching ? setSearch(null) : (setInput(""), setHi(null)), true;
+    if (k.name === "escape" && tabs) return tabs.focusBar(), true; // empty input: leave for the tab bar
     if (matchKey(k, "enter")) {
       if (!searching) return submit(), true;
       if (items[at]) setInput(items[at].text);

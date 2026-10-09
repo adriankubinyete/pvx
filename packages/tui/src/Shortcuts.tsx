@@ -25,10 +25,10 @@ export function Footer({ scope }: { scope: Scope }) {
   );
 }
 
-const titles: Record<Scope, string> = { global: "geral", menu: "menu", session: "sessão", palette: "palette" };
+const titles: Record<Scope, string> = { global: "geral", menu: "menu", tabs: "abas", session: "sessão", palette: "palette" };
 
 /** Two columns, so every scope fits in 80x24. */
-const columns: Scope[][] = [["global", "session"], ["menu", "palette"]];
+const columns: Scope[][] = [["session", "menu"], ["palette", "global", "tabs"]];
 
 /** The `?` overlay: every shortcut in the table, by scope. A modal: it owns the keyboard. */
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
@@ -37,7 +37,7 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
     if (k.name === "escape" || k.sequence === "?" || k.name === "q") onClose();
   }, { modal: true });
   return (
-    <box position="absolute" top={1} left={2} zIndex={10} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)} title={`${g.active} ajuda`}>
+    <box position="absolute" top={0} left={2} zIndex={10} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)} title={`${g.active} ajuda`}>
       <box flexDirection="row" gap={2} flexShrink={0}>
         {columns.map((col) => (
           <box key={col[0]} flexDirection="column" flexShrink={0}>

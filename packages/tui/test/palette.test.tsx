@@ -115,3 +115,27 @@ test("form shows required *, masks the secret and keeps it out of the line and t
   const b = buildLine("demo login", registry.commands.get("demo login")!.args, { token: "s3cr3t" });
   expect(b.argv.join(" ") + b.display).not.toContain("s3cr3t");
 });
+
+test("→ enters the args of the selected command, ← returns to the same command (only from an empty field)", async () => {
+  await open(fake().session);
+  await h!.type(">login");
+  await h!.press("ARROW_RIGHT");
+  expect(h!.frame()).toMatch(/» token\*/); // first field has focus
+  await h!.type("ab");
+  await h!.press("ARROW_LEFT"); // text in the field and no cursor movement: stays
+  expect(h!.frame()).toMatch(/» token\*/);
+  await h!.press("BACKSPACE");
+  await h!.press("BACKSPACE");
+  await h!.press("ARROW_LEFT");
+  expect(h!.frame()).not.toMatch(/» token\*/);
+  expect(h!.frame()).toContain("$ pvx demo login"); // same command still selected
+  await h!.press("ARROW_RIGHT");
+  expect(h!.frame()).toMatch(/» token\*/);
+});
+
+test("→ on a command without args shows a hint", async () => {
+  await open(fake().session);
+  await h!.type(">wipe");
+  await h!.press("ARROW_RIGHT");
+  expect(h!.frame()).toContain("sem argumentos");
+});
