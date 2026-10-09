@@ -1,6 +1,6 @@
 import { useReducer, useEffect } from "react";
 import type { OutLine } from "@pvx/sdk";
-import { matchKey } from "../keymap.ts";
+import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { BlockView } from "../session/Blocks.tsx";
 import type { Block, SessionApi } from "../session/store.ts";
@@ -48,7 +48,7 @@ export function CoreTab({ store, line, cache }: { store: SessionApi; line: strin
   };
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={`${g.query} ${line}`}>
-      <text fg={c.dim}>{done ? `verificado às ${hhmm(done.at)} · r atualiza` : "verificando…"}</text>
+      <text fg={c.dim}>{done ? `verificado às ${hhmm(done.at)} · ${hintText("tabs", "r")}` : "verificando…"}</text>
       <scrollbox flexGrow={1} minHeight={0} focused>
         <BlockView b={b} focused={false} tick={0} onPick={noop} />
       </scrollbox>

@@ -46,6 +46,7 @@ type View = { kind: "list" } | { kind: "form"; item: Item } | { kind: "result"; 
 /** The Início tab: lists generated from the registry (modules, then command groups). Arrows and enter; `/` goes to the Comando tab. */
 export function Menu({ store, registry, nav, version }: { store: SessionApi; registry: Registry; nav: MenuNav; version: string }) {
   const router = useRouter();
+  const { g } = useTheme();
   const tabs = useTabs();
   const { cols, narrow } = useLayout();
   const { history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -85,7 +86,7 @@ export function Menu({ store, registry, nav, version }: { store: SessionApi; reg
       {view.kind === "result" ? <Result store={store} id={view.id} onBack={back} /> : null}
       {view.kind === "list" ? (
         <ItemList items={items} sel={sel[level]} onSel={select} onActivate={activate} onTop={tabs?.focusBar} focused={tabs?.focused ?? true}
-          title={["início", ...crumbs(root, path)].join(" › ")} helpW={helpW} />
+          title={`${g.query} ${["início", ...crumbs(root, path)].join(" › ")}`} helpW={helpW} />
       ) : null}
       {narrow ? null : <SidePanel registry={registry} history={history} version={version} />}
       {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}

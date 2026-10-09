@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { logsDir, readLogs } from "@pvx/core";
+import { useScreenScope } from "../router.tsx";
 import { useTheme } from "../theme-context.tsx";
 import { sanitize } from "./store.ts";
 
 /** Tail of one module's log, refreshed every second. Esc goes back (frame). */
 export function LogScreen({ moduleId }: { moduleId: string }) {
   const { c, box, g } = useTheme();
+  useScreenScope("log");
   const read = () => readLogs({ logsDir: logsDir(), modules: [moduleId], tail: 200 }).flatMap(sanitize);
   const [lines, setLines] = useState(read);
   useEffect(() => {

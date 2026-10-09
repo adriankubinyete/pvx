@@ -54,13 +54,13 @@ function TabBar({ nav, errors, version, onPick }: { nav: TabsNav; errors: number
   const host = clean(hostname());
   const right = room > version.length + 4 ? `${host.slice(0, room - version.length - 1)} ${version}` : "";
   return (
-    <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between">
+    <box height={1} flexShrink={0} overflow="hidden" flexDirection="row" justifyContent="space-between">
       <box flexDirection="row" flexShrink={0}>
         {TAB_IDS.map((id) => (
           <Tab key={id} label={LABELS[id]} errors={id === "modulos" ? errors : 0} active={id === nav.active} focused={nav.bar} onPick={() => onPick(id)} />
         ))}
       </box>
-      <text fg={c.dim}>{right}</text>
+      <text fg={c.dim} wrapMode="none" flexShrink={0}>{right}</text>
     </box>
   );
 }
@@ -79,13 +79,13 @@ export function Tabs({ store, registry, nav, version }: { store: SessionApi; reg
     const id = TAB_IDS[(TAB_IDS.indexOf(nav.active) + d + TAB_IDS.length) % TAB_IDS.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
   };
-  useScreenScope(nav.bar ? "tabs" : nav.active === "comando" ? "session" : "menu");
+  useScreenScope(nav.bar ? "tabs" : nav.active === "comando" ? "session" : "menu", nav.bar ? 2 : 0); // the bar outranks any view inside a tab
   useKeys((k) => {
     if (matchKey(k, "tab")) return step(1), true;
     if (matchKey(k, "shift+tab")) return step(-1), true;
     if (!nav.bar) return;
     if (k.name === "left" || k.name === "right") return step(k.name === "left" ? -1 : 1), true;
-    if (k.name === "down") return hasSel(nav.active) && update({ bar: false }), true;
+    if (k.name === "down" || matchKey(k, "enter")) return hasSel(nav.active) && update({ bar: false }), true;
   }, { base: true });
 
   const api = { focused: !nav.bar, focusBar: () => update({ bar: true }), goto: (id: TabId) => update({ active: id, bar: false }) };

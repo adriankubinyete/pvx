@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { matchKey } from "../keymap.ts";
+import { useScreenScope } from "../router.tsx";
 import { useKeys } from "../keys.tsx";
 import { Form } from "../palette/Form.tsx";
 import { buildLine, type FormValues } from "../palette/form.ts";
@@ -14,6 +15,7 @@ export function MenuForm({ item, onRun, onBack }: { item: Item; onRun: (line: st
   const [focus, setFocus] = useState(0);
   const [msg, setMsg] = useState("");
   const built = buildLine(item.line!, specs, values);
+  useScreenScope("form", 1);
   const f = specs[focus]!;
   const edit = (v: string | boolean) => setValues({ ...values, [f.name]: v });
   useKeys((k) => {
@@ -32,7 +34,6 @@ export function MenuForm({ item, onRun, onBack }: { item: Item; onRun: (line: st
       <text fg={c.dim}>{` ${item.help}`}</text>
       <Form specs={specs} values={values} focus={focus} line={built} />
       <text fg={c.warn}>{msg}</text>
-      <text fg={c.dim}>{" tab campo · espaço marca · enter roda · esc volta"}</text>
     </box>
   );
 }

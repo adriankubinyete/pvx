@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { App, buildRoot, createSessionStore, createTabsNav, itemsAt, Tabs, theme } from "../src/index.ts";
+import { App, buildRoot, createSessionStore, createTabsNav, footerFor, itemsAt, Tabs, theme } from "../src/index.ts";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -286,4 +286,109 @@ test("layout: single column at 80x24, side panel with the last commands at 120x4
   expect(wide.t.frame()).toContain("pvx 0.1.0");
   expect(wide.t.frame()).toContain("módulos");
   wide.t.destroy();
+});
+
+/** Opens the form of `net ip accept` (addr*), 120x30. */
+async function openForm() {
+  const m = await mount({ cols: 120, rows: 30 });
+  await goto(m.t, "net");
+  await m.t.press("RETURN");
+  await m.t.press("RETURN");
+  await m.t.press("RETURN");
+  return m.t;
+}
+
+test("form frame: the bar row is intact and the panel title sits whole on the next row", async () => {
+  const t = await openForm();
+  const [bar, top] = t.frame().split("\n");
+  for (const l of ["Início", "Módulos", "Conformidade", "Plano", "Logs", "Comando", "0.1.0"]) expect(bar).toContain(l);
+  expect(bar).not.toMatch(/[╭╮─│]/);
+  expect(top).toMatch(/^ ╭─› net ip accept─+╮/);
+});
+
+test("form footer comes from the form scope: no tab bar hint, and every key shown is handled", async () => {
+  const t = await openForm();
+  const foot = t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
+  for (const s of footerFor("form")) expect(foot).toContain(`${s.keys} ${s.label}`);
+  expect(foot).not.toContain("tab abas");
+  expect(t.frame()).not.toContain("tab campo ·"); // no inline hint line: the footer is the only place
+  await t.type("x");
+  expect(t.frame()).toContain("x_");
+  await t.press("k", { ctrl: true }); // ctrl+k palette
+  expect(t.frame()).toContain("fila vazia");
+  await t.press("ESCAPE");
+  await t.press("ESCAPE"); // esc volta
+  expect(t.frame()).toContain("início › net");
+});
+
+test("form: tab moves to the next field, space marks a flag, enter runs; result footer: enter goes back", async () => {
+  const { t } = await mount({ cols: 120, rows: 30 });
+  await goto(t, "demo");
+  await t.press("RETURN");
+  await goto(t, "greet");
+  await t.press("RETURN"); // who* (option) + shout (flag)
+  expect(t.frame()).toMatch(/» who/);
+  await t.press("TAB");
+  expect(t.frame()).toMatch(/» shout/);
+  expect(t.frame()).toContain("[ ]");
+  await t.press(" ");
+  expect(t.frame()).toContain("[x]");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("falta: who");
+  await t.press("TAB");
+  await t.type("ana");
+  await t.press("RETURN"); // enter roda
+  const foot = t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
+  for (const s of footerFor("result")) expect(foot).toContain(`${s.keys} ${s.label}`);
+  await t.press("RETURN"); // enter voltar
+  expect(t.frame()).toContain("» greet");
+});
+
+test("log screen footer comes from the log scope and its keys work", async () => {
+  const { t } = await mount({ cols: 120, rows: 30 });
+  await goto(t, "✗ throws-on-load");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("› log throws-on-load");
+  const foot = t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
+  for (const s of footerFor("log")) expect(foot).toContain(`${s.keys} ${s.label}`);
+  await t.press("k", { ctrl: true });
+  expect(t.frame()).toContain("fila vazia");
+  await t.press("ESCAPE");
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("» ✗ throws-on-load");
+});
+
+test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab; enter on the bar acts like down", async () => {
+  const { t } = await mount({ cols: 120, rows: 30 });
+  const foot = () => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
+  const expectScope = (scope: "tabs" | "menu") => {
+    for (const s of footerFor(scope)) expect(foot()).toContain(`${s.keys} ${s.label}`);
+    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : "↑↓ move");
+    expect(foot()).not.toContain(scope === "tabs" ? "↑↓ move" : "troca aba");
+  };
+  expectScope("menu");
+  await t.press("ARROW_UP"); // top of the list -> bar
+  expectScope("tabs");
+  await t.press("RETURN"); // enter == down: first item of Início
+  expectScope("menu");
+  expect(t.frame()).toMatch(/» /);
+  await t.press("ARROW_UP");
+  await t.press("TAB"); // Módulos, bar still focused
+  expect(t.frame()).toContain("› módulos");
+  expectScope("tabs");
+  await t.press("RETURN");
+  expectScope("menu");
+  await t.press("ARROW_UP");
+  await t.press("TAB"); // Conformidade: nothing to select, enter does nothing
+  await t.press("RETURN");
+  expect(foot()).toContain("troca aba");
+  expect(t.frame().split("\n")[1]).toContain("› conformidade");
+});
+
+test("every tab content and pushed screen uses the same title convention", async () => {
+  const { t } = await mount({ cols: 120, rows: 30 });
+  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› início─/);
+  await t.press("ARROW_UP");
+  await t.press("TAB");
+  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos─/);
 });

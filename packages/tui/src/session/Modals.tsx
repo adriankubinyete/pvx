@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { matchKey } from "../keymap.ts";
+import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useTheme } from "../theme-context.tsx";
 import type { Pending, SessionApi } from "./store.ts";
@@ -29,7 +29,7 @@ function Modal({ store, p }: { store: Pick<SessionApi, "answer">; p: Pending }) 
         <>
           <text fg={c.text}>{`${p.name}:`}</text>
           <text fg={c.accent}>{"*".repeat([...secret].length)}</text>
-          <text fg={c.dim}>enter envia · esc cancela</text>
+          <text fg={c.dim}>{hintText("modal", "enter", "esc")}</text>
         </>
       )}
     </box>

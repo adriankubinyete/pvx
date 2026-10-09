@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { useRenderer } from "@opentui/react";
 import { createClipboard, createHostClipboard, createRendererClipboardAdapter, type ScrollBoxRenderable } from "@opentui/core";
 import type { Registry } from "@pvx/core";
-import { matchKey } from "../keymap.ts";
+import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { useTabs } from "../tabs/context.ts";
@@ -66,7 +66,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const last = blocks.at(-1);
   const barFocused = tabs?.focused === false;
   const focus = barFocused ? undefined : blocks.find((b) => b.id === fb);
-  useScreenScope(barFocused ? "tabs" : focus ? "block" : "session");
+  useScreenScope(barFocused ? "tabs" : focus ? "block" : searching ? "search" : "session", 1);
   useEffect(() => {
     if (barFocused) setFb(null); // coming back from the bar lands in the input
   }, [barFocused]);
@@ -156,7 +156,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     if (printable(k.sequence) && !k.ctrl && !k.meta) return edit((s) => s + k.sequence), true;
   });
 
-  const hint = note ?? (searching ? "enter escolhe · esc sai" : "tab completa · enter roda");
+  const hint = note ?? (searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
   const inputFocused = !barFocused && !focus;
   const typed = searching ? `(busca) ${search}` : input;
   return (

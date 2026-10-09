@@ -10,6 +10,12 @@ export interface Screen {
   element: ReactNode;
 }
 
+/** A screen's footer scope. The highest `rank` wins, the latest among equals: a view inside a tab outranks the tab. */
+export interface Claim {
+  scope: Scope;
+  rank: number;
+}
+
 export interface RouterApi {
   top: Screen;
   depth: number;
@@ -21,7 +27,8 @@ export interface RouterApi {
   /** Scope of the footer: an open overlay's (`useFooterScope`), else the one the screen set (`useScreenScope`), else the top screen's. */
   scope: Scope;
   setOverlay(scope: Scope | null): void;
-  setScreenScope(scope: Scope | null): void;
+  claim(c: Claim): void;
+  release(c: Claim): void;
 }
 
 const Ctx = createContext<RouterApi | null>(null);
@@ -38,10 +45,15 @@ export function useFooterScope(scope: Scope) {
   useEffect(() => (set?.(scope), () => set?.(null)), [set, scope]);
 }
 
-/** A screen whose footer depends on its state (the tabs): the scope applies while it is mounted, and an overlay still wins. */
-export function useScreenScope(scope: Scope) {
-  const set = useContext(Ctx)?.setScreenScope;
-  useEffect(() => (set?.(scope), () => set?.(null)), [set, scope]);
+/** A screen whose footer depends on its state: the scope applies while it is mounted, and an overlay still wins. `rank` 1 for a view inside a tab (form, result, session). */
+export function useScreenScope(scope: Scope, rank = 0) {
+  const api = useContext(Ctx);
+  const { claim, release } = api ?? {};
+  useEffect(() => {
+    const c = { scope, rank };
+    claim?.(c);
+    return () => release?.(c);
+  }, [claim, release, scope, rank]);
 }
 
 type Entry = Screen & { uid: number };
@@ -76,7 +88,10 @@ export function RouterProvider({ root, logger, children }: { root: Screen; logge
   const [stack, setStack] = useState<Entry[]>(() => [{ ...root, uid: 0 }]);
   const [notice, setNotice] = useState<string | null>(null);
   const [overlay, setOverlay] = useState<Scope | null>(null);
-  const [screenScope, setScreenScope] = useState<Scope | null>(null);
+  const [claims, setClaims] = useState<Claim[]>([]);
+  const claim = useCallback((c: Claim) => setClaims((l) => [...l, c]), []);
+  const release = useCallback((c: Claim) => setClaims((l) => l.filter((x) => x !== c)), []);
+  const screenScope = claims.reduce<Claim | null>((best, c) => (!best || c.rank >= best.rank ? c : best), null)?.scope;
   const push = useCallback((s: Screen) => {
     setNotice(null);
     setStack((st) => [...st, { ...s, uid: ++uid.current }]);
@@ -94,7 +109,7 @@ export function RouterProvider({ root, logger, children }: { root: Screen; logge
     setNotice(`tela "${e.id}" falhou: ${err.message}`);
   };
   return (
-    <Ctx.Provider value={{ top, depth: stack.length, push, pop, notice, scope: overlay ?? screenScope ?? top.scope ?? "session", setOverlay, setScreenScope }}>
+    <Ctx.Provider value={{ top, depth: stack.length, push, pop, notice, scope: overlay ?? screenScope ?? top.scope ?? "session", setOverlay, claim, release }}>
       <Outlet.Provider value={(
         <Boundary key={top.uid} onCatch={(err) => crash(top, err)}>
           {top.element}

@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "tabs" | "session" | "block" | "palette";
+export type Scope = "global" | "menu" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "search" | "modal";
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -26,10 +26,11 @@ const base: readonly Shortcut[] = [
   { keys: "tab", label: "abas", scope: "menu", footer: true },
   { keys: "esc", label: "sobe um nível", scope: "menu" },
   { keys: "←→", label: "troca aba", scope: "tabs", footer: true },
-  { keys: "↓", label: "entra na aba", scope: "tabs", footer: true },
+  { keys: "↓/enter", label: "entra na aba", scope: "tabs", footer: true },
   { keys: "tab", label: "próxima aba", scope: "tabs", footer: true },
   { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
-  { keys: "r", label: "atualiza", scope: "tabs", footer: true }, // core tabs only (conformidade, plano, logs)
+  { keys: "ctrl+k", label: "palette", scope: "tabs", footer: true },
+  { keys: "r", label: "atualiza", scope: "tabs" }, // core tabs only (conformidade, plano, logs); shown inline there, not in the footer
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
   { keys: "!!", label: "repete", scope: "session", footer: true },
@@ -39,6 +40,16 @@ const base: readonly Shortcut[] = [
   { keys: "tab", label: "completa", scope: "session" },
   { keys: "esc", label: "foca os blocos", scope: "session" }, // empty input; with no blocks it focuses the tab bar (shift+tab always does)
   { keys: "enter", label: "roda", scope: "session" },
+  { keys: "enter", label: "escolhe", scope: "search", footer: true },
+  { keys: "esc", label: "sai", scope: "search" },
+  { keys: "enter", label: "envia", scope: "modal" },
+  { keys: "esc", label: "cancela", scope: "modal" },
+  { keys: "tab", label: "campo", scope: "form", footer: true },
+  { keys: "space", label: "marca", scope: "form", footer: true },
+  { keys: "enter", label: "roda", scope: "form", footer: true },
+  { keys: "ctrl+k", label: "palette", scope: "form", footer: true },
+  { keys: "enter", label: "voltar", scope: "result", footer: true },
+  { keys: "ctrl+k", label: "palette", scope: "log", footer: true },
   { keys: "↑↓", label: "move blocos", scope: "block", footer: true },
   { keys: "r", label: "repetir", scope: "block", footer: true, hint: true },
   { keys: "l", label: "log", scope: "block", footer: true, hint: true },
@@ -51,6 +62,10 @@ export const shortcuts: readonly Shortcut[] = [...new Map([...base, ...paletteSh
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] =>
   [...shortcuts.filter((s) => s.footer && s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.footer && s.scope === "global")];
+
+/** Inline hint text from table rows: `hintText("session", "tab", "enter")` -> `tab completa · enter roda`. */
+export const hintText = (scope: Scope, ...keys: string[]) =>
+  keys.map((k) => { const s = shortcuts.find((r) => r.scope === scope && r.keys === k)!; return `${s.keys} ${s.label}`; }).join(" · ");
 
 const NAMES: Record<string, string> = { esc: "escape", enter: "return" };
 
