@@ -48,13 +48,16 @@ test("type, tab-complete and run shows a ok block; ↑ and !! use the history", 
   expect(t.frame().match(/\[✓\] oi ana/g)).toHaveLength(2);
 });
 
-test("an error block offers actions; r repeats; a throwing module does not end the session", async () => {
+test("esc focuses the last block and shows its actions; r repeats; a throwing module does not end the session", async () => {
   const t = await mount();
   await run(t, "demo greet bad");
   expect(t.frame()).toContain("[✗] falhou");
-  expect(t.frame()).toContain("repetir");
-  expect(t.frame()).toContain("copiar erro");
-  await t.press("r", { meta: true });
+  expect(t.frame()).not.toContain("l log");
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("» demo greet bad");
+  expect(t.frame()).toContain("r repetir");
+  expect(t.frame()).toContain("c copiar");
+  await t.press("r");
   expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(2);
   await run(t, "throws-on-run crash");
   expect(t.frame()).toContain("kaboom");
@@ -68,15 +71,50 @@ test("after a failed block, plain r/l/c type into the input (cause: they used to
   await t.type("reboot");
   expect(t.frame()).toContain("❯ reboot");
   expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(1); // no repeat fired
-  await t.press("l", { meta: true }); // with text in the input the alt action does not fire nor type
-  expect(t.frame()).toContain("❯ reboot");
   expect(t.frame()).not.toContain("log demo");
+});
+
+test("block focus: esc picks the last block, r repeats, up moves, l opens its log and esc returns to the input", async () => {
+  const t = await mount();
+  await run(t, "demo greet ana");
+  await run(t, "demo greet bad");
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("» demo greet bad");
+  await t.press("r");
+  expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(2);
+  expect(t.frame()).toContain("» demo greet bad"); // the focus stays on the repeated block
+  await t.press("ARROW_UP");
+  expect(t.frame()).toContain("» demo greet ana");
+  await t.press("l");
+  expect(t.frame()).toContain("log demo");
+  await t.press("ESCAPE");
+  expect(t.frame()).not.toContain("» demo greet ana"); // the log unmounted the session: back in the input
+  expect(t.frame()).toContain("tab completa");
+  await t.type("ok");
+  expect(t.frame()).toContain("❯ ok");
+});
+
+test("focused block: enter puts its line in the input, a letter types, down on the last block returns to the input", async () => {
+  const t = await mount();
+  await run(t, "demo greet ana");
+  await t.press("ESCAPE");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("❯ demo greet ana");
+  await t.press("ESCAPE"); // clears
+  await t.press("ESCAPE"); // focus
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).not.toContain("» demo greet ana");
+  await t.press("ESCAPE");
+  await t.press("x");
+  expect(t.frame()).toContain("❯ x");
+  expect(t.frame()).not.toContain("» demo greet ana");
 });
 
 test("ctrl+k opens the palette from the log screen too", async () => {
   const t = await mount();
   await run(t, "demo greet bad");
-  await t.press("l", { meta: true });
+  await t.press("ESCAPE");
+  await t.press("l");
   expect(t.frame()).toContain("log demo");
   await t.press("k", { ctrl: true });
   expect(t.frame()).toContain("fila vazia");
@@ -119,8 +157,10 @@ test("full flow without mouse: type, complete, run, fail, repeat, palette, queue
   await t.press("TAB");
   await run(t, "bad");
   expect(t.frame()).toContain("[✗] falhou");
-  await t.press("r", { meta: true });
+  await t.press("ESCAPE");
+  await t.press("r");
   expect(t.frame().match(/\[✗\] falhou/g)).toHaveLength(2);
+  await t.press("ESCAPE");
 
   await t.press("k", { ctrl: true });
   expect(t.frame()).toContain("fila vazia");

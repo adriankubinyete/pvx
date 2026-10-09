@@ -74,7 +74,7 @@ export function ItemList({ items, sel, onSel, onActivate, onTop, focused, title,
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={title}>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
-        {items.map((i) => <Row key={i.id} item={i} selected={i.id === cur?.id} helpW={helpW} onHover={hover} onPick={pick} />)}
+        {items.map((i) => <Row key={i.id} item={i} selected={focused && i.id === cur?.id} helpW={helpW} onHover={hover} onPick={pick} />)}
       </scrollbox>
     </box>
   );

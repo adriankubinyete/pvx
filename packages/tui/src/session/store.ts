@@ -32,6 +32,8 @@ export interface SessionApi {
   readonly history: readonly string[];
   /** Never rejects: a throw becomes an error block. `!!` runs the last history entry. */
   run(line: string, opts?: { secrets?: Record<string, string> }): Promise<{ exit: number }>;
+  /** Runs a core command on the side: no block, no history (the core tabs). Same root rule as `run`. */
+  capture(line: string): Promise<{ exit: number; lines: OutLine[] }>;
   /** Re-runs a block; a secret is asked again through the modal. */
   repeat(blockId: number): Promise<{ exit: number }>;
   /** The line to recall for a block: the real one (memory only) when the shown one is masked. */
@@ -144,6 +146,18 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     return { exit };
   }
 
+  async function capture(line: string): Promise<{ exit: number; lines: OutLine[] }> {
+    let r: { exit: number; lines: OutLine[] };
+    try {
+      const argv = tokenize(line);
+      if (!isRoot && requiresRoot(registry, argv)) r = { exit: 1, lines: [{ kind: "error", text: rootMessage() }] };
+      else r = core ? await core(argv) : { exit: 1, lines: [{ kind: "error", text: "sem núcleo" }] };
+    } catch (e) {
+      r = { exit: 1, lines: [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }] };
+    }
+    return { exit: r.exit, lines: r.lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text }))) };
+  }
+
   function addHistory(line: string) {
     if (state.history.at(-1) === line) return;
     const history = [...state.history, line].slice(-MAX_HISTORY);
@@ -163,6 +177,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
       return state.history;
     },
     run,
+    capture,
     repeat: async (id) => {
       const b = state.blocks.find((x) => x.id === id);
       return b ? run(raws.get(id) ?? b.line) : { exit: 1 };

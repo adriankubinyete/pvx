@@ -11,7 +11,7 @@ import { Session } from "../session/Session.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { TAB_IDS, TabsProvider, type TabId } from "./context.ts";
-import { CoreTab } from "./CoreTab.tsx";
+import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { ModulesTab } from "./ModulesTab.tsx";
 
 const LABELS: Record<TabId, string> = { inicio: "Início", modulos: "Módulos", conformidade: "Conformidade", plano: "Plano", logs: "Logs", comando: "Comando" };
@@ -25,8 +25,12 @@ export interface TabsNav {
   bar: boolean;
   menu: MenuNav;
   modulesSel?: string;
+  /** Last result of each core tab: memory only, for the TUI session. */
+  core: CoreCache;
+  /** Comando input draft: memory only (a secret never goes in the line; it goes through the modal). */
+  draft: string;
 }
-export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, menu: createMenuNav() });
+export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, menu: createMenuNav(), core: {}, draft: "" });
 
 function Tab({ label, errors, active, focused, onPick }: { label: string; errors: number; active: boolean; focused: boolean; onPick: () => void }) {
   const { c, g } = useTheme();
@@ -73,7 +77,7 @@ export function Tabs({ store, registry, nav, version }: { store: SessionApi; reg
   const hasSel = (id: TabId) => id === "inicio" || id === "comando" || (id === "modulos" && registry.modules.size + registry.errors.length > 0);
   const step = (d: number) => {
     const id = TAB_IDS[(TAB_IDS.indexOf(nav.active) + d + TAB_IDS.length) % TAB_IDS.length]!;
-    update({ active: id, bar: nav.bar || !hasSel(id) });
+    update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
   };
   useScreenScope(nav.bar ? "tabs" : nav.active === "comando" ? "session" : "menu");
   useKeys((k) => {
@@ -88,11 +92,13 @@ export function Tabs({ store, registry, nav, version }: { store: SessionApi; reg
   return (
     <TabsProvider value={api}>
       <box flexGrow={1} minHeight={0} flexDirection="column">
-        <TabBar nav={nav} errors={registry.errors.length} version={version} onPick={(id) => update({ active: id, bar: nav.bar || !hasSel(id) })} />
-        {nav.active === "inicio" ? <Menu store={store} registry={registry} nav={nav.menu} version={version} /> : null}
-        {nav.active === "modulos" ? <ModulesTab registry={registry} nav={nav} /> : null}
-        {CORE.includes(nav.active) ? <CoreTab key={nav.active} store={store} line={nav.active} /> : null}
-        {nav.active === "comando" ? <Session store={store} registry={registry} /> : null}
+        <TabBar nav={nav} errors={registry.errors.length} version={version} onPick={(id) => update({ active: id, bar: true })} />
+        <box flexGrow={1} minHeight={0} flexDirection="column">
+          {nav.active === "inicio" ? <Menu store={store} registry={registry} nav={nav.menu} version={version} /> : null}
+          {nav.active === "modulos" ? <ModulesTab registry={registry} nav={nav} /> : null}
+          {CORE.includes(nav.active) ? <CoreTab key={nav.active} store={store} line={nav.active} cache={nav.core} /> : null}
+          {nav.active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}
+        </box>
       </box>
     </TabsProvider>
   );

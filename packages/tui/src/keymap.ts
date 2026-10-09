@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "tabs" | "session" | "palette";
+export type Scope = "global" | "menu" | "tabs" | "session" | "block" | "palette";
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -10,6 +10,8 @@ export interface Shortcut {
   scope: Scope;
   /** Shown in the footer line (while its scope is active). Always listed in the `?` help. */
   footer?: boolean;
+  /** Shown in the action row under the focused block. */
+  hint?: boolean;
 }
 
 /** The ONE shortcut table: the footer line and the `?` help both render from it. Add rows here. */
@@ -27,18 +29,20 @@ const base: readonly Shortcut[] = [
   { keys: "↓", label: "entra na aba", scope: "tabs", footer: true },
   { keys: "tab", label: "próxima aba", scope: "tabs", footer: true },
   { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
+  { keys: "r", label: "atualiza", scope: "tabs", footer: true }, // core tabs only (conformidade, plano, logs)
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
   { keys: "!!", label: "repete", scope: "session", footer: true },
   { keys: "#", label: "páginas", scope: "session", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "session", footer: true },
   { keys: "ctrl+l", label: "limpa", scope: "session", footer: true },
-  { keys: "alt+r", label: "repetir", scope: "session" }, // error-block actions: last block failed; a modifier so plain letters still type
-  { keys: "alt+l", label: "log do módulo", scope: "session" },
-  { keys: "alt+c", label: "copiar erro", scope: "session" },
   { keys: "tab", label: "completa", scope: "session" },
-  { keys: "esc", label: "foca as abas", scope: "session" }, // empty input; shift+tab also leaves for the tab bar
+  { keys: "esc", label: "foca os blocos", scope: "session" }, // empty input; with no blocks it focuses the tab bar (shift+tab always does)
   { keys: "enter", label: "roda", scope: "session" },
+  { keys: "↑↓", label: "move blocos", scope: "block", footer: true },
+  { keys: "r", label: "repetir", scope: "block", footer: true, hint: true },
+  { keys: "l", label: "log", scope: "block", footer: true, hint: true },
+  { keys: "c", label: "copiar", scope: "block", footer: true, hint: true },
 ];
 
 /** Base rows plus the palette's own, one row per keys + scope (the first one wins). */
@@ -51,16 +55,16 @@ export const footerFor = (scope: Scope): Shortcut[] =>
 const NAMES: Record<string, string> = { esc: "escape", enter: "return" };
 
 /**
- * True if the key event matches `spec` (`[ctrl+|shift+|meta+]name`).
+ * True if the key event matches `spec` (`[ctrl+|shift+]name`).
  * Shift pitfall: `key.name` is lowercase even with Shift, only `key.sequence` carries `L`.
- * So a single character (`l`, `L`, `?`, `space`) matches on `sequence`, never with ctrl/meta.
+ * So a single character (`l`, `L`, `?`, `space`) matches on `sequence`, never with ctrl.
  */
 export function matchKey(key: KeyEvent, spec: string): boolean {
   if (spec === "ctrl+j" && key.name === "linefeed") return true; // plain terminals: ctrl+j is a raw \n
   const parts = spec === "+" ? ["+"] : spec.split("+");
   const name = parts.pop()!;
-  const mods = new Set(parts.map((p) => (p === "alt" ? "meta" : p)));
-  if (!!key.ctrl !== mods.has("ctrl") || !!key.meta !== mods.has("meta")) return false;
+  const mods = new Set(parts);
+  if (!!key.ctrl !== mods.has("ctrl") || key.meta) return false; // no alt/meta combos: macOS terminals do not send them
   if (!mods.size) {
     if (name === "space") return key.sequence === " ";
     if ([...name].length === 1) return key.sequence === name;

@@ -104,13 +104,42 @@ test("a command with args opens the form and shows the result; a secret field st
   expect(t.frame()).not.toContain("hunter2zz");
 });
 
-test("a core tab runs the core command and shows its output", async () => {
+test("a core tab runs once on the first visit, then only on r; it leaves no block and no history", async () => {
   const { t, store } = await mount();
   await t.press("TAB"); // Módulos
   await t.press("TAB"); // Conformidade
   await t.flush();
-  expect(store.history.at(-1)).toBe("conformidade");
   expect(t.frame()).toContain("› conformidade");
+  expect(t.frame()).toMatch(/verificado às \d\d:\d\d/);
+  expect(store.history).toEqual([]);
+  expect(store.blocks).toEqual([]);
+  const first = t.frame().match(/verificado às \d\d:\d\d/)![0];
+  await t.press("TAB", { shift: true });
+  await t.press("TAB"); // back: cached, not run again
+  expect(t.frame()).toContain(first);
+  await t.press("r");
+  await t.flush();
+  expect(t.frame()).toMatch(/verificado às/);
+  expect(store.blocks).toEqual([]);
+  expect(store.history).toEqual([]);
+});
+
+test("switching tabs keeps focus on the bar (down goes in); the Comando draft survives a tab switch", async () => {
+  const { t } = await mount();
+  await t.press("ARROW_UP");
+  for (let i = 0; i < 5; i++) await t.press("ARROW_RIGHT"); // Comando, bar still focused
+  expect(t.frame()).toContain("tab próxima aba");
+  const inputRow = () => t.frame().split("\n").find((l) => l.includes("❯"))!;
+  expect(inputRow()).not.toContain("▌");
+  expect(t.frame()).toContain("digite um comando");
+  await t.press("ARROW_DOWN");
+  await t.type("demo gr");
+  await t.press("TAB", { shift: true }); // Comando input has focus: tab would complete; shift+tab leaves
+  expect(t.frame()).toContain("tab próxima aba");
+  await t.press("TAB"); // back to Comando, still the bar
+  expect(t.frame()).toContain("tab próxima aba");
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).toContain("❯ demo gr");
 });
 
 test("/ goes to the Comando tab, esc with an empty input focuses the bar, tab still completes there; ctrl+k opens the palette", async () => {
@@ -135,6 +164,23 @@ test("/ goes to the Comando tab, esc with an empty input focuses the bar, tab st
   expect(t.frame()).toContain("fila vazia");
   await t.press("ESCAPE");
   expect(t.frame()).not.toContain("fila vazia");
+});
+
+test("Comando: esc focuses the last block, up on the first block focuses the bar, down from the bar enters the input", async () => {
+  const { t } = await mount();
+  await t.press("/");
+  await t.type("demo greet ana");
+  await t.press("RETURN");
+  await t.flush();
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("» demo greet ana");
+  expect(t.frame()).toContain("r repetir");
+  await t.press("ARROW_UP");
+  expect(t.frame()).toContain("tab próxima aba"); // bar focused, block not
+  expect(t.frame()).not.toContain("» demo greet ana");
+  await t.press("ARROW_DOWN");
+  await t.type("x");
+  expect(t.frame()).toContain("❯ x");
 });
 
 test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", async () => {
@@ -188,6 +234,20 @@ test("tabs: each tab keeps its state; a failed module in Módulos opens its log"
   expect(t.frame()).toContain("log throws-on-load");
   await t.press("ESCAPE");
   expect(t.frame()).toContain("» ✗ throws-on-load");
+});
+
+test("Módulos: the bar hides the selection and the first row sits fully below the bar", async () => {
+  const { t } = await mount({ cols: 80, rows: 24 });
+  await t.press("TAB");
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).toMatch(/» /);
+  await t.press("ARROW_UP");
+  expect(t.frame()).not.toMatch(/» /); // bar focused: no highlight
+  const lines = t.frame().split("\n");
+  expect(lines[0]).toContain("Módulos");
+  expect(lines[1]).toContain("› módulos"); // the box title right under the bar, not clipped
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).toMatch(/» /);
 });
 
 test("tabs: Módulos shows the load error count and the bar fits 80 columns", async () => {

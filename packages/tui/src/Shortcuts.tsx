@@ -25,10 +25,10 @@ export function Footer({ scope }: { scope: Scope }) {
   );
 }
 
-const titles: Record<Scope, string> = { global: "geral", menu: "menu", tabs: "abas", session: "sessão", palette: "palette" };
+const titles: Record<Scope, string> = { global: "geral", menu: "menu", tabs: "abas", session: "sessão", block: "", palette: "palette" };
 
-/** Two columns, so every scope fits in 80x24. */
-const columns: Scope[][] = [["session", "menu"], ["palette", "global", "tabs"]];
+/** Two columns, so every scope fits in 80x24 (the block rows sit under "sessão", with no title of their own). */
+const columns: Scope[][] = [["session", "block", "menu"], ["palette", "global", "tabs"]];
 
 /** The `?` overlay: every shortcut in the table, by scope. A modal: it owns the keyboard. */
 export function HelpOverlay({ onClose }: { onClose: () => void }) {
@@ -37,13 +37,13 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
     if (k.name === "escape" || k.sequence === "?" || k.name === "q") onClose();
   }, { modal: true });
   return (
-    <box position="absolute" top={0} left={2} zIndex={10} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)} title={`${g.active} ajuda`}>
+    <box position="absolute" top={0} left={2} zIndex={10} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)} title={`${g.active} ajuda · esc fecha`}>
       <box flexDirection="row" gap={2} flexShrink={0}>
         {columns.map((col) => (
           <box key={col[0]} flexDirection="column" flexShrink={0}>
             {col.map((scope) => (
               <box key={scope} flexDirection="column" flexShrink={0}>
-                <text fg={c.dim}>{titles[scope]}</text>
+                {titles[scope] ? <text fg={c.dim}>{titles[scope]}</text> : null}
                 {shortcuts.filter((s) => s.scope === scope).map((s) => (
                   <text key={s.keys}>
                     <span fg={c.accent}><b>{s.keys.padEnd(11)}</b></span>
@@ -55,7 +55,6 @@ export function HelpOverlay({ onClose }: { onClose: () => void }) {
           </box>
         ))}
       </box>
-      <text fg={c.dim}>esc fecha</text>
     </box>
   );
 }

@@ -18,7 +18,7 @@ export function Result({ store, id, onBack }: { store: Pick<SessionApi, "subscri
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={`${g.query} resultado`}>
       <scrollbox flexGrow={1} minHeight={0} focused={false}>
-        {b ? <BlockView b={b} actions={false} tick={0} onPick={noop} /> : null}
+        {b ? <BlockView b={b} focused={false} tick={0} onPick={noop} /> : null}
       </scrollbox>
       <text fg={c.dim}>{" enter ou esc volta"}</text>
     </box>

@@ -4,7 +4,7 @@ import { createClipboard, createHostClipboard, createRendererClipboardAdapter, t
 import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
-import { useRouter } from "../router.tsx";
+import { useRouter, useScreenScope } from "../router.tsx";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
 import { BlockView } from "./Blocks.tsx";
@@ -37,18 +37,21 @@ function Popup({ items, sel }: { items: Candidate[]; sel: number }) {
 }
 
 /** The command-first screen. State lives in `store` (the router mounts only the top screen). */
-export function Session({ store, registry }: { store: SessionApi; registry: Registry }) {
+export function Session({ store, registry, draft }: { store: SessionApi; registry: Registry; draft?: { draft: string } }) {
   const { c, g, box, axes } = useTheme();
   const router = useRouter();
   const tabs = useTabs();
   const renderer = useRenderer();
   const { blocks, history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const [input, setInput] = useState("");
+  const [input, setInputRaw] = useState(draft?.draft ?? "");
+  // The draft lives outside the component (memory only): the tab switch unmounts this screen.
+  const setInput = useCallback((v: string) => (setInputRaw(v), draft && (draft.draft = v)), [draft]);
   const [hi, setHi] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
   const [search, setSearch] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const [fb, setFb] = useState<number | null>(null); // focused block, by id
   const scroll = useRef<ScrollBoxRenderable>(null);
 
   const searching = search !== null;
@@ -61,7 +64,15 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   const at = Math.min(sel, items.length - 1);
 
   const last = blocks.at(-1);
-  const target = last?.status === "error" ? last : undefined;
+  const barFocused = tabs?.focused === false;
+  const focus = barFocused ? undefined : blocks.find((b) => b.id === fb);
+  useScreenScope(barFocused ? "tabs" : focus ? "block" : "session");
+  useEffect(() => {
+    if (barFocused) setFb(null); // coming back from the bar lands in the input
+  }, [barFocused]);
+  useEffect(() => {
+    if (focus) scroll.current?.scrollChildIntoView(`b${focus.id}`);
+  }, [focus?.id]);
   useEffect(() => {
     if (last) scroll.current?.scrollChildIntoView(`b${last.id}`);
   }, [last?.id, last?.status]);
@@ -75,7 +86,7 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
   }, [running]);
   const recall = useCallback((line: string) => (setInput(line), setHi(null), setSel(0)), []);
 
-  const pick = useCallback((b: Block) => recall(store.lineOf(b.id)), [recall, store]);
+  const pick = useCallback((b: Block) => setFb(b.id), []);
 
   const edit = (f: (s: string) => string) => {
     if (searching) setSearch(f(search));
@@ -98,7 +109,27 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
     if (matchKey(k, "ctrl+l")) return store.clear(), true;
     if (matchKey(k, "ctrl+r")) return setSearch(search ?? ""), setSel(0), true;
     if (k.name === "escape" && (searching || input)) return searching ? setSearch(null) : (setInput(""), setHi(null)), true;
-    if (k.name === "escape" && tabs) return tabs.focusBar(), true; // empty input: leave for the tab bar
+    if (focus && !searching) {
+      const i = blocks.indexOf(focus);
+      if (k.name === "up") return i > 0 ? setFb(blocks[i - 1]!.id) : (setFb(null), tabs?.focusBar()), true;
+      if (k.name === "down") return setFb(blocks[i + 1]?.id ?? null), true;
+      if (k.name === "escape") return setFb(null), true;
+      if (matchKey(k, "enter")) return recall(store.lineOf(focus.id)), setFb(null), true;
+      if (matchKey(k, "r")) return void store.repeat(focus.id), true;
+      if (matchKey(k, "l")) return router.push({ id: "log", element: <LogScreen moduleId={focus.moduleId} /> }), true;
+      if (matchKey(k, "c")) {
+        const errors = focus.lines.filter((l) => l.kind === "error");
+        const text = (errors.length ? errors : focus.lines).map((l) => l.text).join("\n");
+        // Host + OSC52: the terminal path alone fails under tmux and SSH.
+        const clip = createClipboard({ host: createHostClipboard(), terminal: createRendererClipboardAdapter(renderer) });
+        void clip.writeText(text, { destination: "best-available" }).finally(() => clip.dispose());
+        return setNote("copiado"), true;
+      }
+      if (k.sequence === "?" || k.ctrl) return;
+      if (printable(k.sequence)) setFb(null); // any other letter goes back to the input and types
+      else return;
+    }
+    if (k.name === "escape") return last ? setFb(last.id) : tabs?.focusBar(), true; // empty input: last block, else the tab bar
     if (matchKey(k, "enter")) {
       if (!searching) return submit(), true;
       if (items[at]) setInput(items[at].text);
@@ -121,34 +152,24 @@ export function Session({ store, registry }: { store: SessionApi; registry: Regi
       return true;
     }
     if (k.name === "backspace") return edit((s) => [...s].slice(0, -1).join("")), true;
-    if (!input && !searching && target) {
-      if (matchKey(k, "alt+r")) return void store.repeat(target.id), true;
-      if (matchKey(k, "alt+l")) return router.push({ id: "log", element: <LogScreen moduleId={target.moduleId} /> }), true;
-      if (matchKey(k, "alt+c")) {
-        const text = target.lines.filter((l) => l.kind === "error").map((l) => l.text).join("\n");
-        // Host + OSC52: the terminal path alone fails under tmux and SSH.
-        const clip = createClipboard({ host: createHostClipboard(), terminal: createRendererClipboardAdapter(renderer) });
-        void clip.writeText(text, { destination: "best-available" }).finally(() => clip.dispose());
-        return setNote("copiado"), true;
-      }
-    }
     if (k.sequence === "?" && !input && !searching) return;
     if (printable(k.sequence) && !k.ctrl && !k.meta) return edit((s) => s + k.sequence), true;
   });
 
   const hint = note ?? (searching ? "enter escolhe · esc sai" : "tab completa · enter roda");
+  const inputFocused = !barFocused && !focus;
   const typed = searching ? `(busca) ${search}` : input;
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom" focused={false} contentOptions={{ gap: 1 }}>
-        {blocks.map((b) => <BlockView key={b.id} b={b} actions={b === target} tick={b.status === "running" ? tick : 0} onPick={pick} />)}
+        {blocks.map((b) => <BlockView key={b.id} b={b} focused={b === focus} tick={b.status === "running" ? tick : 0} onPick={pick} />)}
       </scrollbox>
       {items.length ? <Popup items={items} sel={at} /> : null}
-      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(c.accent)}>
+      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(inputFocused ? c.accent : undefined)}>
         <text>
-          <span fg={c.accent}><b>{`${g.prompt} `}</b></span>
-          <span fg={c.text}>{typed}</span>
-          <span bg={c.accent}>{" "}</span>
+          <span fg={inputFocused ? c.accent : c.dim}><b>{`${g.prompt} `}</b></span>
+          {typed || inputFocused ? <span fg={c.text}>{typed}</span> : <span fg={c.dim}>digite um comando</span>}
+          {inputFocused ? <span bg={c.accent}>{" "}</span> : null}
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>
