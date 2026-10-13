@@ -91,7 +91,7 @@ async function mount(o: MountOpts = {}) {
     catalog: async () => o.catalog ?? { modules: [], source: "embutido" as const },
     pending: async () => o.pending ?? [],
   };
-  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" modules={modules} /> };
+  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} modules={modules} /> };
   h = await renderTui(
     <App root={root} logger={quiet()} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />,
     { cols: o.cols ?? 120, rows: o.rows ?? 40 },

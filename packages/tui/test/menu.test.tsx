@@ -31,7 +31,7 @@ async function mount(opts: { isRoot?: boolean; cols?: number; rows?: number; mod
     registry, makeLogger, isRoot, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
   });
-  const root = { id: "menu", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" /> };
+  const root = { id: "menu", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(
     <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     { cols: opts.cols, rows: opts.rows },

@@ -32,7 +32,7 @@ async function mount(registry: Registry, opts: { cols?: number; rows?: number } 
     core: (argv) => (argv[0] !== "logs" && calls.push(argv[0]!), runCapture({ env, isRoot: true, registry, makeLogger, profilesDir, version: "0.1.0", theme }, argv)),
   });
   cur = store;
-  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" /> };
+  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(
     <App root={root} logger={quiet()} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />,
     { cols: opts.cols ?? 120, rows: opts.rows ?? 40 },
