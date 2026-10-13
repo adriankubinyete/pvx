@@ -15,7 +15,7 @@ export interface TuiState {
 }
 
 export function defaultTuiState(): TuiState {
-  return { theme: "dark", accent: "menta", symbols: "unicode", border: "rounded", result: "bracket", custom: {} };
+  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {} };
 }
 
 export function tuiStatePath(): string {

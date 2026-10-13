@@ -102,6 +102,24 @@ export function accentFor(theme: ThemeName, name: string): string | undefined {
   return (theme === "light" ? lightAccents : accents)[name as AccentName];
 }
 
+/** `top` laid over `under` at `ratio` (0 to 1), both `#rrggbb`; the result is `#rrggbb`. */
+export function blend(top: string, under: string, ratio: number): string {
+  const a = parseInt(top.slice(1), 16), b = parseInt(under.slice(1), 16);
+  const mix = (shift: number) => Math.round(((a >> shift) & 255) * ratio + ((b >> shift) & 255) * (1 - ratio));
+  return `#${[16, 8, 0].map((s) => mix(s).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Share of the accent in `selected`, low enough to keep every text token readable on it with any accent preset. */
+const SELECTED_MIX = { dark: 0.12, light: 0.15, contrast: 0.12 } as const;
+
+/** The theme's tokens with the accent axis applied. Built-in themes tint `selected` with the effective accent; terminal and custom keep their own. */
+export function applyAccent(theme: ThemeName, base: Tokens, name: string): Tokens {
+  const accent = accentFor(theme, name) ?? base.accent;
+  const out: Tokens = { ...base, accent };
+  if (theme in SELECTED_MIX) out.selected = blend(accent, base.bg, SELECTED_MIX[theme as keyof typeof SELECTED_MIX]);
+  return out;
+}
+
 /** Axis 2: symbols. Every glyph is one cell wide and has an ASCII fallback. */
 export const glyphs = {
   unicode: {

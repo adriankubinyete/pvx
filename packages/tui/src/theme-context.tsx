@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createTuiStateWriter, loadTuiState, type TuiState } from "@pvx/core";
 import { useRenderer } from "@opentui/react";
-import { accentFor, glyphs, resultMarker, tokensFor, type Glyphs, type ResultKind, type Tokens } from "./theme.ts";
+import { applyAccent, glyphs, resultMarker, tokensFor, type Glyphs, type ResultKind, type Tokens } from "./theme.ts";
 
 export interface ThemeApi {
   /** Color tokens with the chosen accent applied. */
@@ -44,8 +44,7 @@ export function ThemeProvider({ statePath, children }: { statePath?: string; chi
 
   const renderer = useRenderer();
   const api = useMemo<ThemeApi>(() => {
-    const base = tokensFor(axes.theme, axes.custom);
-    const c: Tokens = { ...base, accent: accentFor(axes.theme, axes.accent) ?? base.accent };
+    const c = applyAccent(axes.theme, tokensFor(axes.theme, axes.custom), axes.accent);
     const g = glyphs[axes.symbols];
     const level = { ok: c.accent, warn: c.warn, error: c.error, info: c.info };
     return {
