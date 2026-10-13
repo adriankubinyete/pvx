@@ -197,12 +197,19 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
         if (out.length > MAX_SHELL_LINES) out.splice(0, out.length - MAX_SHELL_LINES);
         timer ??= setTimeout(flush, 50);
       };
-      const run = spawnShell(cmd, shellTimeoutMs, (text, stderr) => {
-        const key = stderr ? "err" : "out";
-        const parts = (rest[key] + text).split("\n");
-        rest[key] = parts.pop()!;
-        if (parts.length) push(stderr, parts.join("\n"));
-      });
+      let run: ShellRun;
+      try {
+        run = spawnShell(cmd, shellTimeoutMs, (text, stderr) => {
+          const key = stderr ? "err" : "out";
+          const parts = (rest[key] + text).split("\n");
+          rest[key] = parts.pop()!;
+          if (parts.length) push(stderr, parts.join("\n"));
+        });
+      } catch (e) {
+        // The session fires `run` and forgets it: unhandled, this prints a stack over the screen and the block never settles.
+        settle(id, t0, 1, [{ kind: "error", text: `não foi possível abrir o shell do host: ${(e as Error).message}` }]);
+        return { exit: 1 };
+      }
       shells.set(id, run);
       const r = await run.done;
       shells.delete(id);

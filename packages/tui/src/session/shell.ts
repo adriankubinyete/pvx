@@ -19,11 +19,24 @@ export interface ShellRun {
   cancel(): void;
 }
 
-/** `/bin/sh -c cmd`, no stdin, no TTY. `onData` gets raw text per chunk; the caller splits and sanitizes. */
+const WINDOWS = process.platform === "win32";
+
+/**
+ * Windows has no `/bin/sh`: PowerShell is always there and keeps `ls`/`echo`/`sleep` working.
+ * The preamble forces UTF-8 (the OEM code page drops accents) and hides progress records (they leak into a piped stderr).
+ * Cost: an error raised by the line itself (`Write-Error`, `throw`) echoes the preamble.
+ */
+const PS_PREAMBLE = "[Console]::OutputEncoding=[Text.Encoding]::UTF8;$ProgressPreference='SilentlyContinue'";
+const shellArgv = (cmd: string) =>
+  WINDOWS ? ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `${PS_PREAMBLE}\n${cmd}`] : ["/bin/sh", "-c", cmd];
+
+/** `/bin/sh -c cmd` (PowerShell on Windows), no stdin, no TTY. `onData` gets raw text per chunk; the caller splits and sanitizes. */
 export function spawnShell(cmd: string, timeoutMs: number, onData: (text: string, stderr: boolean) => void): ShellRun {
-  const proc = Bun.spawn(["/bin/sh", "-c", cmd], { stdin: "ignore", stdout: "pipe", stderr: "pipe", detached: true });
+  const proc = Bun.spawn(shellArgv(cmd), { stdin: "ignore", stdout: "pipe", stderr: "pipe", detached: !WINDOWS, windowsHide: true });
   let reason: "timeout" | "cancel" | undefined;
   const signal = (sig: NodeJS.Signals) => {
+    // Windows has no process groups and proc.kill leaves the shell's children running: taskkill /T takes the tree.
+    if (WINDOWS) return void Bun.spawn(["taskkill", "/T", "/F", "/PID", String(proc.pid)], { stdout: "ignore", stderr: "ignore", windowsHide: true });
     try {
       process.kill(-proc.pid, sig); // the group: `sh -c` may have forked the real program
     } catch {
