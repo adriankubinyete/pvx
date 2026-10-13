@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useReducer, useState, useSyncExternalStore } from "react";
-import { hostname } from "node:os";
-import { pageWithRole, primaryIp, readMachine, type Registry } from "@pvx/core";
+import { createMachineSampler, pageWithRole, type MachineSampler, type Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
@@ -15,7 +14,8 @@ import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
 import { hhmm } from "./CoreTab.tsx";
 import { conformityOf } from "./conformity.ts";
-import { activity, fmtUptime, levelOf, meter, parseConformity, relTime, slotItems, syncHost, type Att, type Chip } from "./home.ts";
+import { machineCard, planCard, type Tone } from "./machine-card.ts";
+import { activity, meter, parseConformity, relTime, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
 const BASE_PANELS = ["conformidade", "atividade"] as const;
@@ -30,8 +30,10 @@ export interface HomeNav {
 }
 export const createHomeNav = (): HomeNav => ({ panel: "conformidade", inside: false, sel: {} });
 
-const SIDE_W = 40;
-const hms = (t: number) => new Date(t).toTimeString().slice(0, 8);
+/** Outer width of the máquina panel beside conformidade; its inner width is 4 less (border and padding). */
+const machWidth = (cols: number) => (cols >= 200 ? 100 : 58);
+const SAMPLE_MS = 2000;
+let shared: MachineSampler | undefined;
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, Math.max(0, n - 1))}…` : s);
 
 interface Row {
@@ -79,10 +81,10 @@ function Rows({ rows, sel, focused, w, onPick }: { rows: Row[]; sel?: string; fo
 }
 
 /** The Início tab: a dashboard. Machine, conformidade (pending items) and activity; enter on an item puts its command in the Comando input. */
-export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; nav: TabsNav; profile?: string | null; registry: Registry }) {
+export function HomeTab({ store, nav, profile, registry, sampler }: { store: SessionApi; nav: TabsNav; profile?: string | null; registry: Registry; sampler?: MachineSampler }) {
   const slots = registry.slots;
   const { c, g } = useTheme();
-  const { cols, narrow } = useLayout();
+  const { cols, rows: termRows, narrow } = useLayout();
   const tabs = useTabs();
   const nudge = useNudge();
   const panels = usePanelNav();
@@ -90,14 +92,14 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
   useScreenScope(nav.home.inside ? "homein" : "home", 1); // inside a panel the footer changes; the tab bar (rank 2) still outranks it
   const { history, blocks } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [, bump] = useReducer((n: number) => n + 1, 0);
-  const [m, setM] = useState(readMachine);
-  const [readAt, setReadAt] = useState(Date.now);
+  const machine = useMemo(() => sampler ?? (shared ??= createMachineSampler()), [sampler]);
+  const [m, setM] = useState(() => machine.sample());
   const [now, setNow] = useState(Date.now);
   // The only timer: it exists while Início is mounted.
   useEffect(() => {
-    const t = setInterval(() => (setM(readMachine()), setReadAt(Date.now()), setNow(Date.now())), 5000);
+    const t = setInterval(() => (setM(machine.sample()), setNow(Date.now())), SAMPLE_MS);
     return () => clearInterval(t);
-  }, []);
+  }, [machine]);
   // The slot hub's single scheduler runs while Início is mounted; its changes re-render here.
   const makeLogger = usePages()?.makeLogger;
   useEffect(() => {
@@ -106,7 +108,6 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     return () => (off(), stop());
   }, [slots]);
   const favorites = useMemo(() => loadFavorites(), []);
-  const ip = useMemo(primaryIp, []);
 
   const color = { ok: c.accent, warn: c.warn, error: c.error };
   const conf = conformityOf(store); // the cache module pages read too
@@ -178,18 +179,8 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     if (k.sequence === "/") return tabs?.goto("comando"), true;
   });
 
-  const gauge = (label: string, pct: number, text: string) => {
-    const [full, empty] = meter(pct, 10, g);
-    return (
-      <text wrapMode="none" flexShrink={0}>
-        <span fg={c.dim}>{label.padEnd(8)}</span>
-        <span fg={color[levelOf(pct)]}>{full}</span>
-        <span fg={c.dim}>{empty}</span>
-        <span fg={c.text}>{` ${text}`}</span>
-      </text>
-    );
-  };
-  const confW = narrow ? cols - 2 : cols - 2 - SIDE_W;
+  const machW = machWidth(cols);
+  const confW = narrow ? cols - 2 : cols - 2 - machW;
 
   const total = done?.total ?? 0;
   const pct = total ? (done!.ok / total) * 100 : 0;
@@ -221,17 +212,20 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
       <Rows rows={rows.notas} sel={cur("notas")?.id} focused={focused && nav.home.panel === "notas" && nav.home.inside} w={cols - 6} onPick={() => goNotes()} />
     </Panel>
   );
+  // The card takes its full height unless the other panels would starve; then rows drop by priority (see planCard).
+  const innerW = (narrow ? cols - 2 : machW) - 4;
+  const notasH = rows.notas.length ? Math.min(rows.notas.length, 3) + 2 : 0;
+  const avail = termRows - 2 - (chips.length || brokenChips.length ? 1 : 0) - notasH;
+  const cardRows = (max: number) => planCard(m.cpu.cores.length, innerW, max).rows;
+  const machH = Math.max(cardRows(0), Math.min(cardRows(Infinity), avail - (narrow ? 9 : 5) - 2)) + 2; // the always-kept rows are the floor
+  const tone: Record<Tone, string> = { dim: c.dim, text: c.text, accent: c.accent, warn: c.warn, error: c.error, info: c.info };
   const maquina = (
-    <Panel panelRef={panels.ref("maquina")} title="máquina" focused={focused && nav.home.panel === "maquina"} width={narrow ? undefined : SIDE_W} height={narrow ? 8 : undefined}>
-      <text wrapMode="none" flexShrink={0}>
-        <span fg={c.text}><b>{cut(clean(hostname()), SIDE_W - 4 - (ip ? ip.length + 2 : 0))}</b></span>
-        <span fg={c.dim}>{ip ? `  ${ip}` : ""}</span>
-      </text>
-      {gauge("carga", (m.load / m.cpus) * 100, m.load.toFixed(2))}
-      {gauge("ram", m.ramPct, `${Math.round(m.ramPct)}%`)}
-      {gauge("disco /", m.diskPct, `${Math.round(m.diskPct)}%`)}
-      <text fg={c.dim} wrapMode="none" flexShrink={0}>{`uptime ${fmtUptime(m.uptime)}`}</text>
-      <text fg={c.dim} wrapMode="none" flexShrink={0}>{`atualizado ${hms(readAt)}`}</text>
+    <Panel panelRef={panels.ref("maquina")} title="máquina" focused={focused && nav.home.panel === "maquina"} width={narrow ? undefined : machW} height={machH}>
+      {machineCard(m, innerW, machH - 2, g).map((line, i) => (
+        <text key={i} wrapMode="none" flexShrink={0}>
+          {line.map(([t, k, bold], j) => <span key={j} fg={tone[k]}>{bold ? <b>{t}</b> : t}</span>)}
+        </text>
+      ))}
     </Panel>
   );
   const atividade = (
@@ -241,7 +235,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     </Panel>
   );
 
-  // Top row: máquina | conformidade; atividade below, full width. Narrow: one column. The areas share the height; each panel clips.
+  // Top row: máquina | conformidade (as tall as the card); atividade below, full width. Narrow: one column. The areas share the height; each panel clips.
   const chipLine = chips.length || brokenChips.length ? (
     <text wrapMode="none" flexShrink={0} height={1} paddingX={1}>
       {chips.map((ch) => (
@@ -260,8 +254,8 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
         <>{maquina}{conformidade}{atividade}{rows.notas.length ? notas : null}</>
       ) : (
         <>
-          <box flexGrow={1} flexBasis={0} minHeight={8} flexDirection="row">{maquina}{conformidade}</box>
-          <box flexGrow={1} flexBasis={0} minHeight={6} flexDirection="column">{atividade}</box>
+          <box height={machH} flexShrink={0} flexDirection="row">{maquina}{conformidade}</box>
+          <box flexGrow={1} flexBasis={0} minHeight={4} flexDirection="column">{atividade}</box>
           {rows.notas.length ? notas : null}
         </>
       )}

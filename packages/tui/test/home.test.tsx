@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { hostname } from "node:os";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
 import { saveFavorites } from "../src/palette/favorites.ts";
+import { snap } from "./machine-fixture.ts";
 
 const fixtures = join(import.meta.dir, "../../core/test/fixtures");
 let h: TuiHarness | undefined;
@@ -16,13 +16,13 @@ beforeEach(async () => {
   await loadModules(registry, { hostVersion: "0.1.0", makeLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }) });
 });
 
-async function mount(opts: { cols?: number; rows?: number; profile?: string } = {}) {
+async function mount(opts: { cols?: number; rows?: number; profile?: string; cores?: number } = {}) {
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: { PVX_PROFILE: "main" }, isRoot: true, registry, makeLogger, profilesDir: join(fixtures, "profiles"), version: "0.1.0", theme }, argv),
   });
-  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} profile={opts.profile} /> };
+  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} profile={opts.profile} sampler={{ sample: () => snap(opts.cores ?? 8) }} /> };
   h = await renderTui(
     <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     { cols: opts.cols, rows: opts.rows },
@@ -33,7 +33,7 @@ async function mount(opts: { cols?: number; rows?: number; profile?: string } = 
 test("Início renders the four zones at 120x40 and stays one column at 80x24", async () => {
   const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
   const f = t.frame();
-  for (const s of [hostname().slice(0, 12), "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "carga", "ram", "disco /", "uptime", "› [1] conformidade", "› [2] atividade", "▰", "▱"]) expect(f).toContain(s);
+  for (const s of ["central-sp-01", "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "─ cpu", "carga 2.14", "mem ", "disco ", "asterisk 68%", "› [1] conformidade", "› [2] atividade", "▰", "▱"]) expect(f).toContain(s);
   const row = f.split("\n").find((l) => l.includes("› máquina"))!;
   expect(row).toContain("› [1] conformidade"); // two columns
   t.destroy();
@@ -41,7 +41,7 @@ test("Início renders the four zones at 120x40 and stays one column at 80x24", a
   const small = await mount({ cols: 80, rows: 24 });
   const lines = small.t.frame().split("\n");
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
-  for (const s of ["sem perfil", "› máquina", "› [1] conformidade", "› [2] atividade", "uptime", "não verificado", "r atualiza"]) expect(small.t.frame()).toContain(s);
+  for (const s of ["sem perfil", "› máquina", "› [1] conformidade", "› [2] atividade", "─ cpu", "disco ", "atualizado 14:32:07", "não verificado", "r atualiza"]) expect(small.t.frame()).toContain(s);
   expect(lines.some((l) => l.includes("› máquina") && l.includes("› [1] conformidade"))).toBe(false);
 });
 
@@ -118,7 +118,7 @@ test.each([[230, 24], [120, 40], [100, 30], [80, 24]] as const)("rows never over
   expect(at("› [2] atividade")).toHaveLength(1);
   expect(at("↑↓←→ painel")).toEqual([rows - 1]);
   expect(lines.filter((l) => l.includes("pvx 0.1.0"))).toHaveLength(1); // the version only in the bar
-  expect(lines.filter((l) => l.includes(hostname().slice(0, 12)))).toHaveLength(1); // the host only in máquina
+  expect(lines.filter((l) => l.includes("central-sp-01"))).toHaveLength(1); // the host only in máquina
 });
 
 test("below the minimum size only the notice shows (no half-drawn layout)", async () => {
@@ -151,4 +151,44 @@ test("spatial arrows at 80x24 (stacked): → has nothing on the right, ↓ goes 
   await t.press("ARROW_UP");
   await t.press("ARROW_UP"); // máquina is above conformidade
   expect(t.frame()).toContain("› máquina ●");
+});
+
+// Each card row must end exactly at the panel's right border: `│ <row> │`.
+test.each([[80, 24], [120, 40], [230, 25]] as const)("máquina card rows end at the panel border at %ix%i", async (cols, rows) => {
+  const { t } = await mount({ cols, rows });
+  const lines = t.frame().split("\n");
+  for (const s of ["─ cpu", "─ memória · disco"]) {
+    const l = lines.filter((x) => x.includes(s));
+    expect(l).toHaveLength(1);
+    expect(l[0]).toMatch(new RegExp(`│ ${s}[ ─]+ │`));
+  }
+  for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
+  expect(lines.filter((x) => x.includes("atualizado 14:32:07"))).toHaveLength(1);
+  expect(lines.filter((x) => x.includes("› máquina"))).toHaveLength(1);
+  expect(lines.filter((x) => x.includes("› [2] atividade"))).toHaveLength(1);
+  expect(lines.filter((x) => /^ │ \d /.test(x)).length).toBeGreaterThanOrEqual(4); // cores are always kept
+  expect(lines.filter((x) => x.includes("mem ")).length).toBeGreaterThan(0);
+  expect(lines.some((x) => x.includes("disco "))).toBe(true);
+});
+
+test("priority dropping at 80x24, the full card at 120x40, the second graph row at 230x25", async () => {
+  let f = (await mount({ cols: 80, rows: 24 })).t.frame();
+  for (const s of ["asterisk", "eth0", "─ rede", "swap"]) expect(f).not.toContain(s);
+  for (const s of ["─ cpu", "mem ", "disco ", "› [1] conformidade", "› [2] atividade"]) expect(f).toContain(s);
+  h?.destroy();
+  f = (await mount({ cols: 120, rows: 40 })).t.frame();
+  for (const s of ["asterisk 68%", "eth0", "swap", "↓ 1.2 MB/s"]) expect(f).toContain(s);
+  h?.destroy();
+  const wide = (await mount({ cols: 230, rows: 25 })).t.frame().split("\n");
+  const cpu = wide.findIndex((l) => l.includes("─ cpu"));
+  expect(wide[cpu + 1]).toContain("carga");
+  expect(wide[cpu + 2]).toMatch(/│ [⠀-⣿ ]+ +│/); // the second graph row has no text
+  expect(wide.filter((l) => l.includes("cron 1%"))).toHaveLength(0); // procs row dropped by height
+});
+
+test("16+ cores: four columns without the % label", async () => {
+  const { t } = await mount({ cols: 120, rows: 40, cores: 32 });
+  const cores = t.frame().split("\n").filter((l) => /^ │ +\d+ ▰|^ │ +\d+ ▱/.test(l));
+  expect(cores).toHaveLength(8);
+  expect(cores[0]!.slice(0, 58)).not.toContain("%");
 });
