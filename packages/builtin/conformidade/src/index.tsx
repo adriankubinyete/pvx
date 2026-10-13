@@ -132,7 +132,7 @@ export default (sdk: Sdk) => {
     const move = (key: "left" | "right" | "up" | "down" | "enter") => {
       const st = nav.step({ panel: String(panel), inside: false }, key, () => 0);
       if (!st) return;
-      if (st.bar) return nudge("nada aqui");
+      if (st.bar) return nav.toBar();
       return st.nudge ? nudge(st.nudge) : setPanel(Number(st.panel) as 1 | 2);
     };
     useKey("←", "painel", () => move("left"));

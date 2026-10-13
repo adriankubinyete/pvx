@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
+import type { ReactNode } from "react";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, helpFor, Tabs, theme, ui } from "../src/index.ts";
@@ -258,4 +259,80 @@ test("a pushed page shows one border: the host frame, titled › name; the root 
   await toDemo(t); // the same rule in a page tab
   await t.press("ARROW_DOWN");
   expect(t.frame().split("\n").filter((l) => l.includes("╭"))).toHaveLength(1);
+});
+
+// The SDK components return `unknown`; typed loosely so the test can use JSX.
+const { Panel, Text } = ui as unknown as Record<"Panel" | "Text", (p: Record<string, unknown>) => ReactNode>;
+
+/** Two stacked panels on the Início rule: ↑ on the top one goes to the tab bar; esc leaves "inside" through `useBack`. */
+function stackedRegistry(back: "leave" | "none", calls: string[]) {
+  function Stacked() {
+    const p = ui.usePanels();
+    const [panel, setPanel] = ui.useState("b");
+    const [inside, setInside] = ui.useState(false);
+    ui.useKey("↑", "sobe", () => {
+      const st = p.step({ panel, inside: false }, "up", () => 1);
+      if (st?.bar) p.toBar();
+      else if (st) setPanel(st.panel);
+    });
+    ui.useKey("enter", "entra", () => setInside(true));
+    ui.useBack(back === "leave" && inside ? () => (calls.push("leave"), setInside(false)) : undefined);
+    return (
+      <>
+        <Panel title="A" panelRef={p.ref("a")}><Text>a</Text></Panel>
+        <Panel title="B" panelRef={p.ref("b")}><Text>{`panel=${panel} inside=${inside}`}</Text></Panel>
+      </>
+    );
+  }
+  const reg = createRegistry();
+  reg.register({ id: "stk", version: "1.0.0", entry: "x" }, { pages: { stacked: { title: "Pilha", tab: true, render: () => <Stacked /> } } });
+  return reg;
+}
+
+test("usePanels().toBar: ↑ on the top panel of a page tab focuses the tab bar", async () => {
+  const t = await mount({ registry: stackedRegistry("none", []) });
+  await toDemo(t);
+  await t.press("ARROW_DOWN"); // into the page
+  expect(t.frame()).toContain("panel=b");
+  await t.press("ARROW_UP");
+  await t.waitForFrame((f) => f.includes("panel=a")); // b is below a
+  await t.press("ARROW_UP");
+  expect(lastLine(t)).toContain("↓/enter entra na aba");
+});
+
+test("useBack(fn): esc calls fn and stays on the page; with undefined esc goes back to the bar", async () => {
+  const calls: string[] = [];
+  const t = await mount({ registry: stackedRegistry("leave", calls) });
+  await toDemo(t);
+  await t.press("ARROW_DOWN");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("inside=true");
+  await t.press("ESCAPE");
+  expect(calls).toEqual(["leave"]);
+  expect(t.frame()).toContain("inside=false");
+  expect(lastLine(t)).not.toContain("↓/enter entra na aba"); // still on the page
+  await t.press("ESCAPE"); // fn undefined now: the default
+  expect(lastLine(t)).toContain("↓/enter entra na aba");
+  expect(calls).toEqual(["leave"]);
+});
+
+test("useBack on a pushed page: esc calls fn first, then pops", async () => {
+  const calls: string[] = [];
+  function Pushed() {
+    const [on, setOn] = ui.useState(true);
+    ui.useBack(on ? () => (calls.push("back"), setOn(false)) : undefined);
+    return <Text>{`on=${on}`}</Text>;
+  }
+  const reg = createRegistry();
+  reg.register({ id: "psh", version: "1.0.0", entry: "x" }, { pages: { pushed: { title: "Empurrada", render: () => <Pushed /> } } });
+  const t = await mount({ registry: reg });
+  await t.press("k", { ctrl: true });
+  await t.type("#psh.pushed");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("on=true");
+  await t.press("ESCAPE");
+  expect(calls).toEqual(["back"]);
+  expect(t.frame()).toContain("on=false");
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("Início");
 });

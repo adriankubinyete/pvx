@@ -5,6 +5,7 @@ import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useNudge as useHostNudge } from "../nudge.tsx";
 import { usePanelNav } from "../panelnav.ts";
+import { useTabs } from "../tabs/context.ts";
 import { useLayout } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
 
@@ -25,7 +26,15 @@ export interface HostPage {
   pop(): void;
   /** Adds a key to the page (`useKey`); returns the remover. Reserved keys are ignored. */
   addKey(spec: KeySpec): () => void;
+  /** Adds an esc handler (`useBack`); returns the remover. Undefined `current`: not active. */
+  addBack(entry: BackEntry): () => void;
 }
+/** One mounted `useBack`; the page keeps them in mount order. */
+export type BackEntry = { current: (() => void) | undefined };
+/** The esc handler to run: the most recently mounted `useBack` that has a function. */
+export const activeBack = (backs: readonly BackEntry[]) => backs.findLast((b) => b.current)?.current;
+/** Lets a tab pane share its back list with the page inside, so one esc rule serves both. */
+export const BackCtx = createContext<BackEntry[] | null>(null);
 export const HostCtx = createContext<HostPage | null>(null);
 /** True at the page root: a `Panel` there is the page's own frame (the host's border and title), not a second border. */
 export const RootPanelCtx = createContext(false);
@@ -109,6 +118,23 @@ function useConformity(): Conformity {
   return useMemo(() => ({ ...conformityView(snap), refresh: store.refresh, apply: store.apply }), [snap, store]);
 }
 
+/** While mounted with a function, esc calls it (and stays on the page) instead of leaving. */
+function useBack(fn?: () => void) {
+  const { addBack } = useHost();
+  const entry = useRef<BackEntry>({ current: fn });
+  entry.current.current = fn;
+  useEffect(() => addBack(entry.current), [addBack]);
+}
+
+/** Panel navigation plus `toBar`, which focuses the tab bar (no-op outside the tabs). */
+function usePanelsHost() {
+  const nav = usePanelNav();
+  const tabs = useTabs();
+  const latest = useRef(tabs);
+  latest.current = tabs;
+  return useMemo(() => ({ ...nav, toBar: () => latest.current?.focusBar() }), [nav]);
+}
+
 function useViewport() {
   const { cols, rows } = useLayout();
   return { cols, rows };
@@ -119,6 +145,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useConformity" | "useTheme" | "useViewport" | "usePanels"> = {
-  useCommand, useQuery, useStore, useRouter, useKey, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelNav, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels"> = {
+  useCommand, useQuery, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, useTheme: useModuleTheme,
 };

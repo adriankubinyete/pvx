@@ -192,7 +192,26 @@ Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança
 
 - `render()` devolve JSX e roda dentro do componente da página: pode chamar hooks. Se lançar, o host registra o erro, volta e avisa; o resto não é afetado.
 - Abre-se por `#<módulo>.<nome>` (ou `#<nome>`, se for único), na palette (`ctrl+k`, escopo `#`) ou no campo de comando; ou por um comando com `page`.
-- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`, `←`, `→`. Um quarto argumento `{ help: true }` põe a tecla só no `?`. `useNudge()(msg)` mostra o aviso curto do host para uma tecla sem efeito. `Row` põe filhos lado a lado e `Panel grow` iguala a altura de painéis irmãos. **Foco entre painéis: `usePanels()`.** Dê a cada `Panel` navegável `panelRef={p.ref(id)}`; `p.pick(atual, "left"|"right"|"up"|"down")` devolve o id do painel que está de fato naquela direção na tela (pela posição desenhada, então segue o layout: `→` com painéis lado a lado, `↓` empilhados). `p.step({ panel, inside }, tecla, size)` aplica a regra de dois níveis do host: no nível do painel, as setas trocam de painel e `enter` entra num painel com itens (`size(id) > 0`; sem itens vem `nudge: "nada para selecionar"`); dentro, `up`/`down` dão `move`, `enter` dá `act` e `esc` sai. A página guarda o estado e a lista; `bar` indica `↑` sem painel acima. Reservadas (ignoradas): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
+- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`, `←`, `→`. Um quarto argumento `{ help: true }` põe a tecla só no `?`. `useNudge()(msg)` mostra o aviso curto do host para uma tecla sem efeito. `Row` põe filhos lado a lado e `Panel grow` iguala a altura de painéis irmãos. **Foco entre painéis: `usePanels()`.** Dê a cada `Panel` navegável `panelRef={p.ref(id)}`; `p.pick(atual, "left"|"right"|"up"|"down")` devolve o id do painel que está de fato naquela direção na tela (pela posição desenhada, então segue o layout: `→` com painéis lado a lado, `↓` empilhados). `p.step({ panel, inside }, tecla, size)` aplica a regra de dois níveis do host: no nível do painel, as setas trocam de painel e `enter` entra num painel com itens (`size(id) > 0`; sem itens vem `nudge: "nada para selecionar"`); dentro, `up`/`down` dão `move`, `enter` dá `act` e `esc` sai. A página guarda o estado e a lista; `bar` indica `↑` sem painel acima, e `p.toBar()` foca a barra de abas (o que o Início faz nesse caso; sem efeito se a página não está numa aba). **Esc: `useBack(fn?)`.** Enquanto um componente com `useBack(fn)` está montado, `esc` chama `fn` e fica na página, em vez de voltar (à barra de abas, ou à tela anterior numa página empilhada); com `fn` indefinido vale o padrão, então `useBack(inside ? sai : undefined)` funciona. Com vários montados, vale o último montado que tenha função. `ctrl+c` e `ctrl+k` continuam do host. Reservadas (ignoradas em `useKey`): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
+- **Receita: aba de módulo como o Início.** Painéis navegáveis por setas, `enter` entra, `esc` sai, `↑` no painel de cima foca a barra:
+  1. `const p = usePanels()`; dê `panelRef={p.ref(id)}` a cada `Panel`.
+  2. Guarde `{ panel, inside }` com `useState`. Nas setas e no `enter`, chame `p.step({ panel, inside }, tecla, size)` e aplique o resultado: `panel`/`inside` viram o novo estado, `move` e `act` agem na lista de dentro, `nudge` vai para `useNudge()`, e `bar` vira `p.toBar()`.
+  3. `useBack(inside ? () => setInside(false) : undefined)`: `esc` sai do painel; no nível do painel o padrão leva à barra.
+  4. Rodapé por nível: ponha as `useKey` de cada nível em um componente próprio e renderize só o do nível atual (`<NoPainel />` ou `<Dentro />`); a tecla some do rodapé quando o componente sai.
+
+  ```tsx
+  const [f, setF] = useState({ panel: "a", inside: false });
+  const key = (k: "left" | "right" | "up" | "down" | "enter") => {
+    const st = p.step(f, k, (id) => itens[id].length);
+    if (!st) return;
+    if (st.bar) return p.toBar();
+    if (st.nudge) return nudge(st.nudge);
+    if (st.move) moveSelecao(f.panel, st.move);
+    else if (st.act) abreSelecionado(f.panel);
+    setF({ panel: st.panel, inside: st.inside });
+  };
+  useBack(f.inside ? () => setF({ ...f, inside: false }) : undefined);
+  ```
 - `keys` em `PageDef` (`{ keys, label, run }[]`) continua valendo para teclas que não precisam do estado do componente; entram na mesma tabela de atalhos.
 - **Moldura.** O host desenha a borda da página e o título `› <title>`. Um `Panel` na raiz da página é só o conteúdo (sem borda e sem título): assim a página mostra uma moldura só. Para seções dentro da página, ponha `Panel` dentro de outro `Panel`: os internos têm borda e título.
 

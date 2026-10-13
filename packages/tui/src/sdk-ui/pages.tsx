@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
+import { useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from "react";
 import type { RegisteredPage } from "@pvx/core";
 import type { Component, KeySpec, SdkUi } from "@pvx/sdk";
 import { addPageRow, matchKey, setPageRows, type Scope } from "../keymap.ts";
@@ -9,7 +9,7 @@ import { Boundary, useRouter, type Screen } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
-import { HostCtx, RootPanelCtx, runOwn, useHost, usePages, type HostPage } from "./host.tsx";
+import { activeBack, BackCtx, HostCtx, RootPanelCtx, runOwn, useHost, usePages, type BackEntry, type HostPage } from "./host.tsx";
 
 /** Keys the host owns: a page cannot take them over. */
 const RESERVED = ["esc", "?", "ctrl+c", "ctrl+k"];
@@ -34,6 +34,9 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
   const { box, g } = useTheme();
   const { pending } = useSyncExternalStore(deps.session.subscribe, deps.session.getSnapshot);
   const dynKeys = useRef(new Set<KeySpec>()).current; // `useKey`: the keys of the components mounted in this page
+  const outerBacks = useContext(BackCtx); // set by PagePane, which owns esc in a tab
+  const ownBacks = useRef<BackEntry[]>([]).current;
+  const backs = outerBacks ?? ownBacks;
   const scope: Scope = `page:${page.key}`;
   const host = useMemo<HostPage>(() => ({
     moduleId: page.moduleId,
@@ -50,9 +53,17 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
       const off = addPageRow(scope, rowOf(scope, spec));
       return () => (dynKeys.delete(spec), off());
     },
-  }), [page.moduleId, page.key, deps, router.push, router.pop]);
+    addBack(entry) {
+      backs.push(entry);
+      return () => void backs.splice(backs.indexOf(entry), 1);
+    },
+  }), [page.moduleId, page.key, deps, router.push, router.pop, backs]);
   useKeys((k) => {
     if (!enabled) return;
+    if (k.name === "escape" && !outerBacks) { // pushed page: a useBack takes esc, else the router pops
+      const back = activeBack(backs);
+      return back ? (back(), true) : undefined;
+    }
     const spec = [...dynKeys, ...keysOf(page)].find((s) => matchKey(k, s.keys));
     if (!spec) return;
     try {
@@ -83,16 +94,21 @@ function Render({ page }: { page: RegisteredPage }) {
 export function PagePane({ page, active }: { page: RegisteredPage; active: boolean }) {
   const deps = usePages()!;
   const tabs = useTabs();
+  const backs = useRef<BackEntry[]>([]).current;
   useKeys((k) => {
-    if (active && tabs?.focused !== false && k.name === "escape") return tabs?.focusBar(), true; // like the other tabs: back to the bar
+    if (!active || tabs?.focused === false || k.name !== "escape") return;
+    const back = activeBack(backs);
+    return back ? back() : tabs?.focusBar(), true; // a useBack takes esc; else back to the bar like the other tabs
   });
   return (
-    <Boundary
-      onCatch={(err) => deps.makeLogger(page.moduleId).error(`página "${page.key}" falhou: ${err.stack ?? err.message}`)}
-      fallback={(err) => <PageError title={page.title} err={err} />}
-    >
-      <PageContent page={page} enabled={active && tabs?.focused !== false} />
-    </Boundary>
+    <BackCtx.Provider value={backs}>
+      <Boundary
+        onCatch={(err) => deps.makeLogger(page.moduleId).error(`página "${page.key}" falhou: ${err.stack ?? err.message}`)}
+        fallback={(err) => <PageError title={page.title} err={err} />}
+      >
+        <PageContent page={page} enabled={active && tabs?.focused !== false} />
+      </Boundary>
+    </BackCtx.Provider>
   );
 }
 

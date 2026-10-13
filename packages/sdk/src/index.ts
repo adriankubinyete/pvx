@@ -379,6 +379,11 @@ export interface SdkUi {
    * component state. The key joins the footer and `?`. Reserved (ignored): esc, ?, ctrl+c, ctrl+k.
    */
   useKey(keys: string, label: string, handler: () => void, opts?: { help?: boolean }): void;
+  /**
+   * While mounted with a function, `esc` calls it and stays on the page, instead of leaving (tab bar, or back from a pushed page).
+   * With `undefined` the default applies, so `useBack(inside ? leave : undefined)` works. With several mounted, the most recently mounted one that has a function wins.
+   */
+  useBack(fn?: () => void): void;
   /** Shows the host's short notice ("nada aqui") for a key that has no effect. */
   useNudge(): (msg?: string) => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
@@ -389,6 +394,8 @@ export interface SdkUi {
    */
   usePanels(): {
     ref(id: string): unknown;
+    /** Focuses the tab bar (what `step` signals with `bar`). Does nothing when the page is not in a tab. */
+    toBar(): void;
     pick(current: string, dir: "left" | "right" | "up" | "down"): string | undefined;
     /**
      * The host's two-level focus rule for one key, from the state `{ panel, inside }` (keep it with `useState`).
