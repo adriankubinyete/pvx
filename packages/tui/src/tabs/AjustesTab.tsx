@@ -113,7 +113,7 @@ export function AjustesTab() {
   const row = (id: string, label: string, value: React.ReactNode) => {
     const on = focused && id === cur;
     return (
-      <box key={id} flexShrink={0} backgroundColor={on ? c.selected : undefined} onMouseDown={() => setSel(id)}>
+      <box key={id} flexShrink={0} backgroundColor={on ? c.selected : undefined} onMouseOver={() => setSel(id)} onMouseDown={() => setSel(id)}>
         <text wrapMode="none">
           <span fg={c.accent}>{on ? `${g.cursor} ` : "  "}</span>
           <span fg={on ? c.text : c.dim}>{label.padEnd(LABEL_W)}</span>

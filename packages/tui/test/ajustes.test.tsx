@@ -114,3 +114,15 @@ test("Personalizado: a text token under 4.5:1 on bg shows a warning; Começar de
   await t.press("RETURN"); // dark text on a black bg: text, dim, ... fail
   expect(t.frame()).toMatch(/▲ \d\.\d:1/);
 });
+
+test("hovering a row moves the selection: one marker, and ArrowDown continues from it", async () => {
+  const t = await mount();
+  const rows = () => t.frame().split("\n");
+  const y = rows().findIndex((l) => l.includes("símbolos"));
+  await t.hover(10, y);
+  expect(rows().filter((l) => l.includes("»")).length).toBe(1);
+  expect(rows()[y]).toContain("»");
+  await t.press("ARROW_DOWN");
+  const marked = rows().findIndex((l) => l.includes("»"));
+  expect(marked).toBe(rows().findIndex((l) => l.includes("moldura")));
+});

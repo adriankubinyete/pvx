@@ -13,6 +13,8 @@ export interface TuiHarness {
   spans(): CapturedFrame;
   /** Presses a key (`"a"`, `"L"`, `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`...) inside `act` and flushes. */
   press(key: KeyInput, mods?: Mods): Promise<void>;
+  /** Moves the mouse to a cell (0-based), firing hover handlers. */
+  hover(x: number, y: number): Promise<void>;
   /** Types text char by char, each a `press`. */
   type(text: string): Promise<void>;
   /** Waits for pending timers and renders (use after something async). */
@@ -58,6 +60,10 @@ export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: {
     waitFor: (pred) => t.waitFor(pred),
     waitForFrame: (pred) => t.waitForFrame(pred),
     press,
+    async hover(x, y) {
+      await inAct(async () => t.mockMouse.moveTo(x, y));
+      await flush();
+    },
     async type(text) {
       // Not `mockInput.typeText`: it drops keys here, since a handler reads the input state of its last render.
       // Kitty reports Shift+l as name `l`, sequence `L`, shift: so send the lowercase key with shift.

@@ -32,20 +32,19 @@ type Line = { kind: "head"; id: string; text: string } | { kind: "item"; id: str
 const LIST_W = 44;
 const VISIBLE = 14;
 
-interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; onPick: (id: string) => void }
+interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; onHover: (id: string) => void; onPick: (id: string) => void }
 
-/** Memoized: hover state is local, so hovering repaints one row, not the list. */
-const Row = memo(function Row({ id, hit, selected, fav, onPick }: RowProps) {
+/** Memoized: moving the selection repaints two rows, not the list. */
+const Row = memo(function Row({ id, hit, selected, fav, onHover, onPick }: RowProps) {
   const { c, g } = useTheme();
-  const [hover, setHover] = useState(false);
   const mark = hit.core ? [g.core, c.info] : hit.page ? [g.page, c.dim] : hit.origin === "official" ? [g.official, c.accent] : hit.origin === "dev" ? [g.dev, c.warn] : [g.thirdParty, c.thirdParty];
   const key = hit.key.length > 30 ? `${hit.key.slice(0, 29)}…` : hit.key;
   const [a, b] = hit.range && hit.range[1] <= key.length ? hit.range : [0, 0];
   return (
     <box
       height={1} flexShrink={0} flexDirection="row" paddingX={1}
-      backgroundColor={selected ? c.selected : hover ? c.panel : undefined}
-      onMouseOver={() => setHover(true)} onMouseOut={() => setHover(false)} onMouseDown={() => onPick(id)}
+      backgroundColor={selected ? c.selected : undefined}
+      onMouseOver={() => onHover(id)} onMouseDown={() => onPick(id)}
     >
       <text>
         <span fg={mark[1]}>{`${mark[0]} `}</span>
@@ -108,6 +107,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const built = hit ? (hit.page ? { argv: [], display: `#${hit.key}`, secrets: {}, missing: [] } : buildLine(hit.key, specs, values)) : undefined;
   const last = hit ? [...session.history].reverse().find((l) => l === hit.key || l.startsWith(`${hit.key} `)) : undefined;
 
+  const hover = useCallback((id: string) => setSelId(id), []);
   const pick = useCallback((id: string) => (setSelId(id), setFocus(-1)), []);
   const focusField = (i: number) => (setFocus(i), setFcur(Infinity));
   const move = (d: number) => {
@@ -188,7 +188,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
         {lines.length === 0 ? <text fg={c.dim}>{" nada encontrado"}</text> : null}
         {lines.slice(start, start + VISIBLE).map((l) => l.kind === "head"
           ? <text key={l.id} fg={c.dim}>{` ${l.text}`}</text>
-          : <Row key={l.id} id={l.id} hit={l.hit} selected={l.id === cur?.id} fav={favs.includes(l.hit.key)} onPick={pick} />)}
+          : <Row key={l.id} id={l.id} hit={l.hit} selected={l.id === cur?.id} fav={favs.includes(l.hit.key)} onHover={hover} onPick={pick} />)}
       </box>
       <box flexGrow={1} flexDirection="column" paddingLeft={1}>
         {hit && built ? (
