@@ -31,7 +31,7 @@ export interface TuiHarness {
 /** Renders `element` in a headless terminal of `cols` x `rows`, with `act` and flush handled. */
 export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: { cols?: number; rows?: number } = {}): Promise<TuiHarness> {
   // Kitty mode: ESC needs no parser timeout, and ctrl+enter / shift+enter can be sent.
-  const t = await testRender(element, { width: cols, height: rows, kittyKeyboard: true });
+  const t = await testRender(element, { width: cols, height: rows, kittyKeyboard: true, exitOnCtrlC: false }); // like the app: the KeyRouter decides what ctrl+c does
   // `testRender` leaves IS_REACT_ACT_ENVIRONMENT on until destroy; with it on, every timer tick (spinner, log
   // refresh) and store update between our calls warns "not wrapped in act" (111 tests: 4 -> 146 warnings).
   // So it is on only while we are inside `act`.

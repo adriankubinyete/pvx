@@ -7,6 +7,7 @@ import { App, createSessionStore, createTabsNav, Session, Tabs } from "../src/in
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
+let exits = 0;
 let store: ReturnType<typeof createSessionStore>;
 async function load() {
   process.env.PVX_USERMODULES = join(import.meta.dir, "../../core/test/fixtures/usermodules");
@@ -15,11 +16,12 @@ async function load() {
   return registry;
 }
 async function mount(o: { isRoot?: boolean; shellTimeoutMs?: number } = {}) {
+  if (!h) exits = 0;
   const registry = await load();
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   store = createSessionStore({ registry, makeLogger, historyPath: join(pvxHome(), "tui-history"), isRoot: o.isRoot ?? true, shellTimeoutMs: o.shellTimeoutMs });
   h = await renderTui(
-    <App root={{ id: "sessao", element: <Session store={store} registry={registry} /> }} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
+    <App root={{ id: "sessao", element: <Session store={store} registry={registry} /> }} logger={makeLogger("core")} onExit={() => void exits++} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     { cols: 100, rows: 24 },
   );
   return h;
@@ -104,8 +106,54 @@ test("ctrl+c while a !cmd runs kills it; the session stays", async () => {
   expect(store.blocks[0]!.status).toBe("running");
   await t.press("c", { ctrl: true });
   await until(t, () => store.blocks[0]?.status === "error");
-  expect(store.blocks[0]!.lines.at(-1)).toEqual({ kind: "warning", text: "cancelado" });
+  expect(store.blocks[0]!.lines.at(-1)).toEqual({ kind: "error", text: "encerrado pelo usuário" });
+  expect(store.blocks[0]!.status).toBe("error");
+  expect(exits).toBe(0);
+  await t.flush();
+  expect(t.frame()).toContain("comando encerrado · ctrl+c de novo para sair");
   expect(store.cancel()).toBe(false);
+});
+
+test("a second ctrl+c within 2 s quits; with nothing running the first one quits", async () => {
+  const t = await mount();
+  await run(t, "!sleep 30");
+  await t.press("c", { ctrl: true });
+  expect(exits).toBe(0);
+  await t.press("c", { ctrl: true });
+  expect(exits).toBe(1);
+  expect(store.cancel()).toBe(false);
+  const u = await mount();
+  await u.press("c", { ctrl: true });
+  expect(exits).toBe(2);
+});
+
+test("x kills the focused running block (exit 130); the hint shows only while it runs", async () => {
+  const t = await mount();
+  await run(t, "!sleep 30");
+  await t.press("ESCAPE"); // input -> last block
+  await Bun.sleep(150);
+  await t.flush();
+  expect(t.frame()).toContain("x encerrar");
+  const t0 = Date.now();
+  await t.press("x");
+  await until(t, () => store.blocks[0]?.status === "error");
+  expect(Date.now() - t0).toBeLessThan(1500);
+  expect(store.blocks[0]!.lines.at(-1)).toEqual({ kind: "error", text: "encerrado pelo usuário" });
+  expect(t.frame()).toContain("encerrado pelo usuário");
+  expect(t.frame()).not.toContain("x encerrar");
+});
+
+test("the block footer shows esc once", async () => {
+  const t = await mount();
+  await run(t, "!echo oi");
+  await until(t, () => store.blocks[0]?.status === "ok");
+  await t.press("ESCAPE");
+  await Bun.sleep(150);
+  await t.flush();
+  const foot = t.frame().split("\n").filter((l) => l.includes("esc abas")).join("");
+  expect(foot).toContain("esc abas");
+  expect(foot).not.toContain("esc voltar");
+  expect(t.frame()).not.toContain("x encerrar"); // finished block
 });
 
 test("a !cmd past the timeout is killed", async () => {

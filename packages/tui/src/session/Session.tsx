@@ -131,6 +131,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       if (k.name === "escape") return tabs?.focusBar(), true; // one level up: input -> blocks -> tab bar
       if (matchKey(k, "enter")) return recall(store.lineOf(focus.id)), setFb(null), true;
       if (matchKey(k, "r")) return follow.toBottom(), void store.repeat(focus.id), true;
+      if (matchKey(k, "x") && focus.status === "running" && focus.cancellable) return store.cancel(focus.id), true;
       if (matchKey(k, "l")) return router.push({ id: "log", element: <LogScreen moduleId={focus.moduleId} /> }), true;
       if (matchKey(k, "c")) {
         const errors = focus.lines.filter((l) => l.kind === "error");

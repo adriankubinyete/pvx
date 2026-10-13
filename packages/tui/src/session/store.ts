@@ -22,6 +22,8 @@ export interface Block {
   lines: OutLine[];
   /** When it started (ms); absent on synthetic blocks. */
   at?: number;
+  /** A running host shell command: `cancel(id)` can kill it. Module commands run in-process and cannot be aborted. */
+  cancellable?: boolean;
 }
 
 /** A question the host asks the user; answered with `answer`. */
@@ -45,8 +47,8 @@ export interface SessionApi {
   /** The line to recall for a block: the real one (memory only) when the shown one is masked. */
   lineOf(blockId: number): string;
   clear(): void;
-  /** Kills the running `!cmd` shell commands; false when none was running. */
-  cancel(): boolean;
+  /** Kills the running `!cmd` of that block, or all of them without an id; false when none was running. */
+  cancel(blockId?: number): boolean;
   /** Pushes a synthetic block (host news such as a dev-module reload error); no history, no run. */
   notice(line: string, status: Block["status"], lines: OutLine[], moduleId?: string): void;
   /**
@@ -100,7 +102,7 @@ export interface SessionOpts {
 
 export function createSessionStore(opts: SessionOpts): SessionApi {
   const { registry, makeLogger, historyPath, isRoot, core, shellTimeoutMs = SHELL_TIMEOUT_MS } = opts;
-  const shells = new Set<ShellRun>();
+  const shells = new Map<number, ShellRun>();
   let state: SessionState = { blocks: [], history: loadHistory(historyPath), pending: [] };
   const subs = new Set<() => void>();
   const pageSubs = new Set<(key: string) => void>();
@@ -180,7 +182,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     const id = ++seq;
     const t0 = Date.now();
     lastRaw = undefined; // `!!` repeats this line, not an older masked one
-    set({ blocks: [...state.blocks, { id, line, status: "running", moduleId: "core", lines: [], at: t0 } as Block].slice(-MAX_BLOCKS) });
+    set({ blocks: [...state.blocks, { id, line, status: "running", moduleId: "core", lines: [], at: t0, cancellable: true } as Block].slice(-MAX_BLOCKS) });
     addHistory(line);
     const out: OutLine[] = [];
     let exit = 1;
@@ -201,16 +203,16 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
         rest[key] = parts.pop()!;
         if (parts.length) push(stderr, parts.join("\n"));
       });
-      shells.add(run);
+      shells.set(id, run);
       const r = await run.done;
-      shells.delete(run);
+      shells.delete(id);
       clearTimeout(timer);
       for (const stderr of [false, true]) if (rest[stderr ? "err" : "out"]) push(stderr, rest[stderr ? "err" : "out"]);
       clearTimeout(timer);
       exit = r.exit;
       if (r.reason === "timeout") out.push({ kind: "error", text: `tempo esgotado (${Math.round(shellTimeoutMs / 1000)}s): processo morto` });
-      if (r.reason === "cancel") out.push({ kind: "warning", text: "cancelado" });
-      if (exit !== 0) for (const l of out) if (l.kind === "warning" && l.text !== "cancelado") l.kind = "error"; // stderr of a failed command
+      if (r.reason === "cancel") out.push({ kind: "error", text: "encerrado pelo usuário" });
+      if (exit !== 0) for (const l of out) if (l.kind === "warning") l.kind = "error"; // stderr of a failed command
       auditCommand({ line, exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // the host shell is the widest door; auditCommand swallows a write failure (non-root)
     }
     settle(id, t0, exit, out);
@@ -279,7 +281,11 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     },
     lineOf: (blockId) => raws.get(blockId) ?? state.blocks.find((x) => x.id === blockId)?.line ?? "",
     clear: () => set({ blocks: [] }),
-    cancel: () => (shells.forEach((r) => r.cancel()), shells.size > 0),
+    cancel: (id) => {
+      const rs = id === undefined ? [...shells.values()] : [shells.get(id)].filter((r) => r);
+      rs.forEach((r) => r!.cancel());
+      return rs.length > 0;
+    },
     notice(line, status, lines, moduleId = "core") {
       const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
       set({ blocks: [...state.blocks, { id: ++seq, line, status, moduleId, lines: clean }].slice(-MAX_BLOCKS) });

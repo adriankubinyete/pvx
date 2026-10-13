@@ -112,6 +112,7 @@ const base: readonly Shortcut[] = [
   { keys: "r", label: "repetir", scope: "block", footer: true, hint: true },
   { keys: "l", label: "log", scope: "block", footer: true, hint: true },
   { keys: "c", label: "copiar", scope: "block", footer: true, hint: true },
+  { keys: "x", label: "encerrar", scope: "block", hint: true }, // hint row only while the block runs (Blocks.tsx)
 ];
 
 /** Base rows plus the palette's own, one row per keys + scope (the first one wins). */
@@ -139,8 +140,10 @@ export function addPageRow(scope: Scope, row: Shortcut): () => void {
 const rowsOf = (scope: Scope) => [...shortcuts, ...(pageRows.get(scope) ?? []), ...(dynRows.get(scope) ?? [])];
 
 /** Footer entries for the active scope, global ones last. */
-export const footerFor = (scope: Scope): Shortcut[] =>
-  [...rowsOf(scope).filter((s) => s.footer && s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.footer && s.scope === "global")];
+export const footerFor = (scope: Scope): Shortcut[] => {
+  const own = rowsOf(scope).filter((s) => s.footer && s.scope === scope && scope !== "global");
+  return [...own, ...shortcuts.filter((s) => s.footer && s.scope === "global" && !own.some((o) => o.keys === s.keys))]; // a scope's own `esc` replaces the global one
+};
 
 /** Help rows: all rows of the scope (footer or not), then the global ones. */
 export const helpFor = (scope: Scope): Shortcut[] =>

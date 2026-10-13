@@ -6,7 +6,7 @@ import type { Block } from "./store.ts";
 
 const kinds = { success: "ok", warning: "warn", error: "error", info: "info" } as const;
 /** Action row of the focused block, from the one shortcut table. */
-const blockActions = shortcuts.filter((s) => s.scope === "block" && s.hint);
+const allActions = shortcuts.filter((s) => s.scope === "block" && s.hint);
 const dur = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 
 function Line({ l }: { l: OutLine }) {
@@ -27,6 +27,7 @@ function Line({ l }: { l: OutLine }) {
  */
 export const BlockView = memo(function BlockView({ b, focused, tick, onPick }: { b: Block; focused: boolean; tick: number; onPick: (b: Block) => void }) {
   const { c, g } = useTheme();
+  const blockActions = allActions.filter((s) => s.keys !== "x" || (b.status === "running" && b.cancellable));
   const host = b.line.startsWith("!"); // ran on the host shell
   const frames = [...g.spinner];
   const st = { running: [frames[tick % frames.length]!, c.info], ok: [g.ok, c.accent], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
