@@ -4,9 +4,9 @@ import { EXIT, type Logger } from "@pvx/sdk";
 import { createLogger, createRegistry, loadModules, logsDir, runCli, trustGate } from "@pvx/core";
 import { builtin } from "../../../packages/builtin/index.ts";
 import { ask, askSecret } from "./prompt.ts";
+import { VERSION, VERSION_LABEL } from "./version.ts";
 
-const VERSION = "0.1.0";
-// Dev layout. The compiled binary will need the profiles embedded (not done yet).
+// Dev layout; the compiled binary carries the profiles embedded and loadProfiles prefers them.
 const PROFILES_DIR = join(import.meta.dir, "../../../profiles");
 
 /** Logging is best effort: an unwritable PVX_HOME must not break read-only commands. */
@@ -37,7 +37,7 @@ async function main(): Promise<number> {
     registry,
     makeLogger,
     profilesDir: PROFILES_DIR,
-    version: VERSION,
+    version: VERSION_LABEL,
     theme,
   };
   const r = await runCli({

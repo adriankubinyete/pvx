@@ -1,15 +1,49 @@
-# pvx-opentui
+# pvx
 
-To install dependencies:
+Ferramenta de linha de comando e TUI para operar centrais telefônicas Phonevox: lista e roda comandos de módulos, avalia a conformidade da central contra um perfil, aplica o plano de correção e mantém notas e histórico de cada central.
 
-```bash
+## Instalação
+
+Linux (x86_64 ou aarch64, glibc), como root:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/adriankubinyete/pvx/main/install.sh | sudo sh
+```
+
+O instalador baixa a última release, confere o SHA-256 e instala o binário em `/usr/local/lib/pvx/pvx`, com links em `/usr/local/bin` e `/usr/bin` (assim `sudo pvx` funciona mesmo com o `secure_path` do RHEL e do Rocky). Para uma versão específica: `PVX_VERSION=v0.1.0`.
+
+Rode `pvx` sem argumentos para abrir a TUI, ou `pvx --help` para a lista de comandos. `pvx --version` mostra a versão.
+
+## Atualizar
+
+```sh
+sudo pvx self-update
+```
+
+Baixa a última release, confere o hash e troca o binário de forma atômica; com hash errado, nada muda. Processos em execução continuam na versão antiga até reiniciarem. Módulos não entram aqui: use `pvx modules update`.
+
+## Desinstalar
+
+```sh
+sudo pvx uninstall            # remove o binário, os links e o gancho de login
+sudo pvx uninstall --purge    # remove também /etc/pvx
+```
+
+`--purge` nunca apaga `notes.jsonl` nem `usermodules/` sem confirmação: no terminal ele pergunta; sem terminal, só com `--purge-notes-and-modules` (`--yes` não basta).
+
+## Compilar do código-fonte
+
+Requer [Bun](https://bun.com).
+
+```sh
 bun install
+bun test
+bun run typecheck
+bun run build:linux-amd64    # ou build:linux-arm64, build:darwin-arm64; gera dist/pvx-<os>-<arch>.tar.gz
 ```
 
-To run:
+Builds locais mostram `X.Y.Z (nightly, <commit>)`. Para gerar os artefatos de uma release (modo release, com `dist/checksums-sha256.txt` verificado), rode `bun run release`; o script só imprime o comando `gh release create`, quem publica é uma pessoa.
 
-```bash
-bun run index.ts
-```
+## Escrever módulos
 
-This project was created using `bun init` in bun v1.3.14. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+Veja o [guia do SDK](packages/sdk/README.md).

@@ -11,6 +11,7 @@ import { recordDrift, recordSnapshot, partitionIgnored } from "../journal/index.
 import { IGNORE_COMMANDS } from "./ignorar.ts";
 import { catalogSearchCommand } from "../catalog/search-command.ts";
 import { BANNER_COMMAND } from "./banner.ts";
+import { SELF_COMMANDS } from "./self.ts";
 import { listCommand, MODULES_COMMANDS } from "./modules.ts";
 import type { CliIO, Output } from "./run.ts";
 
@@ -24,6 +25,8 @@ export interface Ctx {
 export interface CoreCommand extends Entry {
   /** Writes to PVX_HOME: needs root. */
   root?: boolean;
+  /** Skips the audit line (the command removes the file it would write to). */
+  noAudit?: boolean;
   run(c: Ctx): Promise<number>;
 }
 
@@ -163,6 +166,7 @@ export const CORE: CoreCommand[] = [
   BANNER_COMMAND,
   ...IGNORE_COMMANDS,
   ...MODULES_COMMANDS,
+  ...SELF_COMMANDS,
   {
     key: "version",
     help: "Mostra a versão",

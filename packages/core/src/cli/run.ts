@@ -105,7 +105,7 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
   let json = false;
   let yes = false;
   let help = false;
-  const argv = io.argv.filter((a) => {
+  const argv = (io.argv.length === 1 && io.argv[0] === "--version" ? ["version"] : io.argv).filter((a) => {
     if (a === "--json") json = true;
     else if (a === "--yes") yes = true;
     else if (a === "--help" || a === "-h") help = true;
@@ -139,7 +139,7 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
     if (core) {
       const t0 = Date.now();
       const exit = await core.run({ io, o, rest: argv.slice(core.key.split(" ").length), json, yes });
-      auditCommand({ line: lineOf(argv), exit, ms: Date.now() - t0, destructive: false }, { mutation: core.root }); // `root` = writes PVX_HOME
+      if (!core.noAudit) auditCommand({ line: lineOf(argv), exit, ms: Date.now() - t0, destructive: false }, { mutation: core.root }); // `root` = writes PVX_HOME
       return o.finish(exit);
     }
 

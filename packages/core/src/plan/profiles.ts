@@ -10,6 +10,9 @@ export interface Profile {
 
 /** Loads every `*.json` in dir, sorted by file name (selection order). Missing dir = no profiles. */
 export async function loadProfiles(dir: string): Promise<Profile[]> {
+  // The compiled binary carries the profiles (scripts/build.sh injects them); source runs read the dir.
+  const embedded = (globalThis as { __PVX_PROFILES__?: Profile[] }).__PVX_PROFILES__;
+  if (embedded) return embedded;
   let names: string[];
   try {
     names = readdirSync(dir).filter((n) => n.endsWith(".json")).sort();
