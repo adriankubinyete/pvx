@@ -1,4 +1,4 @@
-import type { CapabilityDef, CommandCtx } from "@pvx/sdk";
+import type { CapabilityDef, ReadCtx } from "@pvx/sdk";
 import type { Profile } from "./profiles.ts";
 
 export interface EvalResult {
@@ -14,7 +14,7 @@ export interface EvalResult {
   optIn?: boolean;
 }
 
-type ProveCtx = Pick<CommandCtx, "log" | "store" | "query">;
+type ProveCtx = ReadCtx;
 
 const withTimeout = <T>(p: Promise<T>, ms: number): Promise<T> =>
   new Promise((resolve, reject) => {

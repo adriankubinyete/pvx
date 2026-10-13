@@ -105,7 +105,12 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
   let json = false;
   let yes = false;
   let help = false;
-  const argv = (io.argv.length === 1 && io.argv[0] === "--version" ? ["version"] : io.argv).filter((a) => {
+  const raw = io.argv.length === 1 && io.argv[0] === "--version" ? ["version"] : io.argv;
+  // Global flags count anywhere before a `--` terminator, unless the command declares an arg of that name.
+  const declared = new Set((findCore(raw)?.args ?? resolveCommand(io.registry, raw)?.cmd.args ?? []).map((a) => a.name));
+  const end = raw.includes("--") ? raw.indexOf("--") : raw.length;
+  const argv = raw.filter((a, i) => {
+    if (i >= end || declared.has(a.replace(/^-+/, ""))) return true;
     if (a === "--json") json = true;
     else if (a === "--yes") yes = true;
     else if (a === "--help" || a === "-h") help = true;

@@ -22,6 +22,11 @@ const factory: ModuleFactory = (sdk) => ({
         ctx.out.success(`token com ${String(ctx.args.token).length} chars`);
       },
     },
+    echo: {
+      help: "Declares a flag named like a global one",
+      args: [{ name: "json", help: "Own flag", kind: "flag" }],
+      run: (ctx) => ctx.out.success(`json=${ctx.args.json === true}`),
+    },
     wipe: { help: "Destructive", destructive: true, run: (ctx) => ctx.out.success("apagado") },
     remember: { help: "Writes state", run: (ctx) => ctx.store.set("k", 1) },
   },

@@ -1,14 +1,17 @@
-import type { Logger, SlotData, SlotId, WidgetDef } from "@pvx/sdk";
+import type { Logger, ReadCtx, SlotData, SlotId, WidgetDef } from "@pvx/sdk";
 
 export interface SlotOpts {
   /** A widget `data()` slower than this is removed. */
   timeoutMs?: number;
   /** Floor for `refreshMs`. */
   minRefreshMs?: number;
+  /** The read-only context handed to `data()`. */
+  ctxFor?: (moduleId: string) => ReadCtx;
 }
 
 interface Entry {
   id: string;
+  moduleId: string;
   def: WidgetDef;
   data?: SlotData;
   /** Why it was removed from its slot. */
@@ -41,7 +44,7 @@ export interface SlotHub {
 }
 
 export function createSlotHub(opts: SlotOpts = {}): SlotHub {
-  const { timeoutMs = 2000, minRefreshMs = 1000 } = opts;
+  const { timeoutMs = 2000, minRefreshMs = 1000, ctxFor } = opts;
   const entries: Entry[] = [];
   const host = new Map<SlotId, SlotData>();
   const subs = new Set<() => void>();
@@ -55,7 +58,7 @@ export function createSlotHub(opts: SlotOpts = {}): SlotHub {
     let t: ReturnType<typeof setTimeout> | undefined;
     try {
       const d = await Promise.race([
-        Promise.resolve().then(() => e.def.data()),
+        Promise.resolve().then(() => e.def.data(ctxFor?.(e.moduleId) as ReadCtx)),
         new Promise<never>((_, rej) => (t = setTimeout(() => rej(new Error(`passou de ${timeoutMs} ms`)), timeoutMs))),
       ]);
       if (!validShape(e.def.slot, d)) throw new Error(`formato inválido para ${e.def.slot}`);
@@ -91,7 +94,7 @@ export function createSlotHub(opts: SlotOpts = {}): SlotHub {
   }
 
   return {
-    add: (moduleId, name, def) => void entries.push({ id: `${moduleId}.${name}`, def, running: false, next: 0 }),
+    add: (moduleId, name, def) => void entries.push({ id: `${moduleId}.${name}`, moduleId, def, running: false, next: 0 }),
     remove(moduleId) {
       for (let i = entries.length - 1; i >= 0; i--) if (entries[i]!.id.startsWith(`${moduleId}.`)) entries.splice(i, 1);
       notify(); // a module that left must leave the Início

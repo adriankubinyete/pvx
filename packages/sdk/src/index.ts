@@ -28,7 +28,7 @@ export interface ModuleDef {
   /** Key = command path with spaces: "ip trust-phonevox". */
   commands?: Record<string, CommandDef>;
   capabilities?: CapabilityDef[];
-  queries?: Record<string, QueryFn>;
+  queries?: Record<string, ModuleQuery>;
   /** Key = page name; opened by `#<module>.<name>` (or `#<name>` when unique). */
   pages?: Record<string, PageDef>;
   widgets?: Record<string, WidgetDef>;
@@ -162,6 +162,23 @@ export interface Store {
 /** Cross-module read: ctx.query("module.name", ...args). */
 export type QueryFn = (name: string, ...args: unknown[]) => unknown | Promise<unknown>;
 
+/**
+ * Context of `prove()`, query functions and widget `data()`: READ ONLY. `store` has only `get`; `fs` has only `read`,
+ * `exists` and `list` (no `write`, `append` or `remove`). `exec` follows `permissions.exec`, with the same timeout, and each
+ * call is logged. It cannot be made read-only by the host: run probes there (status, is-active, --version), never anything
+ * that changes the system. Same trust model as commands.
+ */
+export interface ReadCtx {
+  log: Logger;
+  store: Pick<Store, "get">;
+  query: QueryFn;
+  exec: CommandCtx["exec"];
+  fs: Pick<ModuleFs, "read" | "exists" | "list">;
+}
+
+/** A query function. The host calls it with `this` set to the module's `ReadCtx` (use `function` or method syntax to reach it; an arrow function just ignores it). */
+export type ModuleQuery = (this: ReadCtx, name: string, ...args: unknown[]) => unknown | Promise<unknown>;
+
 export interface CapabilityDef {
   /** "module.name", stable; key of profiles. */
   id: string;
@@ -175,8 +192,8 @@ export interface CapabilityDef {
   needs?: string[];
   /** Fix step is never auto-applied with --yes. */
   optIn?: boolean;
-  /** Read-only. */
-  prove(ctx: Pick<CommandCtx, "log" | "store" | "query">): Proof | Promise<Proof>;
+  /** Read-only (só leitura): no `store.set`, no `fs.write`. `ctx.exec` is for probes only. */
+  prove(ctx: ReadCtx): Proof | Promise<Proof>;
 }
 
 export interface Proof {
@@ -245,7 +262,8 @@ export interface WidgetDef {
   /** Order inside the slot. */
   priority: number;
   refreshMs?: number;
-  data(): SlotData | Promise<SlotData>;
+  /** Read-only context. A `data()` slower than the host's limit (2 s) is removed, so give `ctx.exec` a short `timeoutMs`. */
+  data(ctx: ReadCtx): SlotData | Promise<SlotData>;
 }
 
 // ---- sdk.ui: injected by the host, so a module never imports React ----

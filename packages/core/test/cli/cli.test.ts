@@ -95,6 +95,28 @@ describe("help", () => {
   });
 });
 
+describe("global flags at any position", () => {
+  test("--json after the command and its args", async () => {
+    const r = await run("demo greet bob --shout --json");
+    expect(JSON.parse(r.text)).toMatchObject({ ok: true, lines: [{ kind: "success", text: "OI BOB" }] });
+  });
+  test("--yes after args confirms a destructive command", async () => {
+    expect((await run("demo wipe --yes")).out).toEqual(["[✓] apagado"]);
+    expect((await run("--yes demo wipe")).out).toEqual(["[✓] apagado"]);
+  });
+  test("--help after a path shows that path's help", async () => {
+    const r = await run("demo greet --help");
+    expect(r.code).toBe(0);
+    expect(r.text).toContain("uso: pvx demo greet");
+    expect((await run("demo greet -h")).text).toContain("uso: pvx demo greet");
+  });
+  test("a declared arg of the same name is left to the command; `--` ends the global flags", async () => {
+    expect((await run("demo echo --json")).out).toEqual(["[✓] json=true"]);
+    const r = await run("demo greet -- --json");
+    expect(r.out.join("")).not.toContain('"ok"');
+  });
+});
+
 describe("destructive, secrets and root", () => {
   test("--yes runs it; a TTY asks s/N", async () => {
     expect((await run("demo wipe --yes")).out).toEqual(["[✓] apagado"]);

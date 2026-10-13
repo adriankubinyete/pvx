@@ -3,7 +3,7 @@ import { EXIT, type ArgSpec } from "@pvx/sdk";
 import { parseArgs } from "../engine/args.ts";
 import { execute } from "../engine/execute.ts";
 import { logsDir } from "../engine/paths.ts";
-import { createStore } from "../engine/store.ts";
+import { createReadCtx } from "../engine/permissions.ts";
 import { followLogs, readLogs } from "../logs/index.ts";
 import { applyPlan, buildPlan, evaluate, loadProfiles, selectProfile, type EvalResult } from "../plan/index.ts";
 import { catalogOf, pathHelp, rootHelp, type Entry } from "./help.ts";
@@ -52,7 +52,7 @@ async function profileResults(io: CliIO): Promise<{ title: string; results: Eval
   const caps = new Map(io.registry.capabilities.map((c) => [c.id, c]));
   const results = await evaluate(profile, caps, (c) => {
     const m = caps.get(c.id)!.moduleId;
-    return { log: io.makeLogger(m), store: createStore(m), query: io.registry.query };
+    return createReadCtx(m, io.registry.modules.get(m)?.permissions, io.makeLogger, io.registry.query);
   });
   recordDrift(results); // every evaluation (CLI or TUI refresh) appends the level changes
   recordSnapshot(profile.title, results); // and leaves the result the login banner shows

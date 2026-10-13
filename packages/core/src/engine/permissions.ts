@@ -1,7 +1,8 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import type { CommandCtx, Logger, Manifest } from "@pvx/sdk";
+import type { CommandCtx, Logger, Manifest, QueryFn, ReadCtx } from "@pvx/sdk";
 import { moduleStateDir, profiledDir, pvxHome } from "./paths.ts";
+import { createStore } from "./store.ts";
 
 type Perms = NonNullable<Manifest["permissions"]>;
 type Granted = Pick<CommandCtx, "exec" | "net" | "fs">;
@@ -95,5 +96,21 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
         }
       },
     },
+  };
+}
+
+/** The read-only context of `prove`, queries and widgets: no `store.set`, no `fs` writes (they do not exist, not just refuse); `exec` is the same allowlist, logged. */
+export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: (name: string) => Logger, query: QueryFn): ReadCtx {
+  const log = makeLogger(id);
+  const g = createGranted(id, perms, log, makeLogger("core"));
+  return {
+    log,
+    query,
+    store: { get: createStore(id).get },
+    exec(cmd, args, o) {
+      log.info(`exec ${[cmd, ...(args ?? [])].join(" ")}`);
+      return g.exec(cmd, args, o);
+    },
+    fs: { read: g.fs.read, exists: g.fs.exists, list: g.fs.list },
   };
 }

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CommandCtx, Manifest } from "@pvx/sdk";
-import { createLogger, createRegistry, execute, logsDir, moduleStateDir } from "../../src/index.ts";
+import { createLogger, createReadCtx, createRegistry, execute, logsDir, moduleStateDir } from "../../src/index.ts";
 
 let root = "";
 let ro = "";
@@ -134,5 +134,53 @@ describe("ctx.fs", () => {
 
   test("another module's state dir is not", async () => {
     expect((await run((c) => c.fs.read(join(moduleStateDir("outro"), "state.json")), undefined)).ok).toBe(false);
+  });
+});
+
+describe("read-only context (prove, queries, widgets)", () => {
+  const makeLogger = (n: string) => createLogger(logsDir(), n);
+  const mk = async () => {
+    const registry = createRegistry();
+    let seen: Record<string, unknown> = {};
+    registry.register(
+      { id: "rc", version: "1.0.0", entry: "x", permissions: { exec: ["echo"], fs: [ro] } },
+      {
+        commands: { put: { help: "h", run: (c) => c.store.set("k", "v") } },
+        queries: {
+          "rc.peek": async function () {
+            return { k: this.store.get("k"), echo: (await this.exec("echo", ["oi"])).stdout.trim(), file: await this.fs.read(join(ro, "a.txt")) };
+          },
+          "rc.shape": function () {
+            const c = this as unknown as Record<string, Record<string, unknown>>;
+            return { set: typeof c.store!.set, write: typeof c.fs!.write, append: typeof c.fs!.append, remove: typeof c.fs!.remove };
+          },
+          "rc.deny": function () {
+            return this.exec("uname");
+          },
+        },
+        widgets: { w: { slot: "home.summary", priority: 0, data: (ctx) => ((seen = { exec: typeof ctx.exec, set: typeof (ctx.store as any).set }), "ok") } },
+        capabilities: [{ id: "rc.p", title: "p", goal: "g", prove: async (ctx) => ({ level: "ok", text: (await ctx.exec("echo", ["x"])).stdout.trim() }) }],
+      },
+    );
+    registry.readCtx = (id) => createReadCtx(id, registry.modules.get(id)?.permissions, makeLogger, registry.query); // what loadModules installs
+    await execute(registry, "rc put", { makeLogger });
+    return { registry, seen: () => seen };
+  };
+
+  test("queries get store.get, allowlisted exec and fs.read; exec is logged", async () => {
+    const { registry } = await mk();
+    expect(await registry.query("rc.peek")).toEqual({ k: "v", echo: "oi", file: "lido" });
+    expect(logOf("rc")).toContain("exec echo oi");
+  });
+  test("no store.set, fs.write, fs.append or fs.remove exist; exec outside the allowlist is denied", async () => {
+    const { registry } = await mk();
+    expect(await registry.query("rc.shape")).toEqual({ set: "undefined", write: "undefined", append: "undefined", remove: "undefined" });
+    await expect(registry.query("rc.deny")).rejects.toThrow("permissão negada");
+  });
+  test("widget data() and capability prove() get the same context", async () => {
+    const { registry, seen } = await mk();
+    await registry.slots.refresh();
+    expect(seen()).toEqual({ exec: "function", set: "undefined" });
+    expect(await registry.capabilities[0]!.prove(registry.readCtx("rc"))).toEqual({ level: "ok", text: "x" });
   });
 });

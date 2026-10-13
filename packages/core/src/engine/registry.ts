@@ -1,5 +1,6 @@
+import { createReadCtx } from "./permissions.ts";
 import { createSlotHub, type SlotHub, type SlotOpts } from "./slots.ts";
-import type { CapabilityDef, CommandDef, Manifest, ModuleDef, PageDef, QueryFn, Roles } from "@pvx/sdk";
+import type { CapabilityDef, CommandDef, Manifest, ModuleDef, ModuleQuery, PageDef, QueryFn, ReadCtx, Roles } from "@pvx/sdk";
 
 export interface LoadError {
   id: string;
@@ -13,7 +14,7 @@ export type RegisteredPage = PageDef & { key: string; moduleId: string; name: st
 export interface Registry {
   /** Key = "<module> <path...>". */
   commands: Map<string, RegisteredCommand>;
-  queries: Map<string, { moduleId: string; fn: QueryFn }>;
+  queries: Map<string, { moduleId: string; fn: ModuleQuery }>;
   capabilities: (CapabilityDef & { moduleId: string })[];
   /** Key = "<module>.<name>". */
   pages: Map<string, RegisteredPage>;
@@ -36,7 +37,12 @@ export interface Registry {
   register(manifest: Manifest, def: ModuleDef, o?: { replace?: boolean }): void;
   addError(id: string, error: string): void;
   query: QueryFn;
+  /** The read-only context a module's queries and widgets get. The loader replaces it with one that logs to the real loggers. */
+  readCtx: (moduleId: string) => ReadCtx;
 }
+
+const noop = () => {};
+const silent = { debug: noop, info: noop, warn: noop, error: noop };
 
 export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
   const subs = new Set<() => void>();
@@ -56,9 +62,10 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     modules: new Map(),
     official: new Set(),
     roles: new Map(),
-    slots: createSlotHub(opts.slots),
+    slots: createSlotHub({ ...opts.slots, ctxFor: (id) => r.readCtx(id) }),
     errors: [],
     rev: 0,
+    readCtx: (id) => createReadCtx(id, r.modules.get(id)?.permissions, () => silent, r.query),
     subscribe: (fn) => (subs.add(fn), () => void subs.delete(fn)),
     changed() {
       r.rev++;
@@ -104,7 +111,7 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     query(name, ...args) {
       const q = r.queries.get(name);
       if (!q) throw new Error(`consulta desconhecida: "${name}" (módulo ausente ou não expõe essa consulta)`);
-      return q.fn(name, ...args);
+      return q.fn.call(r.readCtx(q.moduleId), name, ...args);
     },
   };
   return r;

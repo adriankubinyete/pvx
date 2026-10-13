@@ -64,6 +64,8 @@ A chave em `commands` é o caminho do comando com espaços (`"ip trust"`); o usu
 
 `destructive: true` exige `--yes` fora de TTY; a TUI usa a confirmação do host.
 
+**Flags globais.** `--json`, `--yes` e `--help`/`-h` valem em qualquer posição da linha, antes de um `--` (`pvx firewall status --json`). Se o comando declara um arg com o mesmo nome, o arg é do comando e a flag global não age.
+
 `page`: nome de uma página do próprio módulo, aberta quando o comando sai com 0.
 
 **Exit codes.** `run()` não devolve exit. O host decide: 0 se nenhuma linha `error` saiu, 1 se alguma saiu, 2 para uso inválido (argumento faltando, desconhecido ou comando destrutivo sem `--yes`), 3 para comando não encontrado. Aviso (`out.warning`) não muda o exit. O comando deve ser idempotente: rodar duas vezes termina no mesmo estado, e "nada a fazer" é sucesso. Exceção lançada em `run()` vira linha de erro e vai para o log do módulo.
@@ -106,7 +108,7 @@ Uma capacidade é uma condição que o módulo sabe provar e, se possível, cons
 | --- | --- |
 | `id` | `"<módulo>.<nome>"`, estável: é a chave dos perfis. |
 | `title`, `goal` | O que é e o que se quer. |
-| `prove(ctx)` | **Somente leitura.** Devolve `{ level: "ok" \| "warn" \| "error", text, evidence?, fix? }`. Recebe `log`, `store` e `query`. |
+| `prove(ctx)` | **Somente leitura.** Devolve `{ level: "ok" \| "warn" \| "error", text, evidence?, fix? }`. Recebe o contexto de só leitura (`ReadCtx`, veja Permissões): `log`, `store.get`, `query`, `exec` e `fs` de leitura. |
 | `fix` | Comando (linha completa, com o módulo) que conserta. Um `fix` devolvido por `prove` vale mais que o da definição. |
 | `affects` | Capacidades a provar de novo depois do conserto. |
 | `needs` | Capacidades que precisam estar `ok` antes; sem isso, o conserto espera. |
@@ -139,7 +141,7 @@ export default factory;
 
 ## Consultas
 
-`queries` expõe leituras para outros módulos: o nome é `"<módulo>.<nome>"`, a função recebe `(name, ...args)` e devolve um valor ou uma promessa. Quem chama usa `ctx.query(nome, ...args)` e declara o módulo em `uses` no manifest. Consulta é leitura: não grava estado. Uma página lê a própria consulta com `useQuery`.
+`queries` expõe leituras para outros módulos: o nome é `"<módulo>.<nome>"`, a função recebe `(name, ...args)` e devolve um valor ou uma promessa. Quem chama usa `ctx.query(nome, ...args)` e declara o módulo em `uses` no manifest. Consulta é leitura (só leitura): não grava estado. O host chama a função com `this` igual ao `ReadCtx` do módulo (`this.store.get`, `this.exec`, `this.fs.read`): use `function` ou sintaxe de método para alcançá-lo, porque uma arrow function o ignora. Uma página lê a própria consulta com `useQuery`.
 
 <!-- test -->
 ```ts
@@ -275,7 +277,7 @@ export default (sdk: Sdk) => {
 | `home.notes` | `string[]` |
 | `home.panel` | forma ainda em definição |
 
-`priority` ordena os widgets dentro do slot. `data()` pode ser assíncrona e é chamada de novo a cada `refreshMs`, se houver. O contrato dos widgets segue os tipos de `src/index.ts` (`WidgetDef`, `SlotId`, `SlotData`): em caso de dúvida, os tipos valem.
+`priority` ordena os widgets dentro do slot. `data(ctx)` recebe o `ReadCtx` (só leitura) e pode ser assíncrona; é chamada de novo a cada `refreshMs`, se houver. Um `data()` que passa de 2 s é removido: dê um `timeoutMs` curto ao `ctx.exec` que usar. O contrato dos widgets segue os tipos de `src/index.ts` (`WidgetDef`, `SlotId`, `SlotData`): em caso de dúvida, os tipos valem.
 
 <!-- test -->
 ```ts
@@ -338,7 +340,46 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | `ctx.fs.remove(path)` | Mesma regra de `rw:`. Apaga o arquivo; não erra se ele não existe. |
 | `ctx.fs.append(path, texto)` | Mesma regra de `rw:`. Uma única chamada de escrita com `O_APPEND` (arquivo criado com modo 0644): dois processos acrescentando linhas ao mesmo arquivo nunca as misturam. |
 
-`$PVX_HOME` (dados da central) e `$PVX_PROFILED_DIR` (`/etc/profile.d`, onde ficam ganchos de login) valem em `permissions.fs` e nos caminhos de `ctx.fs` (o host os expande). Fora de um comando (consultas, widgets) use `sdk.fs`, que segue as mesmas regras.
+`$PVX_HOME` (dados da central) e `$PVX_PROFILED_DIR` (`/etc/profile.d`, onde ficam ganchos de login) valem em `permissions.fs` e nos caminhos de `ctx.fs` (o host os expande). Fora de um comando, `sdk.fs` segue as mesmas regras (use-o só no que não tem `ReadCtx`).
+
+**Contexto de só leitura (`ReadCtx`).** `prove()`, as consultas (`this`) e o `data()` dos widgets recebem `{ log, store, query, exec, fs }` com estas diferenças:
+
+| Campo | Em `ReadCtx` |
+| --- | --- |
+| `store` | Só `get`: não existe `set` nem `delete`. |
+| `fs` | Só `read`, `exists` e `list`: não existem `write`, `append` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
+| `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo. |
+
+Capacidade, consulta e widget são **só leitura** por contrato. O `exec` não tem como ser só leitura por construção: neste contexto o módulo roda apenas sondas (`systemctl is-active`, `nft list ruleset`, `--version`) e nunca algo que mude o sistema. É o mesmo modelo de confiança dos comandos: a revisão humana do commit é a barreira.
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["uname"] }
+const factory: ModuleFactory = () => ({
+  capabilities: [
+    {
+      id: "doc.kernel",
+      title: "Kernel",
+      goal: "O kernel responde",
+      async prove(ctx) {
+        const r = await ctx.exec("uname", ["-r"], { timeoutMs: 2000 });
+        return r.code === 0 ? { level: "ok", text: r.stdout.trim() } : { level: "error", text: "uname falhou" };
+      },
+    },
+  ],
+  queries: {
+    "doc.ultimo": function () {
+      return this.store.get("ultimo");
+    },
+  },
+  widgets: {
+    chip: { slot: "home.summary", priority: 0, data: (ctx) => String(ctx.store.get("ultimo") ?? "sem registro") },
+  },
+});
+export default factory;
+```
 
 Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário com `area`, `line` e `toggle`; `ctrl+s` envia, `esc` cancela), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
 
@@ -411,7 +452,38 @@ test("página", async () => {
 });
 ```
 
-Ambas definem `PVX_HOME` e `PVX_USERMODULES` do processo: use um arquivo de teste por módulo, sem paralelismo dentro dele. Para uma consulta assíncrona, use `await t.waitForFrame((f) => f.includes("..."))`.
+`runSession(moduleDir)` carrega o módulo **uma vez** num `PVX_HOME` temporário e devolve `{ home, run(linha, { env?, secrets?, confirmed? }), renderPage(página, { cols, rows }) }`. Todas as chamadas dividem a mesma central: o que um `run` gravou no `store` está lá no próximo `run` e na página. `run` devolve `{ ok, exit, lines, text }` (`text` junta os textos das linhas). Use para sequências ("accept", depois "list") e para olhar a página depois de mudar o estado.
+
+```ts
+import { afterEach, expect, test } from "bun:test";
+import { join } from "node:path";
+import { runSession, type TuiHarness } from "@pvx/testing";
+
+let t: TuiHarness | undefined;
+afterEach(() => t?.destroy());
+
+test("sequência e página no mesmo estado", async () => {
+  const s = await runSession(join(import.meta.dir, ".."));
+  await s.run("meumodulo add item");
+  expect((await s.run("meumodulo list")).text).toContain("item");
+  t = await s.renderPage("contador");
+  expect(t.frame()).toContain("item");
+});
+```
+
+Todas definem `PVX_HOME` e `PVX_USERMODULES` do processo: use um arquivo de teste por módulo, sem paralelismo dentro dele. Para uma consulta assíncrona, use `await t.waitForFrame((f) => f.includes("..."))`.
+
+## Desenvolvimento
+
+`modules link <pasta>` grava em `PVX_HOME` e por isso exige root, também na máquina de quem desenvolve: a regra é uid 0, sem atalho por variável de ambiente. Para desenvolver num Mac ou numa VM, aponte `PVX_HOME` para uma pasta sua e rode com `sudo -E`, que mantém a variável:
+
+```sh
+export PVX_HOME=$HOME/.pvx-dev
+sudo -E pvx modules link ~/src/meu-modulo
+sudo -E pvx meumodulo status
+```
+
+Para testes use `@pvx/testing` (`runSession`), que não precisa de root.
 
 ## O que um módulo nunca faz
 
@@ -419,7 +491,7 @@ Ambas definem `PVX_HOME` e `PVX_USERMODULES` do processo: use um arquivo de test
 - Trabalhar na fábrica (I/O, rede, exec, estado).
 - Chamar `process.exit`, escrever em `stdout`/`stderr` direto ou pedir dados de forma bloqueante: sempre `ctx.out`, e falta de dado é exit 2 com a mensagem do que passar.
 - Receber segredo por argumento, ou guardar segredo em log, estado, saída ou erro.
-- Escrever em `prove()`: é somente leitura.
+- Escrever em `prove()`, em consulta ou em `data()`: é somente leitura (o `ReadCtx` nem tem `store.set` nem `fs.write`), e o `exec` ali só roda sondas.
 - Ler ou gravar o estado de outro módulo: só pelas consultas dele (`ctx.query`).
 - Escrever em `PVX_HOME`, fora do `store` e do `log` que o host entrega.
 - Escrever cor hex ou escapes ANSI em texto de UI: use tons e `Text`. O `<text>` mostra escapes literalmente.

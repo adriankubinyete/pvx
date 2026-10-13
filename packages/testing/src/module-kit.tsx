@@ -15,7 +15,7 @@ process.on("exit", () => homes.forEach((d) => rmSync(d, { recursive: true, force
  * Loads ONE module (a symlink to `moduleDir` in a fresh `usermodules/`) through the real loader, with a temp `PVX_HOME`.
  * It points PVX_HOME and PVX_USERMODULES at the temp dirs and leaves them set: a test file owns the process env.
  */
-async function loadOne(moduleDir: string): Promise<{ registry: Registry; id: string }> {
+async function loadOne(moduleDir: string): Promise<{ registry: Registry; id: string; home: string }> {
   const dir = resolve(moduleDir);
   const { id } = JSON.parse(readFileSync(join(dir, "pvx-module.json"), "utf8")) as { id: string };
   const home = mkdtempSync(join(tmpdir(), "pvx-mod-"));
@@ -28,7 +28,7 @@ async function loadOne(moduleDir: string): Promise<{ registry: Registry; id: str
   await loadModules(registry, { hostVersion: HOST_VERSION, makeLogger: (n) => createLogger(logsDir(), n), ui });
   const err = registry.errors[0];
   if (err) throw new Error(`módulo "${err.id}" não carregou: ${err.error}`);
-  return { registry, id };
+  return { registry, id, home };
 }
 
 export interface RunCommandOpts {
@@ -39,21 +39,23 @@ export interface RunCommandOpts {
   confirmed?: boolean;
 }
 
-/** Runs a command line (`"<id> status --flag"`, module id first, as in the CLI) through the core `execute`. */
-export async function runCommand(moduleDir: string, line: string, opts: RunCommandOpts = {}): Promise<{ ok: boolean; exit: number; lines: OutLine[] }> {
-  const { registry } = await loadOne(moduleDir);
+const runOn = async (registry: Registry, line: string, opts: RunCommandOpts) => {
   const secretEnv = Object.fromEntries(Object.entries(opts.secrets ?? {}).map(([k, v]) => [`PVX_SECRET_${k.toUpperCase().replace(/-/g, "_")}`, v]));
   const { ok, exit, lines } = await execute(registry, line, {
     makeLogger: (n) => createLogger(logsDir(), n),
     env: { ...opts.env, ...secretEnv },
     confirmed: opts.confirmed,
   });
+  return { ok, exit, lines, text: lines.map((l) => l.text).join("\n") };
+};
+
+/** Runs a command line (`"<id> status --flag"`, module id first, as in the CLI) through the core `execute`, in a fresh home. */
+export async function runCommand(moduleDir: string, line: string, opts: RunCommandOpts = {}): Promise<{ ok: boolean; exit: number; lines: OutLine[] }> {
+  const { ok, exit, lines } = await runOn((await loadOne(moduleDir)).registry, line, opts);
   return { ok, exit, lines };
 }
 
-/** Mounts the module's page `pageName` with the real host `sdk.ui` in a headless terminal. Call `destroy()` at the end. */
-export async function renderPage(moduleDir: string, pageName: string, { cols = 100, rows = 30 }: { cols?: number; rows?: number } = {}): Promise<TuiHarness> {
-  const { registry, id } = await loadOne(moduleDir);
+const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30 }: { cols?: number; rows?: number } = {}): Promise<TuiHarness> => {
   const page = registry.pages.get(`${id}.${pageName}`);
   if (!page) throw new Error(`página "${pageName}" não existe em "${id}" (tem: ${[...registry.pages.keys()].join(", ") || "nenhuma"})`);
   const makeLogger = (n: string) => createLogger(logsDir(), n);
@@ -65,4 +67,25 @@ export async function renderPage(moduleDir: string, pageName: string, { cols = 1
     <App root={pageScreen(page)} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger }} />,
     { cols, rows },
   );
+};
+
+/** Mounts the module's page `pageName` with the real host `sdk.ui` in a headless terminal, in a fresh home. Call `destroy()` at the end. */
+export async function renderPage(moduleDir: string, pageName: string, size: { cols?: number; rows?: number } = {}): Promise<TuiHarness> {
+  const { registry, id } = await loadOne(moduleDir);
+  return mount(registry, id, pageName, size);
+}
+
+export interface Session {
+  /** The temp `PVX_HOME` every call of this session shares. */
+  home: string;
+  /** Runs a line in the shared home: what an earlier line stored is there for the next one. `text` is the line texts joined by newlines. */
+  run(line: string, opts?: RunCommandOpts): Promise<{ ok: boolean; exit: number; lines: OutLine[]; text: string }>;
+  /** Mounts a page of the module on the same home (the same state the `run` calls left). Call `destroy()` at the end. */
+  renderPage(pageName: string, size?: { cols?: number; rows?: number }): Promise<TuiHarness>;
+}
+
+/** Like `runCommand` and `renderPage`, but ONE temp `PVX_HOME` for several calls, so a test can run a sequence ("add", then "list") and then look at the page. */
+export async function runSession(moduleDir: string): Promise<Session> {
+  const { registry, id, home } = await loadOne(moduleDir);
+  return { home, run: (line, opts = {}) => runOn(registry, line, opts), renderPage: (pageName, size) => mount(registry, id, pageName, size) };
 }
