@@ -39,6 +39,7 @@ Requer [Bun](https://bun.com).
 bun install
 bun test
 bun run typecheck
+bun dev                      # TUI com reload; usa PVX_HOME=.dev/pvx (ignorado pelo git) para o bun vigiar os usermodules
 bun run build:linux-amd64    # ou build:linux-arm64, build:darwin-arm64; gera dist/pvx-<os>-<arch>.tar.gz
 ```
 

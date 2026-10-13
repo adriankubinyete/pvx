@@ -10,7 +10,7 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "dev": "bun run --watch apps/pvx/src/index.ts",
+    "dev": "PVX_HOME=.dev/pvx bun run --watch apps/pvx/src/index.ts",
     "start": "bun apps/pvx/src/index.ts",
     "build": "bun run build:linux-amd64",
     "build:linux-amd64": "sh scripts/build.sh linux-amd64",
