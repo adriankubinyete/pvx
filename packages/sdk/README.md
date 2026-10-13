@@ -13,6 +13,8 @@ Os exemplos marcados com `<!-- test -->` neste arquivo são extraídos e rodados
 | `entry` | sim | Arquivo de entrada, relativo ao módulo (`src/index.tsx`). Tem de ficar dentro do diretório. |
 | `pvx` | não | Faixa semver do pvx aceita (`>=0.1.0`). Fora da faixa, o módulo não carrega e o erro diz qual faixa instalar. |
 | `applies` | não | `{ "file": "/etc/..." }`: sem o arquivo o módulo é ignorado em silêncio. |
+| `os` | não | Sistemas aceitos: `["linux"]`, `["linux", "macos"]`, `["windows"]`. Sem o campo, qualquer sistema. Em outro sistema, o `pvx modules add` recusa a instalação, salvo com `--any-os`. |
+| `distro` | não | Famílias de Linux aceitas (`["rhel", "debian"]`), comparadas sem diferenciar maiúsculas com `ID` e `ID_LIKE` de `/etc/os-release`. Implica Linux. Mesma regra de recusa do `os`. |
 | `permissions` | não | `exec`, `net`, `fs`: o que o módulo declara usar. Serve à revisão de confiança e é o que `ctx.exec`, `ctx.net` e `ctx.fs` aceitam (veja Permissões). |
 | `contributes` | não | `commands`, `pages`, `widgets`, `capabilities`: o que o módulo entrega, para listar sem importar o código. |
 | `uses` | não | Módulos cujas consultas este módulo chama com `ctx.query`. |

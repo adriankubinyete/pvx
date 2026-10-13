@@ -9,7 +9,7 @@ import type { CoreCommand } from "./core.ts";
 export const sha7 = (s?: string) => s?.slice(0, 7);
 
 export function rowLine(r: ModuleRow): OutLine & { module: ModuleRow } {
-  const extra = [r.official && "◆", r.ref && r.sha && `${r.ref}@${sha7(r.sha)}`, r.behind && `↓${r.behind}`, r.dirty && `✎${r.dirty}`, r.error].filter(Boolean).join(" ");
+  const extra = [r.official && "◆", r.ref && r.sha && `${r.ref}@${sha7(r.sha)}`, r.behind && `↓${r.behind}`, r.dirty && `✎${r.dirty}`, r.incompatible && "⚠ sistema", r.error].filter(Boolean).join(" ");
   const kind = r.state === "carregado" || r.state === "atras" ? "success" : "warning";
   const text = r.state === "erro" ? `${r.id} erro: ${r.error}` : `${r.id} ${r.version ?? "?"} ${r.state}${extra ? ` ${extra}` : ""}`;
   return { kind, text, module: r };
@@ -34,6 +34,7 @@ const addArgs: ArgSpec[] = [
   { name: "url", help: "usuario/repo (GitHub), URL https/ssh/git@host:caminho, ou id do catálogo", kind: "positional", required: true },
   { name: "ref", help: "Branch, tag ou commit", kind: "option" },
   { name: "trust", help: "Aprova este commit sem revisão em tela", kind: "option" },
+  { name: "any-os", help: "Instala mesmo se o módulo não declarar este sistema", kind: "flag" },
 ];
 const trustArgs: ArgSpec[] = [
   { name: "id", help: "Módulo", kind: "positional" },
@@ -93,10 +94,13 @@ export const MODULES_COMMANDS: CoreCommand[] = [
         allowFile: io.allowFile,
         registry: io.registry,
         reserved: io.reservedWords,
+        onIncompatible: async () => Boolean(p.args["any-os"]),
       });
       if (!r.ok) {
         if (r.review) reviewLines(r.review, "").slice(0, -1).forEach((l) => o.line(l));
-        return done(o, r);
+        const code = done(o, r);
+        if (r.incompatible) o.line({ kind: "info", text: "para instalar mesmo assim, rode de novo com --any-os" });
+        return code;
       }
       if (r.status === "ja-instalado") return o.line({ kind: "info", text: `${r.id}: já instalado (${r.state})` }), EXIT.OK;
       reviewLines(r.review!, r.state === "aguardando-confianca" ? approveHint(r.id, r.sha!) : "commit aprovado; o módulo carrega na próxima execução").forEach((l) => o.line(l));

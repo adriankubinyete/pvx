@@ -9,6 +9,10 @@ export interface Manifest {
   /** Host semver range. */
   pvx?: string;
   applies?: { file?: string };
+  /** Systems the module supports; unset means any. */
+  os?: ("linux" | "macos" | "windows")[];
+  /** Linux distro families, matched case-insensitively against `ID` and `ID_LIKE` in /etc/os-release. Implies Linux. */
+  distro?: string[];
   /** `fs` entries may start with `$PVX_HOME` (the central's data dir) or `$PVX_PROFILED_DIR` (`/etc/profile.d`), expanded by the host. */
   permissions?: { exec?: string[]; net?: string[]; fs?: string[] };
   contributes?: { commands?: string[]; pages?: string[]; widgets?: string[]; capabilities?: string[] };

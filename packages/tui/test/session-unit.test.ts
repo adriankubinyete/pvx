@@ -102,3 +102,19 @@ test("complete: core commands, their subcommands and flags; `!` lines complete n
   expect(complete(registry, "vers").items[0]!.label).toBe("version");
   expect(complete(registry, "!modul").items).toEqual([]);
 });
+
+test("act hands `choose` to the body: a choice pending resolves with the answered index", async () => {
+  const store = createSessionStore({ registry, makeLogger: () => quiet, historyPath: join(pvxHome(), "h3"), isRoot: true });
+  let picked = -1;
+  const done = store.act("modules add x", async (h) => {
+    picked = await h.choose("título", ["linha"], ["a", "b"]);
+    return { exit: 0, lines: [{ kind: "info", text: `picked ${picked}` }] };
+  });
+  await Bun.sleep(0);
+  const p = store.getSnapshot().pending[0];
+  expect(p).toMatchObject({ kind: "choice", title: "título", lines: ["linha"], options: ["a", "b"] });
+  store.answer(p!.id, 1);
+  await done;
+  expect(picked).toBe(1);
+  expect(store.getSnapshot().pending).toHaveLength(0);
+});

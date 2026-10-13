@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
-import { addModule, createRegistry, listModules, listTrust, loadModules, pendingUpdates, reloadModule, runCli, trustGate, watchDevModules, type CliIO, type DevEvent } from "../../src/index.ts";
+import { addModule, createRegistry, listModules, listTrust, loadModules, pendingUpdates, reloadModule, reviewLines, runCli, type HostPlatform, trustGate, watchDevModules, type CliIO, type DevEvent } from "../../src/index.ts";
 
 const noop = () => {};
 const makeLogger = (): Logger => ({ debug: noop, info: noop, warn: noop, error: noop });
@@ -141,6 +141,73 @@ describe("add and trust", () => {
     const again = await cli(`modules add ${o.url}`);
     expect(again.code).toBe(0);
     expect(again.text).toContain("já instalado");
+  });
+});
+
+describe("system compatibility", () => {
+  const win: HostPlatform = { os: "windows", distros: [], name: "Windows" };
+  const leftovers = () => (existsSync(process.env.PVX_USERMODULES!) ? readdirSync(process.env.PVX_USERMODULES!) : []);
+
+  test("an incompatible module is refused without a callback, leaving nothing behind", async () => {
+    const o = origin("gm", { distro: ["rhel"] });
+    const r = await add(o.url, { host: win });
+    expect(r).toMatchObject({ ok: false, incompatible: true });
+    expect((r as { error: string }).error).toBe("cancelado: feito para linux (rhel); este sistema é Windows");
+    expect((r as { review?: { platform: { ok: boolean } } }).review?.platform.ok).toBe(false);
+    expect(leftovers()).toEqual([]);
+  });
+
+  test("a callback answering false refuses too", async () => {
+    const o = origin("gm", { distro: ["rhel"] });
+    const r = await add(o.url, { host: win, onIncompatible: async () => false });
+    expect(r).toMatchObject({ ok: false, incompatible: true });
+    expect((r as { error: string }).error).toStartWith("cancelado:");
+    expect(leftovers()).toEqual([]);
+  });
+
+  test("a callback answering true installs, awaiting trust, and receives the review", async () => {
+    const o = origin("gm", { distro: ["rhel"] });
+    let seen: { id: string; platform: { ok: boolean } } | undefined;
+    const r = await add(o.url, { host: win, onIncompatible: async (rv) => ((seen = rv), true) });
+    expect(r).toMatchObject({ ok: true, status: "instalado", state: "aguardando-confianca" });
+    expect(seen).toMatchObject({ id: "gm", platform: { ok: false } });
+    expect(leftovers()).toEqual(["gm"]);
+  });
+
+  test("a compatible module never calls the callback", async () => {
+    const o = origin("gm", { os: ["windows"] });
+    let calls = 0;
+    const r = await add(o.url, { host: win, onIncompatible: async () => (calls++, false) });
+    expect(r).toMatchObject({ ok: true, state: "aguardando-confianca" });
+    expect(calls).toBe(0);
+  });
+
+  test("the list flags an installed incompatible module and leaves others without the key", async () => {
+    await add(origin("gm", { distro: ["rhel"] }).url, { host: win, onIncompatible: async () => true });
+    await add(origin("ok").url);
+    const rows = await listModules(undefined, win);
+    expect(rows.find((r) => r.id === "gm")!.incompatible).toBe("feito para linux (rhel); este sistema é Windows");
+    expect("incompatible" in rows.find((r) => r.id === "ok")!).toBe(false);
+  });
+
+  test("the review shows the system line", async () => {
+    const r = await add(origin("gm", { distro: ["rhel"] }).url, { host: win, onIncompatible: async () => true });
+    const lines = reviewLines((r as { review: Parameters<typeof reviewLines>[0] }).review, "x");
+    expect(lines.find((l) => l.text.startsWith("sistema:"))).toEqual({ kind: "error", text: "sistema: feito para linux (rhel); este sistema é Windows" });
+  });
+
+  test("CLI: refused without --any-os (with a hint), installed with it", async () => {
+    const o = origin("gm", { distro: ["nonexistent-distro"] });
+    const refused = await cli(`modules add ${o.url}`);
+    expect(refused.code).toBe(1);
+    expect(refused.text).toContain("cancelado: feito para linux (nonexistent-distro)");
+    expect(refused.text).toContain("para instalar mesmo assim, rode de novo com --any-os");
+    expect(leftovers()).toEqual([]);
+    const forced = await cli(`modules add ${o.url} --any-os`);
+    expect(forced.code).toBe(0);
+    expect(forced.text).toContain("gm instalado: aguardando-confianca");
+    expect(leftovers()).toEqual(["gm"]);
+    expect((await cli("modules list")).text).toContain("⚠ sistema");
   });
 });
 

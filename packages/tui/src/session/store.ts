@@ -27,7 +27,16 @@ export interface Block {
 }
 
 /** A question the host asks the user; answered with `answer`. */
-export type Pending = { id: number; kind: "confirm"; cmd: string } | { id: number; kind: "secret"; name: string };
+export type Pending =
+  | { id: number; kind: "confirm"; cmd: string }
+  | { id: number; kind: "secret"; name: string }
+  | { id: number; kind: "choice"; title: string; lines: string[]; options: string[] };
+
+/** Handed to an `act` body so it can ask the user mid-run. */
+export interface ActHelper {
+  /** Resolves with the chosen option index (escape picks 0). */
+  choose(title: string, lines: string[], options: string[]): Promise<number>;
+}
 
 export interface SessionState {
   blocks: readonly Block[];
@@ -53,11 +62,11 @@ export interface SessionApi {
   notice(line: string, status: Block["status"], lines: OutLine[], moduleId?: string): void;
   /**
    * A host mutation (trust, update, remove, add...) as a block, so it reaches the scrollback like any command: same strict root
-   * rule, `confirm` asks the host question first. `line` is the CLI line it stands for. Never rejects.
+   * rule, `confirm` asks the host question first. `line` is the CLI line it stands for. `fn` gets a helper to ask the user a choice. Never rejects.
    */
-  act(line: string, fn: () => Promise<{ exit: number; lines: OutLine[] }>, o?: { confirm?: boolean }): Promise<{ exit: number; id: number }>;
-  /** Answers a pending confirm (boolean) or secret (string, or undefined to cancel). */
-  answer(id: number, value: boolean | string | undefined): void;
+  act(line: string, fn: (h: ActHelper) => Promise<{ exit: number; lines: OutLine[] }>, o?: { confirm?: boolean }): Promise<{ exit: number; id: number }>;
+  /** Answers a pending confirm (boolean), secret (string, or undefined to cancel) or choice (option index). */
+  answer(id: number, value: boolean | string | number | undefined): void;
   subscribe(fn: () => void): () => void;
   /** Called with a page key ("<module>.<name>") when `#page` is run or a command with `page` finishes ok. The App's page host pushes the screen. */
   onPage(fn: (key: string) => void): () => void;
@@ -106,7 +115,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
   let state: SessionState = { blocks: [], history: loadHistory(historyPath), pending: [] };
   const subs = new Set<() => void>();
   const pageSubs = new Set<(key: string) => void>();
-  const waiting = new Map<number, (v: boolean | string | undefined) => void>();
+  const waiting = new Map<number, (v: boolean | string | number | undefined) => void>();
   let seq = 0;
   // Real lines of masked blocks. Memory only: the masked line is all that reaches blocks, history and disk.
   const raws = new Map<number, string>();
@@ -116,10 +125,10 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     subs.forEach((f) => f());
   };
   const patchBlock = (id: number, p: Partial<Block>) => set({ blocks: state.blocks.map((b) => (b.id === id ? { ...b, ...p } : b)) });
-  const ask = <T extends boolean | string | undefined>(q: { kind: "confirm"; cmd: string } | { kind: "secret"; name: string }) =>
+  const ask = <T extends boolean | string | number | undefined>(q: Pending extends infer P ? (P extends Pending ? Omit<P, "id"> : never) : never) =>
     new Promise<T>((resolve) => {
       const id = ++seq;
-      waiting.set(id, resolve as (v: boolean | string | undefined) => void);
+      waiting.set(id, resolve as (v: boolean | string | number | undefined) => void);
       set({ pending: [...state.pending, { ...q, id } as Pending] });
     });
 
@@ -233,7 +242,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     patchBlock(id, { status, ms: Date.now() - t0, lines: clean });
   }
 
-  async function act(line: string, fn: () => Promise<{ exit: number; lines: OutLine[] }>, o: { confirm?: boolean } = {}) {
+  async function act(line: string, fn: (h: ActHelper) => Promise<{ exit: number; lines: OutLine[] }>, o: { confirm?: boolean } = {}) {
     const id = ++seq;
     const t0 = Date.now();
     set({ blocks: [...state.blocks, { id, line, status: "running", moduleId: "core", lines: [], at: t0 } as Block].slice(-MAX_BLOCKS) });
@@ -241,7 +250,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     try {
       if (!isRoot) r = { exit: 1, lines: [{ kind: "error", text: rootMessage() }] };
       else if (o.confirm && !(await ask<boolean>({ kind: "confirm", cmd: line }))) r = { exit: 1, lines: [{ kind: "warning", text: "cancelado" }] };
-      else (r = await fn()), auditCommand({ line, exit: r.exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // only what actually ran
+      else (r = await fn({ choose: (title, lines, options) => ask<number>({ kind: "choice", title, lines, options }) })), auditCommand({ line, exit: r.exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // only what actually ran
     } catch (e) {
       r = { exit: 1, lines: [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }] };
     }

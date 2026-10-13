@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import type { Manifest, OutLine } from "@pvx/sdk";
 import { moduleStateDir, usermodulesDir } from "../engine/paths.ts";
 import { readManifestRaw } from "../engine/manifest.ts";
+import { checkPlatform, hostPlatform, type HostPlatform, type PlatformCheck } from "../engine/platform.ts";
 import type { Registry } from "../engine/registry.ts";
 import { analyze } from "./analyze.ts";
 import * as G from "./git.ts";
@@ -32,6 +33,8 @@ export interface ModuleRow {
   dirty?: number;
   /** Commits the already-fetched upstream has and HEAD lacks. */
   behind?: number;
+  /** Why the module does not fit this system (PlatformCheck.text); unset when it fits. */
+  incompatible?: string;
   error?: string;
 }
 
@@ -68,7 +71,7 @@ export function trustGate(o: { warn?: (msg: string) => void } = {}) {
 }
 
 /** Every module with its `--json` state. `registry` tells loaded from errored; with none, eligible modules count as loaded. */
-export async function listModules(registry?: Registry): Promise<ModuleRow[]> {
+export async function listModules(registry?: Registry, host: HostPlatform = hostPlatform()): Promise<ModuleRow[]> {
   const rows: ModuleRow[] = [];
   const seen = new Set<string>();
   for (const b of registry?.official ?? []) {
@@ -81,11 +84,15 @@ export async function listModules(registry?: Registry): Promise<ModuleRow[]> {
     const dir = join(root, id);
     if (seen.has(id) || !existsSync(dir) || !(lstatSync(dir).isSymbolicLink() || lstatSync(dir).isDirectory())) continue;
     seen.add(id);
+    let incompatible: string | undefined;
     try {
       const m = readManifestRaw(dir);
       if (m.applies?.file && !existsSync(m.applies.file)) continue; // not applicable here: the loader skips it too
+      const pc = checkPlatform(m, host);
+      if (!pc.ok) incompatible = pc.text;
     } catch {}
     const row = await diskState(dir, id);
+    if (incompatible) row.incompatible = incompatible;
     row.version = registry?.modules.get(id)?.version ?? (() => { try { return readManifestRaw(dir).version; } catch { return undefined; } })();
     // A module in the registry passed the gate (or the host runs without one): a non-git dir is not "awaiting" then.
     if (registry?.modules.has(id) && row.state === "aguardando-confianca") (row.state = "carregado"), delete row.error;
@@ -113,6 +120,7 @@ export interface Review {
   sha: string;
   manifest: Manifest;
   compat: { ok: boolean; text: string };
+  platform: PlatformCheck;
   contributes: NonNullable<Manifest["contributes"]>;
   /** Who collides with this module (id or command path); non-empty refuses the add. */
   conflicts: string[];
@@ -126,6 +134,8 @@ export interface ReviewOpts {
   registry?: Registry;
   /** First words of core commands: a module id equal to one would be shadowed. */
   reserved?: string[];
+  /** Defaults to the running system. */
+  host?: HostPlatform;
 }
 
 /** Reads the manifest WITHOUT importing and gathers what the technician must see before approving. */
@@ -151,7 +161,7 @@ export async function reviewModule(dir: string, o: ReviewOpts = {}): Promise<Rev
     compat = { ok, text: ok ? `pvx ${manifest.pvx} (instalado: ${o.hostVersion ?? "?"})` : `requer pvx ${manifest.pvx} (instalado: ${o.hostVersion})` };
   }
   const git = await Promise.all([G.originUrl(dir).catch(() => undefined), G.currentRef(dir).catch(() => undefined), G.headSha(dir)]);
-  return { dir, id, url: git[0], ref: git[1], sha: git[2], manifest, compat, contributes: manifest.contributes ?? {}, conflicts, permissions: manifest.permissions ?? {}, warnings: analyze(dir) };
+  return { dir, id, url: git[0], ref: git[1], sha: git[2], manifest, compat, platform: checkPlatform(manifest, o.host ?? hostPlatform()), contributes: manifest.contributes ?? {}, conflicts, permissions: manifest.permissions ?? {}, warnings: analyze(dir) };
 }
 
 const list = (a?: string[]) => (a?.length ? a.join(", ") : "nada");
@@ -166,6 +176,7 @@ export function reviewLines(r: Review, hint: string): OutLine[] {
     L("info", `commit: ${r.sha}`),
     L("info", `módulo: ${r.id} ${r.manifest.version}`),
     L(r.compat.ok ? "info" : "error", `compatibilidade: ${r.compat.text}`),
+    L(r.platform.ok ? "info" : "error", `sistema: ${r.platform.text}`),
     L("info", `contribui: comandos ${list(c.commands)}; páginas ${list(c.pages)}; widgets ${list(c.widgets)}; capacidades ${list(c.capabilities)}`),
     L("info", `permissões: exec ${list(p.exec)}; net ${list(p.net)}; fs ${list(p.fs)} (declarativas, não é sandbox)`),
     ...r.conflicts.map((x) => L("error", `conflito: ${x}`)),
@@ -188,11 +199,15 @@ export interface AddOpts {
   expectId?: string;
   registry?: Registry;
   reserved?: string[];
+  /** Defaults to the running system. */
+  host?: HostPlatform;
+  /** Asked when the module does not declare this system; without it (or on false) the add is refused. */
+  onIncompatible?: (review: Review) => Promise<boolean>;
 }
 
 export type AddResult =
   | { ok: true; status: "instalado" | "ja-instalado"; id: string; sha?: string; state: ModuleState; review?: Review }
-  | { ok: false; error: string; review?: Review };
+  | { ok: false; error: string; review?: Review; incompatible?: true };
 
 /**
  * Clones into usermodules/<id>, reviews, and approves only with `trust`. Nothing is imported here. Idempotent by origin URL.
@@ -220,6 +235,9 @@ export async function addModule(url: string, o: AddOpts): Promise<AddResult> {
     if (review.conflicts.length) return { ok: false, error: `adição recusada: ${review.conflicts.join("; ")}`, review };
     if (o.trust !== undefined && !matchSha(review.sha, o.trust)) {
       return { ok: false, error: `--trust ${o.trust} não confere com o commit ${review.sha}`, review };
+    }
+    if (!review.platform.ok && !(o.onIncompatible && (await o.onIncompatible(review)))) {
+      return { ok: false, error: `cancelado: ${review.platform.text}`, review, incompatible: true };
     }
     const dir = join(root, id);
     renameSync(tmp, dir);

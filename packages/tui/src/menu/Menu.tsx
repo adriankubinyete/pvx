@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { OutLine } from "@pvx/sdk";
-import { addModule, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type UpdateCheck } from "@pvx/core";
+import { addModule, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type Review, type UpdateCheck } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
@@ -10,7 +10,7 @@ import { ReviewScreen } from "../modules/Review.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { LogScreen } from "../session/LogScreen.tsx";
 import { SessionModals } from "../session/Modals.tsx";
-import type { SessionApi } from "../session/store.ts";
+import type { ActHelper, SessionApi } from "../session/store.ts";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
 import { AddBox } from "./AddBox.tsx";
@@ -34,6 +34,10 @@ const source = (c: Catalog) => `fonte: ${c.source}${c.fetchedAt ? ` · ${hhmm(c.
 type View = { kind: "list" } | { kind: "form"; item: Item } | { kind: "result"; id: number } | { kind: "add" };
 
 /** The Módulos tab: the registry as a menu (modules, then command groups, then the form and the result). Arrows and enter; esc goes up; `/` goes to the Comando tab. */
+/** Asks whether to install a module that does not fit this system. */
+const askIncompatible = (h: ActHelper) => (r: Review) =>
+  h.choose("sistema incompatível", [`parece que o ${r.id} não é compatível com este sistema.`, `feito para    ${r.platform.wanted}`, `este sistema  ${r.platform.host}`], ["Entendi, não instalar", "Instalar mesmo assim"]).then((i) => i === 1);
+
 export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi; registry: Registry; nav: MenuNav; updates?: UpdatePending[] }) {
   const router = useRouter();
   const { g } = useTheme();
@@ -74,7 +78,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
     setView({ kind: "result", id: store.blocks.at(-1)!.id }); // run adds its block synchronously
   };
   /** A host action as a block (same root rule and scrollback as a command), then its output on screen. */
-  const act = async (line: string, fn: () => Promise<{ exit: number; lines: OutLine[] }>, confirm = false) => {
+  const act = async (line: string, fn: (h: ActHelper) => Promise<{ exit: number; lines: OutLine[] }>, confirm = false) => {
     const r = await store.act(line, fn, { confirm });
     registry.changed(); // rows, tabs, palette and Início re-read
     return r;
@@ -84,8 +88,9 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const showResult = (id: number) => setView({ kind: "result", id });
   const install = async (e: NonNullable<Item["catalog"]>) => {
     let added: Awaited<ReturnType<typeof addModule>> | undefined;
-    const r = await act(`modules add ${e.id}`, async () => {
-      added = await addModule(e.url, { hostVersion: deps!.load.hostVersion, expectId: e.id, registry, reserved: deps!.reserved, allowFile: deps!.allowFile });
+    const r = await act(`modules add ${e.id}`, async (h) => {
+      added = await addModule(e.url, { hostVersion: deps!.load.hostVersion, expectId: e.id, registry, reserved: deps!.reserved, allowFile: deps!.allowFile,
+        onIncompatible: askIncompatible(h) });
       const a = added;
       if (!a.ok) return { exit: 1, lines: [{ kind: "error", text: a.error }] };
       if (a.status === "ja-instalado") return { exit: 0, lines: [{ kind: "info", text: `${a.id}: já instalado (${a.state})` }] };
@@ -98,14 +103,15 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const addRef = async (ref: string): Promise<string | undefined> => {
     let error: string | undefined;
     let added: Awaited<ReturnType<typeof addModule>> | undefined;
-    const r = await act(`modules add ${ref}`, async () => {
+    const r = await act(`modules add ${ref}`, async (h) => {
       let url: string;
       try {
         url = await resolveModuleRef(ref);
       } catch (e) {
         return { exit: 1, lines: [{ kind: "error", text: (error = (e as Error).message) }] };
       }
-      added = await addModule(url, { hostVersion: deps!.load.hostVersion, registry, reserved: deps!.reserved, allowFile: deps!.allowFile });
+      added = await addModule(url, { hostVersion: deps!.load.hostVersion, registry, reserved: deps!.reserved, allowFile: deps!.allowFile,
+        onIncompatible: askIncompatible(h) });
       const a = added;
       if (!a.ok) return { exit: 1, lines: [{ kind: "error", text: (error = a.error) }] };
       if (a.status === "ja-instalado") return { exit: 0, lines: [{ kind: "info", text: `repositório: ${url}` }, { kind: "info", text: `${a.id}: já instalado (${a.state})` }] };

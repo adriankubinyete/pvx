@@ -177,6 +177,7 @@ export function ReviewScreen({ id, store, registry, deps, update }: ReviewProps)
       <Row k="commit">{`${review!.sha} fixado: nova confiança se mudar`}</Row>
       <Row k="módulo">{`${clean(review!.id)} ${clean(review!.manifest.version)}`}</Row>
       <Row k="pvx" tone={review!.compat.ok ? undefined : "error"}>{`${review!.compat.ok ? g.ok : g.error} ${clean(review!.compat.text)}`}</Row>
+      <Row k="sistema" tone={review!.platform.ok ? undefined : "error"}>{`${review!.platform.ok ? g.ok : g.error} ${clean(review!.platform.text)}`}</Row>
       <Row k="contribui">{`comandos ${list(review!.contributes.commands)}; páginas ${list(review!.contributes.pages)}; widgets ${list(review!.contributes.widgets)}`}</Row>
       {review!.conflicts.length ? review!.conflicts.map((x) => <Row key={x} k="conflito" tone="error">{clean(x)}</Row>) : <Row k="conflitos">nenhum</Row>}
       <Perms review={review} />

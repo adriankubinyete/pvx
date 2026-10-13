@@ -16,6 +16,13 @@ export function readManifestRaw(dir: string): Manifest {
     if (typeof m[f] !== "string" || !m[f]) throw bad(`campo "${f}" ausente`);
   }
   if (!/^[a-z0-9-]+$/.test(m.id)) throw bad(`id "${m.id}" deve ter só minúsculas, dígitos e hífen`);
+  for (const f of ["os", "distro"] as const) {
+    const v: unknown = m[f];
+    if (v !== undefined && (!Array.isArray(v) || !v.length || v.some((x) => typeof x !== "string" || !x.trim()))) {
+      throw bad(`"${f}" deve ser uma lista não vazia de textos`);
+    }
+  }
+  if (m.os?.some((x) => !["linux", "macos", "windows"].includes(x))) throw bad(`"os" aceita linux, macos, windows`);
   return m;
 }
 

@@ -302,6 +302,69 @@ test("a opens the repository box; a short ref clones and opens the review; esc c
   }
 });
 
+/** Makes `acme/<id>` clone from the local origin: a Windows file:// path is not a valid manual-add URL. Returns the ref. */
+function shortRef(o: Origin, id: string) {
+  process.env.GIT_CONFIG_COUNT = "1";
+  process.env.GIT_CONFIG_KEY_0 = `url.${o.url}.insteadOf`;
+  process.env.GIT_CONFIG_VALUE_0 = `https://github.com/acme/${id}.git`;
+  return `acme/${id}`;
+}
+afterEach(() => {
+  for (const k of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) delete process.env[k];
+});
+
+/** Manual add of `o` up to the incompatibility modal. */
+async function addIncompatible(o: Origin, id: string) {
+  const m = await mount();
+  await m.t.press("a");
+  await m.t.type(shortRef(o, id));
+  await m.t.press("RETURN");
+  const f = await see(m.t, (x) => x.includes("sistema incompatível"));
+  expect(f).toContain("não é compatível com este sistema");
+  expect(f).toMatch(/\[ Entendi, não instalar \]/);
+  expect(f).not.toMatch(/\[ Instalar mesmo assim \]/);
+  return m;
+}
+
+test("a incompatible module: the modal defaults to not installing; enter refuses and removes the clone", async () => {
+  const { t } = await addIncompatible(origin("inc", { distro: ["nonexistent-distro"] }), "inc");
+  await t.press("RETURN");
+  await see(t, (x) => !x.includes("sistema incompatível") && x.includes("cancelado"));
+  expect(existsSync(dirOf("inc"))).toBe(false);
+  expect(existsSync(marker)).toBe(false);
+});
+
+test("a incompatible module: esc on the modal also cancels", async () => {
+  const { t } = await addIncompatible(origin("inc2", { distro: ["nonexistent-distro"] }), "inc2");
+  await t.press("ESCAPE");
+  await see(t, (x) => !x.includes("sistema incompatível") && x.includes("cancelado"));
+  expect(existsSync(dirOf("inc2"))).toBe(false);
+});
+
+test("a incompatible module: right then enter installs anyway and the review shows the sistema row", async () => {
+  const { t } = await addIncompatible(origin("inc3", { distro: ["nonexistent-distro"] }), "inc3");
+  await t.press("ARROW_RIGHT");
+  expect(t.frame()).toMatch(/\[ Instalar mesmo assim \]/);
+  expect(t.frame()).not.toMatch(/\[ Entendi, não instalar \]/);
+  await t.press("RETURN");
+  const f = await see(t, (x) => x.includes("revisão de confiança"));
+  expect(f).toMatch(/sistema\s+✗/);
+  expect(f).toContain("nonexistent-distro");
+  expect(existsSync(dirOf("inc3"))).toBe(true);
+  expect(existsSync(marker)).toBe(false);
+});
+
+test("a compatible module never shows the incompatibility modal", async () => {
+  const o = origin("cmp");
+  const { t } = await mount();
+  await t.press("a");
+  await t.type(shortRef(o, "cmp"));
+  await t.press("RETURN");
+  await see(t, (x) => x.includes("revisão de confiança"));
+  expect(t.frame()).not.toContain("sistema incompatível");
+  expect(t.frame()).toMatch(/sistema\s+✓/);
+});
+
 test("a without root shows the sudo block", async () => {
   const { t, store } = await mount({ isRoot: false });
   await t.press("a");
