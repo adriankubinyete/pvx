@@ -5,7 +5,9 @@ import { moduleStateDir, usermodulesDir } from "../engine/paths.ts";
 import { readManifestRaw } from "../engine/manifest.ts";
 import { checkPlatform, hostPlatform, type HostPlatform, type PlatformCheck } from "../engine/platform.ts";
 import type { Registry } from "../engine/registry.ts";
-import { analyze } from "./analyze.ts";
+import { analyze, hitLines, readSources, type Hit } from "./analyze.ts";
+import { buildFiles, type ReviewFile } from "./graph.ts";
+import { summarizeCommands, summarizePermissions, type CommandSummary, type PermissionSummary } from "./review-summary.ts";
 import * as G from "./git.ts";
 import { audit, devLinks, disabledSet, invalidateUpdateCache, isLink, isRegisteredDev, matchSha, msg, setDevLinks, validId, writeDisabled, type Result } from "./common.ts";
 import { approve, getTrust, revoke } from "./trust.ts";
@@ -17,6 +19,9 @@ export * from "./live.ts";
 export { audit, invalidateUpdateCache, type Result };
 export { GitError, checkUrl } from "./git.ts";
 export { analyze };
+export type { Hit, ReviewFile, CommandSummary, PermissionSummary };
+export { BROAD_EXEC, summarizeCommands, summarizePermissions } from "./review-summary.ts";
+export type { CommitInfo } from "./git.ts";
 
 export type ModuleState = "aguardando-confianca" | "carregado" | "desativado" | "erro" | "modificado" | "atras" | "dev";
 
@@ -33,6 +38,8 @@ export interface ModuleRow {
   dirty?: number;
   /** Commits the already-fetched upstream has and HEAD lacks. */
   behind?: number;
+  /** Trusted always: new commits from the same origin apply without review. */
+  always?: true;
   /** Why the module does not fit this system (PlatformCheck.text); unset when it fits. */
   incompatible?: string;
   error?: string;
@@ -57,6 +64,7 @@ async function diskState(dir: string, id: string): Promise<ModuleRow> {
     return { ...row, state: "aguardando-confianca", error: "não é um repositório git" };
   }
   const t = getTrust(id);
+  if (t?.always) row.always = true;
   if (!t || t.sha !== row.sha) return { ...row, state: "aguardando-confianca" };
   return { ...row, state: row.dirty ? "modificado" : "carregado" };
 }
@@ -118,6 +126,10 @@ export interface Review {
   url?: string;
   ref?: string;
   sha: string;
+  /** HEAD's metadata; `count` is the commits reachable from HEAD. */
+  commit: G.CommitInfo;
+  /** The sha now approved for this id in the trust store; unset on a first approval. */
+  trustedBefore?: string;
   manifest: Manifest;
   compat: { ok: boolean; text: string };
   platform: PlatformCheck;
@@ -125,8 +137,14 @@ export interface Review {
   /** Who collides with this module (id or command path); non-empty refuses the add. */
   conflicts: string[];
   permissions: NonNullable<Manifest["permissions"]>;
-  /** Static analysis hits (warnings, not a guarantee). */
+  /** Static analysis hits as `path:line: msg` text (warnings, not a guarantee). */
   warnings: string[];
+  /** Code files with size, group, import graph from the entry and hits. Never source text. */
+  files: ReviewFile[];
+  /** Risky exec/fs declarations first; the rest only counted. */
+  permissionSummary: PermissionSummary;
+  /** `contributes.commands` grouped by first word. */
+  commandSummary: CommandSummary;
 }
 
 export interface ReviewOpts {
@@ -160,11 +178,32 @@ export async function reviewModule(dir: string, o: ReviewOpts = {}): Promise<Rev
     const ok = !o.hostVersion || Bun.semver.satisfies(o.hostVersion, manifest.pvx);
     compat = { ok, text: ok ? `pvx ${manifest.pvx} (instalado: ${o.hostVersion ?? "?"})` : `requer pvx ${manifest.pvx} (instalado: ${o.hostVersion})` };
   }
-  const git = await Promise.all([G.originUrl(dir).catch(() => undefined), G.currentRef(dir).catch(() => undefined), G.headSha(dir)]);
-  return { dir, id, url: git[0], ref: git[1], sha: git[2], manifest, compat, platform: checkPlatform(manifest, o.host ?? hostPlatform()), contributes: manifest.contributes ?? {}, conflicts, permissions: manifest.permissions ?? {}, warnings: analyze(dir) };
+  const git = await Promise.all([G.originUrl(dir).catch(() => undefined), G.currentRef(dir).catch(() => undefined), G.commitInfo(dir)]);
+  const sources = readSources(dir);
+  const hits = analyze(dir, sources);
+  const permissions = manifest.permissions ?? {};
+  const trustedBefore = getTrust(id)?.sha;
+  return {
+    dir, id, url: git[0], ref: git[1], sha: git[2].sha, commit: git[2], ...(trustedBefore ? { trustedBefore } : {}), manifest, compat,
+    platform: checkPlatform(manifest, o.host ?? hostPlatform()), contributes: manifest.contributes ?? {}, conflicts, permissions,
+    warnings: hitLines(hits), files: buildFiles(sources, manifest.entry, hits),
+    permissionSummary: summarizePermissions(id, permissions), commandSummary: summarizeCommands(manifest.contributes?.commands),
+  };
 }
 
 const list = (a?: string[]) => (a?.length ? a.join(", ") : "nada");
+const pad = (n: number) => String(n).padStart(2, "0");
+const localDate = (iso: string) => {
+  const d = new Date(iso);
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const MAX_LINES = 10;
+function staticLine(f: ReviewFile): string {
+  const nums = [...new Set(f.hits.map((h) => h.line))];
+  const shown = nums.slice(0, MAX_LINES).join(", ") + (nums.length > MAX_LINES ? ` e mais ${nums.length - MAX_LINES}` : "");
+  const msgs = [...new Set(f.hits.map((h) => h.msg))].join(", ");
+  return `${f.path}: ${nums.length === 1 ? "linha" : "linhas"} ${shown} (${msgs}; ${f.used ? "usado pelo módulo" : "fora do caminho do entry"})`;
+}
 
 /** The review screen as lines, for the CLI (the TUI builds its own from the same `Review`). */
 export function reviewLines(r: Review, hint: string): OutLine[] {
@@ -174,13 +213,14 @@ export function reviewLines(r: Review, hint: string): OutLine[] {
   return [
     L("info", `origem: ${r.url ?? "(local)"}${r.ref ? ` (${r.ref})` : ""}`),
     L("info", `commit: ${r.sha}`),
+    L("info", `autor: ${r.commit.author} · ${localDate(r.commit.date)} · ${r.commit.subject}`),
     L("info", `módulo: ${r.id} ${r.manifest.version}`),
     L(r.compat.ok ? "info" : "error", `compatibilidade: ${r.compat.text}`),
     L(r.platform.ok ? "info" : "error", `sistema: ${r.platform.text}`),
     L("info", `contribui: comandos ${list(c.commands)}; páginas ${list(c.pages)}; widgets ${list(c.widgets)}; capacidades ${list(c.capabilities)}`),
     L("info", `permissões: exec ${list(p.exec)}; net ${list(p.net)}; fs ${list(p.fs)} (declarativas, não é sandbox)`),
     ...r.conflicts.map((x) => L("error", `conflito: ${x}`)),
-    ...r.warnings.map((w) => L("warning", `análise estática: ${w}`)),
+    ...r.files.filter((f) => f.hits.length).map((f) => L("warning", `análise estática: ${staticLine(f)}`)),
     L("warning", "este código roda como root; só aprove um commit que você revisou"),
     L("info", hint),
   ];
@@ -193,6 +233,10 @@ export interface AddOpts {
   ref?: string;
   /** Approves the commit without a screen; must match HEAD (full sha or 7+ prefix). */
   trust?: string;
+  /** With `trust`: the approval is "always" (every later commit from this origin applies without review). */
+  always?: boolean;
+  /** From the official catalog: after the checks the commit is approved "always", with no review screen (`trust` is not needed). */
+  catalog?: boolean;
   /** Tests and link only. */
   allowFile?: boolean;
   /** Fails when the cloned manifest id differs (the catalog knows the id it asked for). */
@@ -244,9 +288,9 @@ export async function addModule(url: string, o: AddOpts): Promise<AddResult> {
     tmp = "";
     review.dir = dir;
     invalidateUpdateCache();
-    if (o.trust === undefined) return { ok: true, status: "instalado", id, sha: review.sha, state: "aguardando-confianca", review };
-    approve(id, { url, sha: review.sha, permissions: review.permissions });
-    audit(`trust aprovado: ${id} ${review.sha} (${url})`);
+    if (o.trust === undefined && !o.catalog) return { ok: true, status: "instalado", id, sha: review.sha, state: "aguardando-confianca", review };
+    approve(id, { url, sha: review.sha, permissions: review.permissions, always: o.always || o.catalog });
+    audit(o.catalog ? `trust automático (catálogo): ${id} ${review.sha} (${url})` : `trust aprovado${o.always ? " (sempre)" : ""}: ${id} ${review.sha} (${url})`);
     return { ok: true, status: "instalado", id, sha: review.sha, state: (await diskState(dir, id)).state, review };
   } catch (e) {
     return { ok: false, error: msg(e) };
@@ -255,17 +299,17 @@ export async function addModule(url: string, o: AddOpts): Promise<AddResult> {
   }
 }
 
-/** Approves the commit currently checked out; `sha` must match HEAD (full or 7+ prefix). */
-export async function trustModule(id: string, sha: string): Promise<Result> {
+/** Approves the commit currently checked out; `sha` must match HEAD (full or 7+ prefix). `always` also trusts every later commit from this origin; absent, it clears a previous "always". */
+export async function trustModule(id: string, sha: string, o: { always?: boolean } = {}): Promise<Result> {
   try {
     const dir = join(usermodulesDir(), validId(id));
     if (!existsSync(dir)) throw new Error(`módulo "${id}" não instalado`);
     const head = await G.headSha(dir);
     if (!matchSha(head, sha)) throw new Error(`--sha ${sha} não confere com o commit ${head}`);
     const m = readManifestRaw(dir);
-    approve(id, { url: (await G.originUrl(dir).catch(() => undefined)) ?? "(local)", sha: head, permissions: m.permissions });
-    audit(`trust aprovado: ${id} ${head}`);
-    return { ok: true, text: `${id} aprovado em ${head}` };
+    approve(id, { url: (await G.originUrl(dir).catch(() => undefined)) ?? "(local)", sha: head, permissions: m.permissions, always: o.always });
+    audit(`trust aprovado${o.always ? " (sempre)" : ""}: ${id} ${head}`);
+    return { ok: true, text: `${id} aprovado em ${head}${o.always ? " (confiança sempre)" : ""}` };
   } catch (e) {
     return { ok: false, error: msg(e) };
   }

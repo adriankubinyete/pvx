@@ -96,6 +96,7 @@ export function buildRoot(registry: Registry, rows: readonly ModuleRow[] = [], p
       ...(behind ? [{ text: `↓${behind} `, tone: "info" as const }] : []),
       ...(row?.dirty ? [{ text: `✎${row.dirty} `, tone: "warn" as const }] : []),
       ...(row?.incompatible ? [{ text: "⚠ sistema ", tone: "warn" as const }] : []),
+      ...(row?.always ? [{ text: "∞ sempre ", tone: "info" as const }] : []),
       { text: `${registry.modules.get(id)?.version ?? row?.version ?? ""} ` },
       { text: STATE_TEXT[state], tone: STATE_TONE[state] },
       ...(loaded ? [{ text: ` · ${plural(entries.length)}` }] : row?.error ? [{ text: ` · ${clean(row.error)}` }] : []),

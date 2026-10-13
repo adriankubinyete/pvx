@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { addModule, createLogger, createRegistry, linkModule, loadModules, logsDir, pvxHome, runCapture, setEnabled, trustGate, type Catalog, type LoadOpts, type Pending, type Registry } from "@pvx/core";
+import { dirname, join } from "node:path";
+import { addModule, listTrust, createLogger, createRegistry, linkModule, loadModules, logsDir, pvxHome, runCapture, setEnabled, trustGate, type Catalog, type LoadOpts, type Pending, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
 
@@ -47,7 +47,10 @@ function origin(id: string, extra: Record<string, unknown> = {}, factory = `({ c
     url: `file://${bare}`,
     work,
     commit(files, message = "c") {
-      for (const [f, c] of Object.entries(files)) writeFileSync(join(work, f), c);
+      for (const [f, c] of Object.entries(files)) {
+        mkdirSync(dirname(join(work, f)), { recursive: true });
+        writeFileSync(join(work, f), c);
+      }
       sh(work, "add", "-A");
       sh(work, "commit", "-q", "-m", message);
       sh(work, "push", "-q", bare, "main");
@@ -165,24 +168,25 @@ test("catalog: lists what is not installed with the source; empty shows a friend
   expect(footer(m.t)).toContain("enter instala");
 });
 
-test("catalog enter clones and opens the review; nothing is imported before t; t loads it live (palette sees it)", async () => {
+test("manual add clones and opens the review; nothing is imported before t; t loads it live (palette sees it)", async () => {
   const o = origin("gm", { permissions: { exec: ["systemctl"], net: ["srv:10051"] } });
-  const cat: Catalog = { modules: [{ id: "gm", url: o.url, descricao: "módulo de teste" }], source: "rede", fetchedAt: Date.now() };
-  const { t, store } = await mount({ catalog: cat });
-  await t.press("c");
+  const { t, store } = await mount();
+  await t.press("a");
+  await t.type(shortRef(o, "gm"));
   await t.press("RETURN");
   const f = await see(t, (x) => x.includes("revisão de confiança"));
   expect(f).toContain("gm 1.0.0");
-  expect(f).toMatch(/exec systemctl/);
-  expect(f).toContain("net srv:10051");
+  expect(f).toContain("srv:10051");
   expect(f).toContain("roda como root");
-  expect(f).toContain("conflitos");
+  expect(f).toContain("sem conflitos");
   expect(existsSync(dirOf("gm"))).toBe(true);
   expect(existsSync(marker)).toBe(false); // cloned, never imported
-  expect(footer(t)).toContain("t confiar neste commit");
+  expect(footer(t)).toContain("t confiar em");
   await t.press("p"); // só permissões
   expect(t.frame()).toContain("pede permissão");
-  expect(t.frame()).not.toContain("origem");
+  expect(t.frame()).toContain("exec systemctl");
+  expect(t.frame()).toContain("net srv:10051");
+  expect(t.frame()).not.toContain("primeira aprovação");
   await t.press("p");
   await t.press("s"); // ver o código
   await see(t, (x) => x.includes("código · só leitura"));
@@ -202,6 +206,43 @@ test("catalog enter clones and opens the review; nothing is imported before t; t
   await t.press("k", { ctrl: true });
   await t.type("gm hi");
   expect(t.frame()).toContain("gm hi");
+});
+
+test("catalog enter installs trusted always: no review screen, the module loads and the row shows ∞ sempre", async () => {
+  const o = origin("gm");
+  const cat: Catalog = { modules: [{ id: "gm", url: o.url, descricao: "módulo de teste" }], source: "rede", fetchedAt: Date.now() };
+  const { t, store } = await mount({ catalog: cat });
+  await t.press("c");
+  await t.press("RETURN");
+  const f = await see(t, (x) => x.includes("gm 1.0.0 carregado"));
+  expect(f).not.toContain("revisão de confiança");
+  expect(f).toContain("instalado do catálogo: confiança sempre");
+  expect(listTrust().gm?.always).toBe(true);
+  expect(registry.commands.has("gm hi")).toBe(true);
+  expect(store.blocks.at(-1)).toMatchObject({ line: "modules add gm", status: "ok" });
+  await t.press("RETURN");
+  await t.press("c");
+  await see(t, (x) => /gm ◇.*∞ sempre.*carregado/.test(x));
+});
+
+test("a manual URL equal to a catalog entry installs the same way; one outside the catalog keeps the review", async () => {
+  const o = origin("cm");
+  const cat: Catalog = { modules: [{ id: "cm", url: "https://github.com/acme/cm.git", descricao: "x" }], source: "rede", fetchedAt: Date.now() };
+  const { t } = await mount({ catalog: cat });
+  await t.press("a");
+  await t.type(shortRef(o, "cm"));
+  await t.press("RETURN");
+  const f = await see(t, (x) => x.includes("cm 1.0.0 carregado"));
+  expect(f).not.toContain("revisão de confiança");
+  expect(listTrust().cm?.always).toBe(true);
+  h!.destroy();
+  const other = origin("om");
+  const m = await mount({ catalog: cat });
+  await m.t.press("a");
+  await m.t.type(shortRef(other, "om"));
+  await m.t.press("RETURN");
+  await see(m.t, (x) => x.includes("revisão de confiança · om"));
+  expect(listTrust().om).toBeUndefined();
 });
 
 test("update: u shows the new commits and the permission diff; t advances to the approved commit", async () => {
@@ -348,8 +389,7 @@ test("a incompatible module: right then enter installs anyway and the review sho
   expect(t.frame()).not.toMatch(/\[ Entendi, não instalar \]/);
   await t.press("RETURN");
   const f = await see(t, (x) => x.includes("revisão de confiança"));
-  expect(f).toMatch(/sistema\s+✗/);
-  expect(f).toContain("nonexistent-distro");
+  expect(f).toMatch(/✗ só .*nonexistent-distro.* aqui é /);
   expect(existsSync(dirOf("inc3"))).toBe(true);
   expect(existsSync(marker)).toBe(false);
 });
@@ -362,7 +402,7 @@ test("a compatible module never shows the incompatibility modal", async () => {
   await t.press("RETURN");
   await see(t, (x) => x.includes("revisão de confiança"));
   expect(t.frame()).not.toContain("sistema incompatível");
-  expect(t.frame()).toMatch(/sistema\s+✓/);
+  expect(t.frame()).toContain("✓ qualquer sistema");
 });
 
 test("a without root shows the sudo block", async () => {
@@ -414,7 +454,160 @@ for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
     await see(t, (x) => x.includes("revisão de confiança"));
     fit();
     expect(t.frame()).toContain("roda como root");
-    expect(footer(t)).toContain("t confiar neste commit");
-    expect(footer(t)).toContain("? ajuda");
+    expect(footer(t)).toContain("↑↓ arquivo");
+    expect(footer(t)).toContain(cols >= 120 ? "? ajuda" : "enter editor"); // the review footer needs ~108 columns
+    expect(t.frame()).toContain("arquivos");
   });
 }
+
+const FILLER = Array.from({ length: 80 }, (_, i) => `// filler ${i + 1}`);
+/** A module with a used lib file (a hit on line 60), an unused one (a hit too) and a distinctive source line. */
+function rich(id: string, extra: Record<string, unknown> = {}): Origin {
+  const o = origin(id, { permissions: { exec: ["systemctl", "sh"], net: ["srv:10051"] }, contributes: { commands: ["hi"], pages: ["main"] }, ...extra });
+  const util = [...FILLER];
+  util[9] = `export const SECRET = "SECRET_DISTINCT_LINE_xyz";`;
+  util[59] = `export const run = () => Bun.spawn(["true"]);`;
+  o.commit({
+    "index.ts": `import { writeFileSync } from "node:fs";\nimport { SECRET } from "./lib/util.ts";\nwriteFileSync(process.env.PVX_TEST_MARKER!, "imported");\nexport default () => ({ commands: { hi: { help: "hi", run: (ctx: any) => ctx.out.success(SECRET) } } });\n`,
+    ...(Object.fromEntries([["lib/util.ts", util.join("\n") + "\n"], ["lib/dead.ts", `import cp from "child_process";\nexport default cp;\n`]])),
+  }, "feat: rich fixture");
+  return o;
+}
+async function openReview(id: string, o: MountOpts = {}) {
+  const m = await mount(o);
+  await see(m.t, (x) => new RegExp(`${id}.*aguardando confiança`).test(x));
+  await goto(m.t, id);
+  await m.t.press("t");
+  await see(m.t, (x) => x.includes(`revisão de confiança · ${id}`) && x.includes("arquivos"));
+  return m;
+}
+
+test("review banner: short sha, subject, author, branch and the first-approval mark", async () => {
+  const o = rich("bn");
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const sha = sh(o.work, "rev-parse", "HEAD");
+  const { t } = await openReview("bn");
+  const f = t.frame();
+  expect(f).toContain(sha.slice(0, 7));
+  expect(f).toContain("feat: rich fixture");
+  expect(f).toContain("t · "); // author
+  expect(f).toContain("(hoje)");
+  expect(f).toContain("2 commits no histórico");
+  expect(f).toContain("primeira aprovação");
+  expect(f).toContain("branch main");
+  expect(f).toContain("✓ pvx qualquer versão");
+  expect(f).toContain("▲ exec sh");
+  expect(f).toContain("srv:10051");
+  expect(f).toMatch(/entrega\s+1 comando · 1 página/);
+});
+
+test("review files: group headers, entry tag, hit counts; ↓ changes the detalhes panel", async () => {
+  const o = rich("fl");
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const { t } = await openReview("fl");
+  let f = t.frame();
+  expect(f).toContain("arquivos ●");
+  expect(f).toContain("3 arquivos · 86 linhas");
+  expect(f).toMatch(/▾ \(raiz\)\s+1 · 4 linhas\s+▲ 1 aviso/);
+  expect(f).toMatch(/▾ lib\/\s+2 · 82 linhas\s+▲ 2 avisos/);
+  expect(f).toMatch(/» index\.ts\s+4\s+entry ▲ 1/);
+  expect(f).toMatch(/detalhes · index\.ts/);
+  expect(f).toMatch(/importado por\s+ninguém/);
+  expect(f).toMatch(/módulo usa\?\s+sim \(entry\)/);
+  expect(f).toContain("enter abre no editor na linha 3");
+  await t.press("ARROW_DOWN");
+  f = t.frame();
+  expect(f).toMatch(/» util\.ts\s+80\s+▲ 1/);
+  expect(f).toMatch(/detalhes · lib\/util\.ts/);
+  expect(f).toMatch(/importado por\s+index\.ts/);
+  expect(f).toMatch(/módulo usa\?\s+sim\s*│/);
+  expect(f).toContain("▲ usa Bun.spawn");
+  expect(f).toContain("linha 60");
+  expect(f).toMatch(/1 ─+●─+ 80/);
+  expect(f).toContain("enter abre no editor na linha 60");
+  await t.press("ARROW_DOWN");
+  f = t.frame();
+  expect(f).toMatch(/detalhes · lib\/dead\.ts/);
+  expect(f).toMatch(/módulo usa\?\s+não · fora do caminho do entry/);
+  await t.press("ARROW_DOWN"); // last one: stays
+  expect(t.frame()).toMatch(/» dead\.ts/);
+});
+
+test("the review never shows source code", async () => {
+  const o = rich("ns");
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const { t } = await openReview("ns");
+  for (let i = 0; i < 3; i++) {
+    const f = t.frame();
+    for (const code of ["SECRET_DISTINCT_LINE_xyz", "Bun.spawn([", "export default", "writeFileSync(process", "import cp from", "// filler"]) expect(f).not.toContain(code);
+    await t.press("ARROW_DOWN");
+  }
+  await t.press("p");
+  expect(t.frame()).not.toContain("SECRET_DISTINCT_LINE_xyz");
+});
+
+test("enter opens the editor at the first hit line with the hits marked; esc returns to the review", async () => {
+  const o = rich("ed");
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const { t } = await openReview("ed");
+  await t.press("ARROW_DOWN"); // lib/util.ts: hit on line 60
+  await t.press("RETURN");
+  const f = await see(t, (x) => x.includes("lib/util.ts") && x.includes("export const run"));
+  expect(f).toMatch(/60 ▲ export const run = \(\) => Bun\.spawn/);
+  expect(f).not.toContain("SECRET_DISTINCT_LINE_xyz"); // line 10: scrolled past
+  expect(f).not.toContain("revisão de confiança");
+  await t.press("ESCAPE");
+  const back = await see(t, (x) => x.includes("revisão de confiança · ed"));
+  expect(back).toContain("» util.ts"); // same selection
+  expect(back).not.toContain("export const run");
+  await t.press("s"); // the plain file list still works and opens a file with its marks
+  await see(t, (x) => x.includes("código · só leitura"));
+  await t.press("RETURN");
+  await see(t, (x) => x.includes("writeFileSync"));
+  expect(t.frame()).toMatch(/3 ▲ writeFileSync\(process/);
+  await t.press("ESCAPE"); // to the list, then to the review
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("revisão de confiança · ed");
+});
+
+test("T trusts always: the trust entry says so, the module loads and the list shows ∞ sempre", async () => {
+  const o = rich("al", { contributes: { commands: ["hi"] } });
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const { t, store } = await openReview("al");
+  expect(footer(t)).toContain("T confiar sempre");
+  await t.type("T");
+  await see(t, (x) => x.includes("al 1.0.0 carregado"));
+  expect(listTrust().al?.always).toBe(true);
+  expect(registry.commands.has("al hi")).toBe(true);
+  expect(store.blocks.at(-1)).toMatchObject({ line: expect.stringMatching(/^modules trust al --sha \w{7} --always$/), status: "ok" });
+  await t.press("RETURN");
+  await see(t, (x) => /al ◇.*∞ sempre.*carregado/.test(x));
+});
+
+test("an always module updates by itself on u and the result says so", async () => {
+  const o = origin("au");
+  const r = await addModule(o.url, { hostVersion: "0.1.0", allowFile: true, trust: sh(o.work, "rev-parse", "HEAD"), always: true });
+  expect(r.ok).toBe(true);
+  const sha = o.commit({ "pvx-module.json": JSON.stringify({ id: "au", version: "1.1.0", entry: "index.ts", contributes: { commands: ["hi"] } }) }, "bump");
+  const { t } = await mount();
+  await goto(t, "au");
+  await t.press("u");
+  await see(t, (x) => x.includes("atualizado automaticamente") && x.includes("(confiança sempre)"));
+  expect(sh(dirOf("au"), "rev-parse", "HEAD")).toBe(sha);
+  expect(registry.modules.get("au")?.version).toBe("1.1.0");
+  expect(listTrust().au?.always).toBe(true);
+});
+
+test("narrow terminals stack the panels; wide ones put them side by side", async () => {
+  const o = rich("nw");
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const wide = await openReview("nw", { cols: 120, rows: 40 });
+  const row = (f: string, s: string) => f.split("\n").findIndex((l) => l.includes(s));
+  expect(row(wide.t.frame(), "arquivos ●")).toBe(row(wide.t.frame(), "detalhes ·"));
+  h!.destroy();
+  const { t } = await openReview("nw", { cols: 90, rows: 34 });
+  const f = t.frame();
+  expect(row(f, "detalhes ·")).toBeGreaterThan(row(f, "arquivos ●"));
+  for (const l of f.split("\n")) expect(l.length).toBeLessThanOrEqual(90);
+  expect(f).toMatch(/importado por/);
+});

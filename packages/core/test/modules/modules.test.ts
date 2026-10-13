@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
-import { addModule, createRegistry, listModules, listTrust, loadModules, pendingUpdates, reloadModule, reviewLines, runCli, type HostPlatform, trustGate, watchDevModules, type CliIO, type DevEvent } from "../../src/index.ts";
+import { addModule, createRegistry, listModules, listTrust, loadModules, pendingUpdates, reloadModule, reviewLines, reviewModule, runCli, summarizeCommands, summarizePermissions, trustModule, updateModule, type HostPlatform, trustGate, watchDevModules, type CliIO, type DevEvent } from "../../src/index.ts";
 
 const noop = () => {};
 const makeLogger = (): Logger => ({ debug: noop, info: noop, warn: noop, error: noop });
@@ -390,9 +390,7 @@ describe("review and list", () => {
     const o = origin("gm", { permissions: { exec: ["ls"] } });
     o.commit({ "evil.ts": 'import { exec } from "node:child_process";\nBun.spawn(["x"]);\nfetch("http://x");\n' });
     const r = await cli(`modules add ${o.url}`);
-    expect(r.text).toContain("análise estática: evil.ts:1: usa child_process");
-    expect(r.text).toContain("evil.ts:2: usa Bun.spawn");
-    expect(r.text).toContain("evil.ts:3: chama fetch(");
+    expect(r.text).toContain("análise estática: evil.ts: linhas 1, 2, 3 (usa child_process, usa Bun.spawn, chama fetch( direto; fora do caminho do entry)");
     expect(r.text).toContain("exec ls");
     const j = await cli("modules list --json", { registry: await load() });
     const parsed = JSON.parse(j.text);
@@ -540,6 +538,197 @@ describe("update", () => {
   });
 });
 
+describe("trust always", () => {
+  const auditText = () => {
+    const f = join(process.env.PVX_HOME!, "audit.jsonl");
+    return existsSync(f) ? readFileSync(f, "utf8").split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l).text).join(" | ") : "";
+  };
+  const always = async (id = "gm", extra: Record<string, unknown> = {}) => {
+    const o = origin(id, extra);
+    await add(o.url, { trust: head(o.work), always: true });
+    return o;
+  };
+
+  test("an always approval is stored, listed, and a plain re-approval clears it", async () => {
+    const o = await always();
+    expect(listTrust().gm!.always).toBe(true);
+    expect((await listModules(await load()))[0]).toMatchObject({ id: "gm", state: "carregado", always: true });
+    expect((await cli("modules trust --list")).text).toContain(" sempre");
+    expect((await trustModule("gm", head(o.work))).ok).toBe(true);
+    expect(listTrust().gm!.always).toBeUndefined();
+    expect((await listModules(await load()))[0]).not.toHaveProperty("always");
+    expect((await trustModule("gm", head(o.work), { always: true })).ok).toBe(true);
+    expect(listTrust().gm!.always).toBe(true);
+    expect((await cli("modules trust --revoke gm")).code).toBe(0);
+    expect(listTrust().gm).toBeUndefined();
+  });
+
+  test("update applies the new commit by itself, audited, adding permissions included", async () => {
+    const o = await always("gm", { permissions: { exec: ["ls"] } });
+    const fresh = o.commit({ "pvx-module.json": manifestOf("gm", { exec: ["ls", "curl"], net: ["x.com"] }) }, "mais permissões");
+    const r = await updateModule("gm", { allowFile: true });
+    expect(r).toMatchObject({ ok: true, status: "atualizado", auto: true, sha: fresh });
+    if (r.ok) expect(r.check.permissions.added).toEqual({ exec: ["curl"], net: ["x.com"] });
+    expect(head(modDir())).toBe(fresh);
+    expect(listTrust().gm).toMatchObject({ sha: fresh, always: true, permissions: { exec: ["ls", "curl"], net: ["x.com"] } });
+    expect(auditText()).toContain(`trust automático (sempre): gm ${fresh} (${o.url})`);
+    expect(await states()).toEqual({ gm: "carregado" });
+  });
+
+  test("a changed origin URL is not automatic", async () => {
+    const o = await always();
+    const old = head(modDir());
+    const moved = join(tmp, "moved.git");
+    sh(tmp, "clone", "-q", "--bare", join(tmp, "gm.git"), moved);
+    const fresh = o.commit({ "x.txt": "x" });
+    sh(moved, "fetch", "-q", join(tmp, "gm.git"), "main:main");
+    sh(modDir(), "remote", "set-url", "origin", `file://${moved}`);
+    const r = await updateModule("gm", { allowFile: true });
+    expect(r).toMatchObject({ ok: true, status: "pendente" });
+    expect(r.ok && r.auto).toBeFalsy();
+    expect(head(modDir())).toBe(old);
+    expect(fresh).not.toBe(old);
+    expect(listTrust().gm!.sha).toBe(old);
+  });
+
+  test("without always the update stays pending", async () => {
+    const o = await trusted();
+    o.commit({ "x.txt": "x" });
+    const r = await updateModule("gm", { allowFile: true });
+    expect(r).toMatchObject({ ok: true, status: "pendente" });
+    expect(auditText()).not.toContain("automático");
+  });
+
+  test("diverged and dirty still fail with always", async () => {
+    const o = await always();
+    o.commit({ "x.txt": "x" });
+    writeFileSync(join(modDir(), "junk"), "j");
+    const dirty = await updateModule("gm", { allowFile: true });
+    expect(dirty).toMatchObject({ ok: false });
+    expect(!dirty.ok && dirty.error).toContain("árvore alterada");
+    rmSync(join(modDir(), "junk"));
+    writeFileSync(join(modDir(), "local.txt"), "l");
+    sh(modDir(), "add", "-A");
+    sh(modDir(), "commit", "-q", "-m", "local");
+    const div = await updateModule("gm", { allowFile: true });
+    expect(!div.ok && div.error).toContain("não é fast-forward");
+  });
+
+  test("an unreadable new manifest fails with always", async () => {
+    const o = await always();
+    o.commit({ "pvx-module.json": "{" });
+    const r = await updateModule("gm", { allowFile: true });
+    expect(!r.ok && r.error).toContain("manifest do commit novo ilegível");
+  });
+
+  test("CLI: --always on add and trust, list marker, update line", async () => {
+    const o = origin();
+    const sha = head(o.work);
+    expect((await cli(`modules add ${o.url} --always`)).code).toBe(2);
+    expect((await cli(`modules add ${o.url} --trust ${sha} --always`)).code).toBe(0);
+    expect(listTrust().gm!.always).toBe(true);
+    expect((await cli("modules list")).text).toMatch(/gm 1\.0\.0 \S+ .*∞ sempre/);
+    await cli("modules trust --revoke gm");
+    await cli(`modules trust gm --sha ${sha}`);
+    expect(listTrust().gm!.always).toBeUndefined();
+    expect((await cli(`modules trust gm --always`)).code).toBe(2);
+    expect((await cli(`modules trust gm --sha ${sha} --always`)).code).toBe(0);
+    expect(listTrust().gm!.always).toBe(true);
+    const fresh = o.commit({ "x.txt": "x" }, "adiciona x");
+    const r = await cli("modules update gm");
+    expect(r.code).toBe(0);
+    const lines = r.text.split("\n");
+    expect(lines).toContain(`  ${fresh.slice(0, 7)} adiciona x`);
+    expect(lines.at(-1)).toBe(`[✓] gm atualizado automaticamente em ${fresh.slice(0, 7)} (confiança sempre)`);
+    expect(head(modDir())).toBe(fresh);
+  });
+});
+
+describe("catalog modules are trusted always", () => {
+  const auditText = () => {
+    const f = join(process.env.PVX_HOME!, "audit.jsonl");
+    return existsSync(f) ? readFileSync(f, "utf8").split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l).text).join(" | ") : "";
+  };
+  /** A fresh catalog cache, so the loader never touches the network. */
+  const catalogOf = (...entries: { id: string; url: string }[]) =>
+    writeFileSync(join(process.env.PVX_HOME!, "catalog.json"), JSON.stringify({ fetchedAt: Date.now(), modules: entries.map((e) => ({ ...e, descricao: "d" })) }));
+
+  test("add with catalog: approved always and audited, no review needed", async () => {
+    const o = origin();
+    const r = await add(o.url, { catalog: true });
+    expect(r).toMatchObject({ ok: true, status: "instalado", id: "gm", state: "carregado" });
+    expect(listTrust().gm).toMatchObject({ sha: head(o.work), always: true });
+    expect(auditText()).toContain(`trust automático (catálogo): gm ${head(o.work)} (${o.url})`);
+    expect((await cli("gm hi", { registry: await load() })).text).toBe("[✓] oi de gm");
+  });
+
+  test("catalog add still refuses a wrong id and an incompatible system", async () => {
+    const o = origin();
+    expect((await add(o.url, { catalog: true, expectId: "outro" })).ok).toBe(false);
+    expect(existsSync(modDir())).toBe(false);
+    const w = origin("wm", { distro: ["rhel"] });
+    const r = await add(w.url, { catalog: true, host: { os: "windows", distros: [], name: "Windows" } });
+    expect(r).toMatchObject({ ok: false, incompatible: true });
+    expect(listTrust().wm).toBeUndefined();
+  });
+
+  test("CLI: a catalog id installs without the approve hint", async () => {
+    const o = origin();
+    catalogOf({ id: "gm", url: o.url });
+    const r = await cli("modules add gm");
+    expect(r.code).toBe(0);
+    expect(r.text).not.toContain("para aprovar");
+    expect(r.text.split("\n").at(-1)).toBe("[✓] gm instalado do catálogo: confiança sempre");
+    expect(listTrust().gm!.always).toBe(true);
+    expect(await states()).toEqual({ gm: "carregado" });
+  });
+
+  test("CLI: a manual URL equal to a catalog entry is the same", async () => {
+    const o = origin();
+    catalogOf({ id: "gm", url: o.url });
+    const r = await cli(`modules add ${o.url}`);
+    expect(r.text.split("\n").at(-1)).toBe("[✓] gm instalado do catálogo: confiança sempre");
+    expect(listTrust().gm!.always).toBe(true);
+  });
+
+  test("CLI: a URL outside the catalog keeps the normal review", async () => {
+    const o = origin();
+    catalogOf({ id: "other", url: "https://x.com/other.git" });
+    const r = await cli(`modules add ${o.url}`);
+    expect(r.text).toContain("pvx modules trust gm --sha");
+    expect(r.text).not.toContain("do catálogo");
+    expect(listTrust().gm).toBeUndefined();
+  });
+
+  test("catalog unavailable: the add is a normal awaiting-trust one, never an error", async () => {
+    const o = origin();
+    const r = await cli(`modules add ${o.url}`); // setup points PVX_CATALOG_URL at a refused port; no cache
+    expect(r.code).toBe(0);
+    expect(r.text).toContain("pvx modules trust gm --sha");
+    expect(await states()).toEqual({ gm: "aguardando-confianca" });
+  });
+
+  test("update of a legacy (non-always) catalog module applies by itself and upgrades the record", async () => {
+    const o = await trusted();
+    catalogOf({ id: "gm", url: o.url });
+    expect(listTrust().gm!.always).toBeUndefined();
+    const fresh = o.commit({ "pvx-module.json": manifestOf("gm", { exec: ["curl"] }) }, "mais permissões");
+    const r = await updateModule("gm", { allowFile: true });
+    expect(r).toMatchObject({ ok: true, status: "atualizado", auto: true, sha: fresh });
+    expect(head(modDir())).toBe(fresh);
+    expect(listTrust().gm).toMatchObject({ sha: fresh, always: true });
+    expect(auditText()).toContain(`trust automático (catálogo): gm ${fresh} (${o.url})`);
+  });
+
+  test("update of a module outside the catalog stays pending", async () => {
+    const o = await trusted();
+    catalogOf({ id: "other", url: "https://x.com/other.git" });
+    o.commit({ "x.txt": "x" });
+    expect(await updateModule("gm", { allowFile: true })).toMatchObject({ ok: true, status: "pendente" });
+    expect(listTrust().gm!.always).toBeUndefined();
+  });
+});
+
 describe("update-notice cache", () => {
   const cache = () => join(process.env.PVX_HOME!, "update-check.json");
   test("TTL: a fresh cache is used, an expired one refetches", async () => {
@@ -652,5 +841,96 @@ describe("link and reload", () => {
     } finally {
       stop();
     }
+  });
+});
+
+describe("review data", () => {
+  const review = (id = "gm") => reviewModule(modDir(id));
+
+  test("commit fields, with a 2-commit history", async () => {
+    const o = origin();
+    o.commit({ "a.ts": "export {};\n" }, "segundo commit");
+    await add(o.url);
+    const r = await review();
+    expect(r.commit).toMatchObject({ sha: r.sha, short: r.sha.slice(0, 7), author: "t", subject: "segundo commit", count: 2 });
+    expect(r.commit.date).toMatch(/^\d{4}-\d\d-\d\dT/);
+  });
+
+  test("trustedBefore: unset when fresh, the approved sha after trust", async () => {
+    const o = origin();
+    const first = await add(o.url);
+    expect(first.ok && first.review!.trustedBefore).toBeUndefined();
+    const fresh = await review();
+    expect("trustedBefore" in fresh).toBe(false);
+    expect((await trustModule("gm", fresh.sha)).ok).toBe(true);
+    expect((await review()).trustedBefore).toBe(fresh.sha);
+  });
+
+  test("files: lines, groups, sort and import graph (static, dynamic, re-export, require, tests not used)", async () => {
+    const o = origin("gm", { entry: "src/index.ts" });
+    for (const d of ["src/b", "test", "lib"]) mkdirSync(join(o.work, d), { recursive: true });
+    o.commit({
+      "src/index.ts": 'import { a } from "./a";\nimport "./side.js";\nexport * from "./re";\nconst d = () => import("./dyn.ts");\nimport fs from "node:fs";\nexport default () => a;\n',
+      "src/a.ts": 'import { b } from "./b";\nexport const a = b;\n',
+      "src/b/index.ts": "export const b = 1;\n",
+      "src/side.ts": "export {};\n",
+      "src/re.ts": 'export const r = require("./b");\n',
+      "src/dyn.ts": "export {};\n",
+      "src/orphan.ts": "1;\n2;\n3;\n",
+      "test/x.test.ts": 'import { a } from "../src/a.ts";\nBun.spawn(["x"]);\n',
+      "lib/z.js": "module.exports = 1;",
+      "root.ts": "export {};\n",
+    });
+    await add(o.url);
+    const r = await review();
+    const by = Object.fromEntries(r.files.map((f) => [f.path, f]));
+    expect(by["src/index.ts"]).toMatchObject({ entry: true, used: true, group: "src/", lines: 6 });
+    for (const p of ["src/a.ts", "src/b/index.ts", "src/side.ts", "src/re.ts", "src/dyn.ts"]) expect(by[p]!.used).toBe(true);
+    expect(by["src/orphan.ts"]).toMatchObject({ used: false, lines: 3 });
+    expect(by["test/x.test.ts"]!.used).toBe(false);
+    expect(by["src/a.ts"]!.importedBy).toEqual(["src/index.ts", "test/x.test.ts"]);
+    expect(by["src/b/index.ts"]!.importedBy).toEqual(["src/a.ts", "src/re.ts"]);
+    expect(by["root.ts"]!.group).toBe(".");
+    expect(by["lib/z.js"]!.lines).toBe(1);
+    expect(r.files.every((f) => !f.path.includes("\\"))).toBe(true);
+    // entry group first, then alphabetical; lines desc inside a group
+    expect(r.files.map((f) => f.group).filter((g, i, a) => a.indexOf(g) === i)).toEqual(["src/", ".", "lib/", "test/"]);
+    const src = r.files.filter((f) => f.group === "src/").map((f) => f.path);
+    expect(src[0]).toBe("src/index.ts");
+    expect(src.indexOf("src/orphan.ts")).toBeLessThan(src.indexOf("src/b/index.ts"));
+  });
+
+  test("structured hits feed files[].hits, the unchanged warnings text and the CLI lines", async () => {
+    const o = origin();
+    o.commit({ "evil.ts": 'import { exec } from "node:child_process";\nBun.spawn(["x"]);\n' });
+    await add(o.url);
+    const r = await review();
+    expect(r.files.find((f) => f.path === "evil.ts")!.hits).toEqual([{ line: 1, msg: "usa child_process" }, { line: 2, msg: "usa Bun.spawn" }]);
+    expect(r.warnings.filter((w) => w.startsWith("evil.ts"))).toEqual(["evil.ts:1: usa child_process", "evil.ts:2: usa Bun.spawn"]);
+    const lines = reviewLines(r, "x").map((l) => l.text);
+    expect(lines).toContain("análise estática: evil.ts: linhas 1, 2 (usa child_process, usa Bun.spawn; fora do caminho do entry)");
+    expect(lines[2]).toMatch(/^autor: t · \d\d\/\d\d\/\d{4} \d\d:\d\d · c$/);
+  });
+
+  test("permission summary: shells and escapes are broad, own state is not", () => {
+    const home = process.env.PVX_HOME!;
+    const s = summarizePermissions("gm", {
+      exec: ["sh", "systemd-run", "ls", "/usr/bin/sudo"],
+      fs: ["rw:/etc/systemd/system/", "rw:$PVX_HOME/modules/gm/state/", `rw:${home}/modules/gm/`, "/etc/hosts", "rw:$PVX_HOME/modules/other/", "rw:$PVX_HOME/modules/gm/../../etc/"],
+      net: ["example.com:443"],
+    });
+    expect(s.broad).toEqual(["exec sh", "exec systemd-run", "exec /usr/bin/sudo", "rw /etc/systemd/system/", "rw $PVX_HOME/modules/other/", "rw $PVX_HOME/modules/gm/../../etc/"]);
+    expect(s.commonCount).toBe(4);
+    expect(s.net).toEqual(["example.com:443"]);
+    expect(summarizePermissions("gm", {})).toEqual({ broad: [], commonCount: 0, net: [] });
+  });
+
+  test("command summary groups by first word and keeps order", () => {
+    expect(summarizeCommands(["status", "ip list", "ip trust", "fw on", "reload", "ip del"])).toEqual({
+      total: 6,
+      groups: [{ name: "ip", count: 3 }, { name: "fw", count: 1 }],
+      singles: ["status", "reload"],
+    });
+    expect(summarizeCommands(undefined)).toEqual({ total: 0, groups: [], singles: [] });
   });
 });

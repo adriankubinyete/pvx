@@ -50,11 +50,6 @@ const base: readonly Shortcut[] = [
   { keys: "enter", label: "clona e revisa", scope: "add", footer: true },
   { keys: "←→", label: "cursor", scope: "add" },
   { keys: "esc", label: "cancela", scope: "add" },
-  { keys: "t", label: "confiar neste commit", scope: "review", footer: true },
-  { keys: "s", label: "código", scope: "review", footer: true },
-  { keys: "p", label: "permissões", scope: "review", footer: true },
-  { keys: "↑↓", label: "rola", scope: "review" },
-  { keys: "esc", label: "cancela", scope: "review" },
   { keys: "↑↓", label: "move", scope: "files", footer: true },
   { keys: "enter", label: "abre", scope: "files", footer: true },
   { keys: "esc", label: "volta", scope: "files" },
@@ -138,6 +133,15 @@ export function addPageRow(scope: Scope, row: Shortcut): () => void {
   return () => (set.delete(row), touch());
 }
 const rowsOf = (scope: Scope) => [...shortcuts, ...(pageRows.get(scope) ?? []), ...(dynRows.get(scope) ?? [])];
+
+/** Rows of the `review` scope. They name the commit, so the screen adds them with `addPageRow` once it knows it; `s` (file list) works but stays out of the footer. */
+export function reviewRows(update: boolean, short?: string): Shortcut[] {
+  const t = `confiar em ${short ?? "…"}`;
+  const row = (keys: string, label: string, footer = true): Shortcut => ({ keys, label, scope: "review", footer });
+  return update
+    ? [row("t", t), row("s", "código"), row("p", "permissões"), row("↑↓", "rola", false), row("esc", "cancela")]
+    : [row("↑↓", "arquivo"), row("enter", "editor"), row("t", t), row("T", "confiar sempre"), row("p", "permissões"), row("esc", "cancela"), row("s", "lista de arquivos", false)];
+}
 
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] => {

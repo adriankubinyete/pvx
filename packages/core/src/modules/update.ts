@@ -1,6 +1,7 @@
 import { existsSync, lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Manifest } from "@pvx/sdk";
+import { isCatalogUrl } from "../catalog/index.ts";
 import { usermodulesDir } from "../engine/paths.ts";
 import { audit, disabledSet, invalidateUpdateCache, isLink, matchSha, msg, updateCheckFile, validId } from "./common.ts";
 import * as G from "./git.ts";
@@ -79,12 +80,14 @@ export async function checkUpdates(id: string, o: { allowFile?: boolean } = {}):
 }
 
 export type UpdateResult =
-  | { ok: true; status: "ja-atualizado" | "pendente" | "atualizado"; id: string; check: UpdateCheck; sha: string }
+  | { ok: true; status: "ja-atualizado" | "pendente" | "atualizado"; id: string; check: UpdateCheck; sha: string; /** Applied by an "always" approval, no --trust. */ auto?: true }
   | { ok: false; id: string; error: string; check?: UpdateCheck };
 
 /**
  * Fetches and reports. Moves the working tree ONLY with `trust` = the fetched upstream sha (full or 7+ prefix): then it
  * fast-forwards to exactly that sha and approves it. Without it the module stays on the approved commit (state `atras`).
+ * Exception: an "always" approval whose origin URL is unchanged applies the fetched sha by itself (`auto`), whatever it adds.
+ * An approved module whose origin is in the catalog counts as "always" too, and the record is upgraded when it applies.
  */
 export async function updateModule(id: string, o: { trust?: string; allowFile?: boolean } = {}): Promise<UpdateResult> {
   const r = await checkUpdates(id, o);
@@ -93,22 +96,30 @@ export async function updateModule(id: string, o: { trust?: string; allowFile?: 
   const fail = (error: string): UpdateResult => ({ ok: false, id, error, check });
   if (!check.behind) return { ok: true, status: "ja-atualizado", id, check, sha: check.fromSha };
   if (check.diverged) return fail("não é fast-forward: o histórico local e o remoto divergiram; resolva no diretório do módulo");
-  if (o.trust === undefined) {
+  const dir = moduleDir(id);
+  const prior = getTrust(id);
+  const url = await G.originUrl(dir).catch(() => undefined);
+  // An explicit --trust on an always record keeps it (same origin); only `modules trust` without the flag clears it.
+  const sticky = Boolean(prior?.always && url && prior.url === url);
+  // Legacy catalog installs were approved one commit at a time; the cached catalog makes them "always" now.
+  const viaCatalog = !sticky && Boolean(prior && url && (await isCatalogUrl(url, { allowFile: o.allowFile })));
+  const always = sticky || viaCatalog;
+  const auto = always && o.trust === undefined;
+  if (o.trust === undefined && !auto) {
     audit(`update disponível: ${id} ${check.fromSha.slice(0, 7)}..${check.remoteSha!.slice(0, 7)} (${check.behind} commit(s)); sem aprovação`);
     return { ok: true, status: "pendente", id, check, sha: check.fromSha };
   }
-  if (!matchSha(check.remoteSha!, o.trust)) return fail(`--trust ${o.trust} não confere com o commit remoto ${check.remoteSha}`);
+  if (!auto && !matchSha(check.remoteSha!, o.trust!)) return fail(`--trust ${o.trust} não confere com o commit remoto ${check.remoteSha}`);
   if (check.manifestError) return fail(check.manifestError);
   if (check.dirty) return fail(`árvore alterada localmente (${check.dirty} caminho(s)): limpe antes de atualizar`);
   try {
-    const dir = moduleDir(id);
     await G.mergeFfOnly(dir, check.remoteSha!);
     const head = await G.headSha(dir);
     const next = JSON.parse(await G.showFile(dir, head, "pvx-module.json")) as Manifest;
-    approve(id, { url: (await G.originUrl(dir).catch(() => undefined)) ?? "(local)", sha: head, permissions: next.permissions });
-    audit(`update aprovado: ${id} ${check.fromSha.slice(0, 7)} -> ${head.slice(0, 7)}`);
+    approve(id, { url: url ?? "(local)", sha: head, permissions: next.permissions, always });
+    audit(auto ? `trust automático (${viaCatalog ? "catálogo" : "sempre"}): ${id} ${head} (${url})` : `update aprovado: ${id} ${check.fromSha.slice(0, 7)} -> ${head.slice(0, 7)}`);
     invalidateUpdateCache();
-    return { ok: true, status: "atualizado", id, check, sha: head };
+    return { ok: true, status: "atualizado", id, check, sha: head, ...(auto ? { auto: true as const } : {}) };
   } catch (e) {
     return fail(msg(e));
   }

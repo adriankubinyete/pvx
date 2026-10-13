@@ -9,6 +9,8 @@ export interface TrustEntry {
   approvedBy: string;
   at: string;
   permissions: Manifest["permissions"];
+  /** Every future commit from this same origin applies without review. */
+  always?: true;
 }
 
 const trustFile = () => join(pvxHome(), "trust.json");
@@ -33,13 +35,14 @@ export const listTrust = (): Record<string, TrustEntry> => readJson(trustFile(),
 export const getTrust = (id: string): TrustEntry | undefined => listTrust()[id];
 
 // note: read-modify-write without a lock; two simultaneous approvals can lose one. Atomic rename only prevents torn files.
-export function approve(id: string, e: { url: string; sha: string; permissions?: Manifest["permissions"] }): TrustEntry {
+export function approve(id: string, e: { url: string; sha: string; permissions?: Manifest["permissions"]; always?: boolean }): TrustEntry {
   const entry: TrustEntry = {
     url: e.url,
     sha: e.sha,
     approvedBy: process.env.SUDO_USER || process.env.LOGNAME || process.env.USER || "desconhecido",
     at: new Date().toISOString(),
     permissions: e.permissions ?? {},
+    ...(e.always ? { always: true as const } : {}),
   };
   writeJsonAtomic(trustFile(), { ...listTrust(), [id]: entry });
   return entry;

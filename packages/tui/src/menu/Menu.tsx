@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { OutLine } from "@pvx/sdk";
-import { addModule, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type Review, type UpdateCheck } from "@pvx/core";
+import { addModule, catalogHas, isModuleUrl, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type Review, type UpdateCheck } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
@@ -90,14 +90,18 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
     let added: Awaited<ReturnType<typeof addModule>> | undefined;
     const r = await act(`modules add ${e.id}`, async (h) => {
       added = await addModule(e.url, { hostVersion: deps!.load.hostVersion, expectId: e.id, registry, reserved: deps!.reserved, allowFile: deps!.allowFile,
-        onIncompatible: askIncompatible(h) });
+        catalog: true, onIncompatible: askIncompatible(h) });
       const a = added;
       if (!a.ok) return { exit: 1, lines: [{ kind: "error", text: a.error }] };
       if (a.status === "ja-instalado") return { exit: 0, lines: [{ kind: "info", text: `${a.id}: já instalado (${a.state})` }] };
-      return { exit: 0, lines: [{ kind: "warning", text: `${a.id} clonado em ${a.sha?.slice(0, 7)}: aguardando confiança, nada foi importado` }] };
+      return fromCatalog(a.id);
     });
-    if (added?.ok && added.status === "instalado" && added.state === "aguardando-confianca") review(added.id);
-    else showResult(r.id);
+    showResult(r.id);
+  };
+  /** A catalog module is already approved "always": load it (like after approving) instead of opening the review. */
+  const fromCatalog = async (id: string) => {
+    const l = await reloadAndReport(registry, deps!, id, "instalado");
+    return { exit: l.exit, lines: [{ kind: "info" as const, text: `${id} instalado do catálogo: confiança sempre` }, ...l.lines] };
   };
   /** Manual add: resolves the ref, clones, opens the same trust review. Returns the inline error, or nothing when the screen moved on. */
   const addRef = async (ref: string): Promise<string | undefined> => {
@@ -110,12 +114,16 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
       } catch (e) {
         return { exit: 1, lines: [{ kind: "error", text: (error = (e as Error).message) }] };
       }
+      // A bare id came from the catalog; a URL counts when it equals an entry's. No catalog means a normal review.
+      const catalog = !isModuleUrl(ref) && !ref.includes("/") ? true : catalogHas(await defaultCatalog(deps ?? undefined).catch(() => ({ modules: [] })), url);
       added = await addModule(url, { hostVersion: deps!.load.hostVersion, registry, reserved: deps!.reserved, allowFile: deps!.allowFile,
-        onIncompatible: askIncompatible(h) });
+        catalog, onIncompatible: askIncompatible(h) });
       const a = added;
       if (!a.ok) return { exit: 1, lines: [{ kind: "error", text: (error = a.error) }] };
-      if (a.status === "ja-instalado") return { exit: 0, lines: [{ kind: "info", text: `repositório: ${url}` }, { kind: "info", text: `${a.id}: já instalado (${a.state})` }] };
-      return { exit: 0, lines: [{ kind: "info", text: `repositório: ${url}` }, { kind: "warning", text: `${a.id} clonado em ${a.sha?.slice(0, 7)}: aguardando confiança, nada foi importado` }] };
+      const repo = { kind: "info" as const, text: `repositório: ${url}` };
+      if (a.status === "ja-instalado") return { exit: 0, lines: [repo, { kind: "info", text: `${a.id}: já instalado (${a.state})` }] };
+      if (catalog) return fromCatalog(a.id).then((l) => ({ ...l, lines: [repo, ...l.lines] }));
+      return { exit: 0, lines: [repo, { kind: "warning", text: `${a.id} clonado em ${a.sha?.slice(0, 7)}: aguardando confiança, nada foi importado` }] };
     });
     if (error) return error;
     if (added?.ok && added.status === "instalado" && added.state === "aguardando-confianca") setView({ kind: "list" }), review(added.id);
@@ -126,6 +134,10 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
     const r = await act(`modules update ${id}`, async () => {
       const u = await updateModule(id, { allowFile: deps!.allowFile });
       if (u.ok && u.status === "pendente") check = u.check;
+      if (u.ok && u.status === "atualizado") { // an "always" module moved by itself: load what it is now
+        const l = await reloadAndReport(registry, deps!, id, "atualizado");
+        return { exit: l.exit, lines: [...updateLines(u), ...l.lines] };
+      }
       return { exit: u.ok ? 0 : 1, lines: updateLines(u) };
     });
     if (check) review(id, check);

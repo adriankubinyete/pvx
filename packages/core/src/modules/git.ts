@@ -100,3 +100,21 @@ export const showFile = (dir: string, rev: string, path: string) => git(dir, ["s
 export const mergeFfOnly = (dir: string, sha: string) => git(dir, ["merge", "--ff-only", "--no-edit", sha]);
 /** True when `dir` is itself a repository root (not a folder inside some other checkout). */
 export const isRepoRoot = async (dir: string) => (await git(dir, ["rev-parse", "--show-prefix"]).catch(() => "x")).trim() === "";
+
+export interface CommitInfo {
+  sha: string;
+  short: string;
+  author: string;
+  /** Author date, ISO 8601. */
+  date: string;
+  subject: string;
+  /** Commits reachable from HEAD. */
+  count: number;
+}
+
+/** HEAD's metadata plus how many commits lead to it. */
+export async function commitInfo(dir: string): Promise<CommitInfo> {
+  const [log, count] = await Promise.all([git(dir, ["log", "-1", "--format=%H%x1f%an%x1f%aI%x1f%s"]), git(dir, ["rev-list", "--count", "HEAD"])]);
+  const [sha = "", author = "", date = "", ...subject] = log.replace(/\n$/, "").split("\x1f");
+  return { sha, short: sha.slice(0, 7), author, date, subject: subject.join("\x1f"), count: Number(count.trim()) };
+}

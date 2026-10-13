@@ -26,6 +26,8 @@ export interface CatalogLoadOpts {
   now?: number;
   /** Receives validation warnings; defaults to the `core` log (best effort). */
   warn?: (msg: string) => void;
+  /** Tests only: entries may be file:// URLs (the add and update paths take the same flag). */
+  allowFile?: boolean;
 }
 
 // NOT the update-notice cache: that one (spec "Avisos de atualização") is invalidated by add/update/remove.
@@ -33,6 +35,7 @@ export interface CatalogLoadOpts {
 const cachePath = () => join(pvxHome(), "catalog.json");
 const ID_RE = /^[a-z0-9-]+$/;
 const URL_RE = /^(https:\/\/\S+|ssh:\/\/\S+|[\w.-]+@[\w.-]+:\S+)$/;
+const FILE_URL_RE = /^file:\/\/\S+$/;
 
 /** True for an https/ssh git URL (`ssh://…` or scp-like `git@host:path`). */
 export const isModuleUrl = (s: string) => URL_RE.test(s);
@@ -44,7 +47,7 @@ const defaultWarn = (msg: string) => {
 };
 
 /** Strict validation: invalid entries are dropped with a warning; garbage as a whole yields []. */
-export function parseCatalog(data: unknown, warn: (m: string) => void = defaultWarn): CatalogEntry[] {
+export function parseCatalog(data: unknown, warn: (m: string) => void = defaultWarn, allowFile = false): CatalogEntry[] {
   const d = data as { version?: unknown; modules?: unknown } | null;
   if (!d || typeof d !== "object" || d.version !== 1 || !Array.isArray(d.modules)) {
     warn("catálogo ignorado: formato inválido (esperado version 1 e modules[])");
@@ -57,7 +60,7 @@ export function parseCatalog(data: unknown, warn: (m: string) => void = defaultW
     const why =
       !e || typeof e !== "object" ? "não é um objeto"
       : typeof e.id !== "string" || !ID_RE.test(e.id) ? "id inválido"
-      : typeof e.url !== "string" || !URL_RE.test(e.url) ? "url deve ser https ou ssh"
+      : typeof e.url !== "string" || !(URL_RE.test(e.url) || (allowFile && FILE_URL_RE.test(e.url))) ? "url deve ser https ou ssh"
       : typeof e.descricao !== "string" ? "descricao ausente"
       : e.versao !== undefined && typeof e.versao !== "string" ? "versao inválida"
       : seen.has(e.id) ? "id duplicado"
@@ -70,11 +73,11 @@ export function parseCatalog(data: unknown, warn: (m: string) => void = defaultW
   return out;
 }
 
-function readCache(warn: (m: string) => void): { fetchedAt: number; modules: CatalogEntry[] } | null {
+function readCache(warn: (m: string) => void, allowFile: boolean): { fetchedAt: number; modules: CatalogEntry[] } | null {
   try {
     const c = JSON.parse(readFileSync(cachePath(), "utf8"));
     if (typeof c.fetchedAt !== "number") return null;
-    return { fetchedAt: c.fetchedAt, modules: parseCatalog({ version: 1, modules: c.modules }, warn) };
+    return { fetchedAt: c.fetchedAt, modules: parseCatalog({ version: 1, modules: c.modules }, warn, allowFile) };
   } catch {
     return null;
   }
@@ -84,12 +87,12 @@ function readCache(warn: (m: string) => void): { fetchedAt: number; modules: Cat
 export async function loadCatalog(opts: CatalogLoadOpts = {}): Promise<Catalog> {
   const warn = opts.warn ?? defaultWarn;
   const now = opts.now ?? Date.now();
-  const cache = readCache(warn);
+  const cache = readCache(warn, Boolean(opts.allowFile));
   if (cache && now - cache.fetchedAt < CATALOG_TTL_MS) return { modules: cache.modules, source: "cache", fetchedAt: cache.fetchedAt };
   try {
     const res = await (opts.fetchImpl ?? fetch)(process.env.PVX_CATALOG_URL || DEFAULT_CATALOG_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const modules = parseCatalog(await res.json(), warn);
+    const modules = parseCatalog(await res.json(), warn, opts.allowFile);
     try {
       mkdirSync(pvxHome(), { recursive: true });
       writeFileSync(cachePath(), JSON.stringify({ fetchedAt: now, modules }));
@@ -126,16 +129,38 @@ const okName = (n: string) => !n.startsWith("-") && !n.includes("..") && n !== "
  * Throws a pt-BR Error listing the accepted forms (and close catalog matches).
  */
 export async function resolveModuleRef(ref: string, opts: CatalogLoadOpts = {}): Promise<string> {
-  if (isModuleUrl(ref)) return ref;
+  return (await resolveRef(ref, opts)).url;
+}
+
+/** True when `url` is exactly an entry's URL (the same comparison the add's idempotency check makes on origins). */
+export const catalogHas = (cat: Pick<Catalog, "modules">, url: string) => cat.modules.some((m) => m.url === url);
+
+/** Whether `url` belongs to the official catalog (fresh cache, else the loader's own fallbacks). Never throws: any failure is "no". */
+export async function isCatalogUrl(url: string, opts: CatalogLoadOpts = {}): Promise<boolean> {
+  try {
+    return catalogHas(await loadCatalog(opts), url);
+  } catch {
+    return false;
+  }
+}
+
+/** Like `resolveModuleRef`, also telling whether the ref is from the catalog: a bare id, or a URL equal to an entry's. */
+export async function resolveModuleRefInfo(ref: string, opts: CatalogLoadOpts = {}): Promise<{ url: string; catalog: boolean }> {
+  const r = await resolveRef(ref, opts);
+  return { url: r.url, catalog: r.catalog || (await isCatalogUrl(r.url, opts)) };
+}
+
+async function resolveRef(ref: string, opts: CatalogLoadOpts): Promise<{ url: string; catalog: boolean }> {
+  if (isModuleUrl(ref)) return { url: ref, catalog: false };
   if (ref.includes("/")) {
     const m = SHORT_RE.exec(ref);
     const repo = m?.[2]!.replace(/\.git$/, "");
     if (!m || !repo || !okName(m[1]!) || !okName(repo)) throw new Error(`referência inválida "${ref}": ${MODULE_REF_FORMS}`);
-    return `https://github.com/${m[1]}/${repo}.git`;
+    return { url: `https://github.com/${m[1]}/${repo}.git`, catalog: false };
   }
   const cat = await loadCatalog(opts);
   const hit = cat.modules.find((m) => m.id === ref);
-  if (hit) return hit.url;
+  if (hit) return { url: hit.url, catalog: true };
   const close = searchCatalog(cat, ref).slice(0, 5).map((m) => m.id);
   throw new Error(`módulo "${ref}" não está no catálogo (${cat.source})${close.length ? `; parecidos: ${close.join(", ")}` : ""}; ${MODULE_REF_FORMS}`);
 }
