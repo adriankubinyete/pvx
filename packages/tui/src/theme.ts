@@ -1,3 +1,5 @@
+import { RGBA } from "@opentui/core";
+
 /** The only file with color literals. Dark tokens from the spec ("Identidade visual"). */
 export const tokens = {
   bg: "#0e1013",
@@ -13,18 +15,92 @@ export const tokens = {
   thirdParty: "#b78cff",
 } as const;
 
-export type Tokens = { -readonly [K in keyof typeof tokens]: string };
-export type ThemeName = "dark" | "light";
+export type TokenKey = keyof typeof tokens;
+export const TOKEN_KEYS = Object.keys(tokens) as TokenKey[];
+/**
+ * Typed as strings so every `fg`/`bg` prop keeps its type. The terminal theme stores `RGBA` objects here (default and ANSI
+ * palette intent, which a hex string cannot carry); OpenTUI takes both. Never do string work on a token: use `HexTokens`.
+ */
+export type Tokens = Record<TokenKey, string>;
+export type HexTokens = Record<TokenKey, string>;
+export type ThemeName = "dark" | "light" | "contrast" | "terminal" | "custom";
+export const THEME_NAMES: readonly ThemeName[] = ["dark", "light", "contrast", "terminal", "custom"];
+/** Tokens drawn as text: each must reach 4.5:1 on `bg`. */
+export const TEXT_TOKENS: readonly TokenKey[] = ["text", "dim", "accent", "warn", "error", "info", "thirdParty"];
+/** Backgrounds a text token can land on. */
+export const SURFACES: readonly TokenKey[] = ["bg", "panel", "selected"];
 
-/** Light theme is an owner decision still pending (contrast must be measured first). */
-export function tokensFor(name: ThemeName): Tokens {
-  if (name === "light") throw new Error("tema claro ainda não definido");
-  return { ...tokens };
+const hexThemes = {
+  dark: { ...tokens } as HexTokens,
+  // Same roles on a light ground; every text token is >= 4.5:1 on bg, panel and selected (see theme.test.ts).
+  light: {
+    bg: "#f6f7f9", panel: "#ffffff", selected: "#d9efe4", border: "#c4cad3",
+    text: "#1b1f24", dim: "#505a66", accent: "#0a6b4a", warn: "#7d4a00", error: "#b3261e", info: "#0b5394", thirdParty: "#6a3dbd",
+  } as HexTokens,
+  // Pure black and white; text tokens >= 7:1 on every surface.
+  contrast: {
+    bg: "#000000", panel: "#0a0a0a", selected: "#161616", border: "#a0a0a0",
+    text: "#ffffff", dim: "#c4c4c4", accent: "#3dffb0", warn: "#ffd60a", error: "#ff8080", info: "#6cc9ff", thirdParty: "#d4a5ff",
+  } as HexTokens,
+};
+export type HexThemeName = keyof typeof hexThemes;
+
+/** No colours of its own: the terminal's default fg/bg and its ANSI palette (green accent, yellow warn, red error, blue info, bright black dim). */
+const terminal = {
+  bg: RGBA.defaultBackground(), panel: RGBA.defaultBackground(), selected: RGBA.defaultBackground(), border: RGBA.fromIndex(8),
+  text: RGBA.defaultForeground(), dim: RGBA.fromIndex(8), accent: RGBA.fromIndex(2), warn: RGBA.fromIndex(3), error: RGBA.fromIndex(1), info: RGBA.fromIndex(4), thirdParty: RGBA.fromIndex(5),
+} as unknown as Tokens;
+
+/** `#rgb` or `#rrggbb` (any case) to `#rrggbb` lowercase; `null` if it is neither. */
+export function normalizeHex(s: string): string | null {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s.trim());
+  if (!m) return null;
+  const h = m[1]!.toLowerCase();
+  return `#${h.length === 3 ? [...h].map((x) => x + x).join("") : h}`;
+}
+
+const channel = (v: number) => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+/** WCAG relative luminance of `#rrggbb`. */
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  return 0.2126 * channel(n >> 16) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255);
+}
+/** WCAG contrast ratio of two `#rrggbb` colours, 1 to 21. */
+export function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+/** Hex values of a theme; `null` for `terminal`, whose colours come from the terminal. A custom theme starts from dark; invalid entries are ignored. */
+export function hexTokensFor(name: ThemeName, custom: Record<string, string> = {}): HexTokens | null {
+  if (name === "terminal") return null;
+  if (name !== "custom") return { ...hexThemes[name] };
+  const out = { ...hexThemes.dark };
+  for (const k of TOKEN_KEYS) out[k] = normalizeHex(custom[k] ?? "") ?? out[k];
+  return out;
+}
+
+export function tokensFor(name: ThemeName, custom: Record<string, string> = {}): Tokens {
+  return hexTokensFor(name, custom) ?? { ...terminal };
+}
+
+/** Text tokens below 4.5:1 on `bg`, with their ratio. */
+export function lowContrast(t: HexTokens): { key: TokenKey; ratio: number }[] {
+  return TEXT_TOKENS.map((key) => ({ key, ratio: contrast(t[key], t.bg) })).filter((x) => x.ratio < 4.5);
 }
 
 /** Axis 1: accent color. Replaces `accent` only. */
-export const accents = { menta: tokens.accent, azul: tokens.info, ambar: tokens.warn, violeta: tokens.thirdParty } as const;
+export const accents = { menta: tokens.accent, azul: tokens.info, ambar: tokens.warn, roxo: tokens.thirdParty } as const;
+/** The same presets, darkened to read on a light ground. */
+const lightAccents: Record<AccentName, string> = { menta: "#0a6b4a", azul: "#0b5394", ambar: "#7d4a00", roxo: "#6a3dbd" };
 export type AccentName = keyof typeof accents;
+export const ACCENT_NAMES = Object.keys(accents) as AccentName[];
+
+/** The preset's colour for the theme, or `undefined` for "do tema" (any name that is not a preset). */
+export function accentFor(theme: ThemeName, name: string): string | undefined {
+  if (!Object.hasOwn(accents, name)) return undefined;
+  return (theme === "light" ? lightAccents : accents)[name as AccentName];
+}
 
 /** Axis 2: symbols. Every glyph is one cell wide and has an ASCII fallback. */
 export const glyphs = {

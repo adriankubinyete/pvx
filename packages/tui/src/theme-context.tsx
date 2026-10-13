@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createTuiStateWriter, loadTuiState, type TuiState } from "@pvx/core";
-import { accents, glyphs, resultMarker, tokensFor, type Glyphs, type ResultKind, type Tokens } from "./theme.ts";
+import { useRenderer } from "@opentui/react";
+import { accentFor, glyphs, resultMarker, tokensFor, type Glyphs, type ResultKind, type Tokens } from "./theme.ts";
 
 export interface ThemeApi {
   /** Color tokens with the chosen accent applied. */
@@ -41,10 +42,10 @@ export function ThemeProvider({ statePath, children }: { statePath?: string; chi
     writer.save(next);
   }, [writer]);
 
+  const renderer = useRenderer();
   const api = useMemo<ThemeApi>(() => {
-    const base = tokensFor(axes.theme);
-    const accent = accents[axes.accent as keyof typeof accents] ?? base.accent;
-    const c: Tokens = { ...base, accent };
+    const base = tokensFor(axes.theme, axes.custom);
+    const c: Tokens = { ...base, accent: accentFor(axes.theme, axes.accent) ?? base.accent };
     const g = glyphs[axes.symbols];
     const level = { ok: c.accent, warn: c.warn, error: c.error, info: c.info };
     return {
@@ -53,6 +54,12 @@ export function ThemeProvider({ statePath, children }: { statePath?: string; chi
       result: (kind) => ({ marker: resultMarker(kind, axes.result, g), color: level[kind] }),
     };
   }, [axes, set, writer]);
+
+  // Nothing repaints on its own: the terminal background and a redraw follow the palette.
+  useEffect(() => {
+    renderer.setBackgroundColor(api.c.bg);
+    renderer.requestRender();
+  }, [renderer, api.c]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

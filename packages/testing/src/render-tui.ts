@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
+import type { CapturedFrame } from "@opentui/core";
 import type { KeyInput } from "@opentui/core/testing";
 
 type Mods = { shift?: boolean; ctrl?: boolean; meta?: boolean };
@@ -8,6 +9,8 @@ type Mods = { shift?: boolean; ctrl?: boolean; meta?: boolean };
 export interface TuiHarness {
   /** Current frame as text. */
   frame(): string;
+  /** Current frame with the colours of every run of cells (`fg`/`bg` as `RGBA`). */
+  spans(): CapturedFrame;
   /** Presses a key (`"a"`, `"L"`, `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`...) inside `act` and flushes. */
   press(key: KeyInput, mods?: Mods): Promise<void>;
   /** Types text char by char, each a `press`. */
@@ -50,6 +53,7 @@ export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: {
   };
   return {
     frame: () => t.captureCharFrame(),
+    spans: () => t.captureSpans(),
     flush,
     waitFor: (pred) => t.waitFor(pred),
     waitForFrame: (pred) => t.waitForFrame(pred),
