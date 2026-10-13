@@ -84,10 +84,12 @@ test("!cmd: exit code sets the status, stderr is warning, then error on failure;
   expect(audit().at(-1)).toMatchObject({ line: expect.stringContaining("!printf"), exit: 0 });
 });
 
-test("!cmd needs root, refuses interactive programs, and a non-root run writes nothing", async () => {
+test("!cmd runs without root, unaudited when the audit file is unwritable; interactive programs are refused", async () => {
   const t = await mount({ isRoot: false });
+  process.env.PVX_HOME = "/nonexistent/pvx";
   await run(t, "!echo oi");
-  expect(t.frame()).toContain("rode com sudo");
+  await until(t, () => store.blocks[0]?.status === "ok");
+  expect(store.blocks[0]!.lines).toEqual([{ kind: "plain", text: "oi" }]);
   expect(audit()).toEqual([]);
   t.destroy();
   const u = await mount();
@@ -153,4 +155,27 @@ test("typing a core command prefix and tab completes it", async () => {
   expect(t.frame()).toContain("modules");
   await t.press("TAB");
   expect(t.frame()).toContain("❯ modules ");
+});
+
+test("typing `!` switches the prompt to `$`, a shell block keeps the marker, backspace returns to normal", async () => {
+  const t = await mount();
+  expect(t.frame()).toContain("❯ ");
+  await t.type("!");
+  expect(t.frame()).toContain("$ !");
+  expect(t.frame()).toContain("host shell · enter roda");
+  await t.press("BACKSPACE");
+  expect(t.frame()).toContain("❯ ");
+  expect(t.frame()).not.toContain("host shell ·");
+  await run(t, "!echo oi");
+  await until(t, () => store.blocks[0]?.status === "ok");
+  await t.flush();
+  expect(t.frame()).toContain("$ !echo oi");
+});
+
+test("with the input focused, no block shows the focus marker", async () => {
+  const t = await mount();
+  await run(t, "!echo oi");
+  await until(t, () => store.blocks[0]?.status === "ok");
+  await t.flush();
+  expect(t.frame()).not.toContain("»");
 });

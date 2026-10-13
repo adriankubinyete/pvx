@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo } from "react";
 import type { OutLine } from "@pvx/sdk";
 import { shortcuts } from "../keymap.ts";
 import { useTheme } from "../theme-context.tsx";
@@ -23,19 +23,19 @@ function Line({ l }: { l: OutLine }) {
 
 /**
  * One scrollback block: command line, status and duration, output indented 3 cells. `focused`: selected background, `»` and the action row.
- * `tick` only matters while running (the spinner frame). Memoized, and hover is local state, so hovering repaints one block.
+ * `tick` only matters while running (the spinner frame). Memoized. Only focus tints the background: no hover, so a resting mouse never looks like focus.
  */
 export const BlockView = memo(function BlockView({ b, focused, tick, onPick }: { b: Block; focused: boolean; tick: number; onPick: (b: Block) => void }) {
   const { c, g } = useTheme();
-  const [hover, setHover] = useState(false);
+  const host = b.line.startsWith("!"); // ran on the host shell
   const frames = [...g.spinner];
   const st = { running: [frames[tick % frames.length]!, c.info], ok: [g.ok, c.accent], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
   return (
-    <box id={`b${b.id}`} flexDirection="column" flexShrink={0} backgroundColor={focused || hover ? c.selected : c.panel} paddingX={1}
-      onMouseOver={() => setHover(true)} onMouseOut={() => setHover(false)} onMouseDown={() => onPick(b)}>
+    <box id={`b${b.id}`} flexDirection="column" flexShrink={0} backgroundColor={focused ? c.selected : c.panel} paddingX={1}
+      onMouseDown={() => onPick(b)}>
       <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <text>
-          <span fg={c.accent}>{`${focused ? g.cursor : g.prompt} `}</span>
+          <span fg={host ? c.warn : c.accent}>{`${focused ? g.cursor : host ? g.shell : g.prompt} `}</span>
           <span fg={c.text}><b>{b.line}</b></span>
         </text>
         <text>

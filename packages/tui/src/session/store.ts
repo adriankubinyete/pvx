@@ -172,7 +172,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     return { exit };
   }
 
-  /** `!cmd`: a host shell command (`/bin/sh -c`), streamed into a block. Strict root like a module command; always audited. */
+  /** `!cmd`: a host shell command (`/bin/sh -c`), streamed into a block. Runs as the invoking user (no privilege gain), so no root check; audited when the audit file is writable. */
   async function runShell(line: string): Promise<{ exit: number }> {
     const cmd = line.slice(1).trim();
     if (!cmd) return { exit: 0 };
@@ -185,8 +185,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     const out: OutLine[] = [];
     let exit = 1;
     const interactive = interactiveProgram(cmd);
-    if (!isRoot) out.push({ kind: "error", text: rootMessage() });
-    else if (interactive) out.push({ kind: "error", text: `\`${interactive}\` precisa de um terminal interativo e aqui não há TTY: rode-o fora do pvx` });
+    if (interactive) out.push({ kind: "error", text: `\`${interactive}\` precisa de um terminal interativo e aqui não há TTY: rode-o fora do pvx` });
     else {
       const rest = { out: "", err: "" };
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -212,7 +211,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
       if (r.reason === "timeout") out.push({ kind: "error", text: `tempo esgotado (${Math.round(shellTimeoutMs / 1000)}s): processo morto` });
       if (r.reason === "cancel") out.push({ kind: "warning", text: "cancelado" });
       if (exit !== 0) for (const l of out) if (l.kind === "warning" && l.text !== "cancelado") l.kind = "error"; // stderr of a failed command
-      auditCommand({ line, exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // always: the host shell is the widest door
+      auditCommand({ line, exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // the host shell is the widest door; auditCommand swallows a write failure (non-root)
     }
     settle(id, t0, exit, out);
     return { exit };

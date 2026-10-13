@@ -238,7 +238,7 @@ test("layout at 80x24 and 120x40: last block, input and footer stay visible", as
     expect(t.frame()).toContain("❯ demo gr");
     expect(t.frame()).toContain("tab completa");
     expect(lines.filter((l) => l.trim()).at(-1)).toContain("ctrl+k palette");
-    expect(lines.filter((l) => l.trim()).at(-1)).toContain("!cmd shell do host");
+    expect(lines.filter((l) => l.trim()).at(-1)).toContain("! host shell");
     expect(lines.filter((l) => l.trim()).at(-1)).toContain("? ajuda");
     await t.press("ESCAPE");
     await t.press("?");

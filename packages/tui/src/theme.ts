@@ -30,12 +30,12 @@ export type AccentName = keyof typeof accents;
 export const glyphs = {
   unicode: {
     ok: "✓", warn: "▲", warnTag: "!", error: "✗", info: "i", active: "●", inactive: "○",
-    meterFull: "▰", meterEmpty: "▱", prompt: "❯", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
+    meterFull: "▰", meterEmpty: "▱", prompt: "❯", shell: "$", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
     core: "■", page: "§", official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═", moreLeft: "‹", moreRight: "›",
   },
   ascii: {
     ok: "+", warn: "^", warnTag: "!", error: "x", info: "i", active: "*", inactive: "o",
-    meterFull: "#", meterEmpty: "-", prompt: ">", query: ">", cursor: ">", spinner: "|/-\\",
+    meterFull: "#", meterEmpty: "-", prompt: ">", shell: "$", query: ">", cursor: ">", spinner: "|/-\\",
     core: "=", page: "#", official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=", moreLeft: "<", moreRight: ">",
   },
 } as const;

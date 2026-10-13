@@ -172,8 +172,10 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
 
   });
 
-  const hint = note ?? (searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
+  const hint = note ?? (input.startsWith("!") && !input.startsWith("!!") && !searching ? "host shell · enter roda" : searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
   const inputFocused = !barFocused && !focus;
+  const shell = !searching && input.startsWith("!") && !input.startsWith("!!"); // host shell mode: the `!` stays visible, deleting it leaves the mode
+  const mode = shell ? c.warn : c.accent;
   const { cols } = useLayout();
   const room = Math.max(10, cols - 12 - [...hint].length - (searching ? 8 : 0));
   return (
@@ -182,11 +184,11 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
         {blocks.map((b) => <BlockView key={b.id} b={b} focused={b === focus} tick={b.status === "running" ? tick : 0} onPick={pick} />)}
       </scrollbox>
       {items.length ? <Popup items={items} sel={at} /> : null}
-      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(inputFocused ? c.accent : undefined)}>
+      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(inputFocused ? mode : undefined)}>
         <text>
-          <span fg={inputFocused ? c.accent : c.dim}><b>{`${g.prompt} `}</b></span>
+          <span fg={inputFocused ? mode : c.dim}><b>{`${shell ? g.shell : g.prompt} `}</b></span>
           {searching ? <span fg={c.text}>(busca) </span> : null}
-          {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} /> : <span fg={c.dim}>digite um comando · sem segredos (histórico)</span>}
+          {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} fg={shell ? c.warn : undefined} /> : <span fg={c.dim}>digite um comando · !ls para o shell · sem segredos</span>}
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>
