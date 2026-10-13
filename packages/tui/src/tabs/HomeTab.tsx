@@ -4,7 +4,9 @@ import { pageWithRole, primaryIp, readMachine, type Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
+import { panelStep, usePanelNav } from "../panelnav.ts";
 import { useLayout } from "../layout.ts";
+import { useScreenScope } from "../router.tsx";
 import { loadFavorites } from "../palette/favorites.ts";
 import { clean } from "../palette/search.ts";
 import { usePages } from "../sdk-ui/host.tsx";
@@ -17,13 +19,16 @@ import { activity, fmtUptime, levelOf, meter, parseConformity, relTime, slotItem
 import type { TabsNav } from "./Tabs.tsx";
 
 const BASE_PANELS = ["conformidade", "atividade"] as const;
-export type HomePanel = (typeof BASE_PANELS)[number] | "notas";
+/** `maquina` takes the cursor as a whole but has no items and no number. */
+export type HomePanel = (typeof BASE_PANELS)[number] | "notas" | "maquina";
 /** Which panel has the cursor and the selected row of each; lives in `TabsNav` (the tab unmounts on a switch). */
 export interface HomeNav {
   panel: HomePanel;
+  /** On the items of the panel (the selection shows) instead of on the panel as a whole. */
+  inside: boolean;
   sel: Record<string, string>;
 }
-export const createHomeNav = (): HomeNav => ({ panel: "conformidade", sel: {} });
+export const createHomeNav = (): HomeNav => ({ panel: "conformidade", inside: false, sel: {} });
 
 const SIDE_W = 40;
 const hms = (t: number) => new Date(t).toTimeString().slice(0, 8);
@@ -41,10 +46,10 @@ interface Row {
 }
 
 /** Clips its content (never pushes siblings); `width`/`height` fix it, otherwise it grows. */
-function Panel({ title, focused, width, height, children }: { title: string; focused: boolean; width?: number; height?: number; children: React.ReactNode }) {
+function Panel({ title, focused, width, height, panelRef, children }: { title: string; focused: boolean; width?: number; height?: number; panelRef?: (r: never) => void; children: React.ReactNode }) {
   const { c, box, g } = useTheme();
   return (
-    <box flexDirection="column" paddingX={1} overflow="hidden" minHeight={0} width={width} height={height} flexShrink={width || height ? 0 : 1} flexGrow={width || height ? 0 : 1}
+    <box ref={panelRef} flexDirection="column" paddingX={1} overflow="hidden" minHeight={0} width={width} height={height} flexShrink={width || height ? 0 : 1} flexGrow={width || height ? 0 : 1}
       {...box(focused ? c.accent : undefined)} title={`${g.query} ${title}${focused ? ` ${g.active}` : ""}`}>
       {children}
     </box>
@@ -80,7 +85,9 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
   const { cols, narrow } = useLayout();
   const tabs = useTabs();
   const nudge = useNudge();
+  const panels = usePanelNav();
   const focused = tabs?.focused ?? true;
+  useScreenScope(nav.home.inside ? "homein" : "home", 1); // inside a panel the footer changes; the tab bar (rank 2) still outranks it
   const { history, blocks } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [m, setM] = useState(readMachine);
@@ -120,6 +127,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
       ...slots.broken("home.configured").map(brokenRow),
       ...(done?.ignored ?? []).map((t): Row => ({ id: `ig:${t}`, mark: [g.inactive, c.dim], text: t })),
     ],
+    maquina: [],
     notas: slotItems<string>(slots, "home.notes").map((t, i): Row => ({ id: `note:${i}`, mark: [" ", c.dim], text: clean(t) })),
     atividade: activity(history, blocks, favorites).map((a) => ({
       id: a.id,
@@ -132,7 +140,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
   // The notes panel exists only while the slot has data; it is the 3rd navigable panel.
   const PANELS: readonly HomePanel[] = rows.notas.length ? [...BASE_PANELS, "notas"] : BASE_PANELS;
   const cur = (p: HomePanel) => rows[p].find((r) => r.id === nav.home.sel[p]) ?? rows[p][0];
-  const select = (p: HomePanel, id: string) => (nav.home.sel[p] = id, bump());
+  const select = (p: HomePanel, id: string) => (nav.home.sel[p] = id, nav.home.panel = p, nav.home.inside = true, bump());
   const use = (r?: Row) => {
     if (!r?.use) return;
     nav.draft = r.use;
@@ -147,21 +155,24 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
 
   useKeys((k) => {
     if (!focused) return;
-    const p = PANELS.includes(nav.home.panel) ? nav.home.panel : PANELS[0]!; // the notes panel can go away
-    if (k.name === "left" || k.name === "right") {
-      const next = PANELS[PANELS.indexOf(p) + (k.name === "left" ? -1 : 1)];
-      return next ? (nav.home.panel = next, bump()) : nudge("nada aqui"), true;
-    }
-    if (k.name === "up" || k.name === "down") {
-      const i = rows[p].findIndex((r) => r.id === cur(p)?.id);
-      if (k.name === "up" && i <= 0) return tabs?.focusBar(), true;
-      const d = k.name === "up" ? -1 : 1;
-      const to = rows[p][i + d];
-      return to ? select(p, to.id) : nudge(!rows[p].length ? "nada aqui" : d < 0 ? "início da lista" : "fim da lista"), true;
+    const p = nav.home.panel === "maquina" || PANELS.includes(nav.home.panel) ? nav.home.panel : PANELS[0]!; // the notes panel can go away
+    const key = k.name === "left" || k.name === "right" || k.name === "up" || k.name === "down" ? k.name : matchKey(k, "enter") ? "enter" : matchKey(k, "esc") ? "esc" : undefined;
+    const step = key && panelStep({ panel: p, inside: nav.home.inside }, key, (from, dir) => panels.pick(from, dir), (q) => rows[q as HomePanel].length);
+    if (step) {
+      if (step.bar) return tabs?.focusBar(), true;
+      if (step.nudge) return nudge(step.nudge), true;
+      if (step.move) {
+        const i = rows[p].findIndex((r) => r.id === cur(p)?.id);
+        const to = rows[p][i + step.move];
+        return to ? select(p, to.id) : nudge(step.move < 0 ? "início da lista" : "fim da lista"), true;
+      }
+      if (step.act) return p === "notas" ? goNotes() : use(cur(p)), true;
+      nav.home.panel = step.panel as HomePanel;
+      nav.home.inside = step.inside;
+      return bump(), true;
     }
     const n = PANELS[Number(k.sequence) - 1];
-    if (n && !k.ctrl) return nav.home.panel = n, bump(), true;
-    if (matchKey(k, "enter")) return p === "notas" ? goNotes() : use(cur(p)), true;
+    if (n && !k.ctrl) return nav.home.panel = n, nav.home.inside = false, bump(), true;
     if (matchKey(k, "n") && hasNotes) return void registry.query(compose!), goNotes(), true;
     if (matchKey(k, "r")) return refresh(), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
@@ -185,7 +196,7 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
   const [cf, ce] = meter(pct, 10, g);
   const worst = attention.some((p) => p.level === "error") ? c.error : c.warn;
   const conformidade = (
-    <Panel title={`[${PANELS.indexOf("conformidade") + 1}] conformidade`} focused={focused && nav.home.panel === "conformidade"}>
+    <Panel panelRef={panels.ref("conformidade")} title={`[${PANELS.indexOf("conformidade") + 1}] conformidade`} focused={focused && nav.home.panel === "conformidade"}>
       <text wrapMode="none" flexShrink={0}>
         {profile ? <span fg={c.accent}>{`perfil ${profile}`}</span> : <span fg={c.dim}>sem perfil</span>}
       </text>
@@ -202,16 +213,16 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
             <text fg={c.dim} wrapMode="none" flexShrink={0}>{`verificado às ${hhmm(checked!.at)} · ${hintText("home", "r")}`}</text>
           </>
         )}
-      <Rows rows={rows.conformidade} sel={cur("conformidade")?.id} focused={focused && nav.home.panel === "conformidade"} w={confW - 4} onPick={(r) => (select("conformidade", r.id), use(r))} />
+      <Rows rows={rows.conformidade} sel={cur("conformidade")?.id} focused={focused && nav.home.panel === "conformidade" && nav.home.inside} w={confW - 4} onPick={(r) => (select("conformidade", r.id), use(r))} />
     </Panel>
   );
   const notas = (
-    <Panel title={`[${PANELS.indexOf("notas") + 1}] notas`} focused={focused && nav.home.panel === "notas"} height={Math.min(rows.notas.length, 3) + 2}>
-      <Rows rows={rows.notas} sel={cur("notas")?.id} focused={focused && nav.home.panel === "notas"} w={cols - 6} onPick={() => goNotes()} />
+    <Panel panelRef={panels.ref("notas")} title={`[${PANELS.indexOf("notas") + 1}] notas`} focused={focused && nav.home.panel === "notas"} height={Math.min(rows.notas.length, 3) + 2}>
+      <Rows rows={rows.notas} sel={cur("notas")?.id} focused={focused && nav.home.panel === "notas" && nav.home.inside} w={cols - 6} onPick={() => goNotes()} />
     </Panel>
   );
   const maquina = (
-    <Panel title="máquina" focused={false} width={narrow ? undefined : SIDE_W} height={narrow ? 8 : undefined}>
+    <Panel panelRef={panels.ref("maquina")} title="máquina" focused={focused && nav.home.panel === "maquina"} width={narrow ? undefined : SIDE_W} height={narrow ? 8 : undefined}>
       <text wrapMode="none" flexShrink={0}>
         <span fg={c.text}><b>{cut(clean(hostname()), SIDE_W - 4 - (ip ? ip.length + 2 : 0))}</b></span>
         <span fg={c.dim}>{ip ? `  ${ip}` : ""}</span>
@@ -224,9 +235,9 @@ export function HomeTab({ store, nav, profile, registry }: { store: SessionApi; 
     </Panel>
   );
   const atividade = (
-    <Panel title={`[${PANELS.indexOf("atividade") + 1}] atividade`} focused={focused && nav.home.panel === "atividade"}>
+    <Panel panelRef={panels.ref("atividade")} title={`[${PANELS.indexOf("atividade") + 1}] atividade`} focused={focused && nav.home.panel === "atividade"}>
       {rows.atividade.length ? null : <text fg={c.dim} flexShrink={0}>nada executado ainda</text>}
-      <Rows rows={rows.atividade} sel={cur("atividade")?.id} focused={focused && nav.home.panel === "atividade"} w={cols - 6} onPick={(r) => (select("atividade", r.id), use(r))} />
+      <Rows rows={rows.atividade} sel={cur("atividade")?.id} focused={focused && nav.home.panel === "atividade" && nav.home.inside} w={cols - 6} onPick={(r) => (select("atividade", r.id), use(r))} />
     </Panel>
   );
 

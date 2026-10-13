@@ -92,3 +92,13 @@ test("notice pushes a synthetic block (no history) with sanitized text", () => {
   expect(s.blocks[0]).toMatchObject({ line: "recarga de dv", status: "error", moduleId: "dv", lines: [{ kind: "error", text: "dv: Unexpected ;" }] });
   expect(s.history).toEqual([]);
 });
+
+test("complete: core commands, their subcommands and flags; `!` lines complete nothing", () => {
+  expect(complete(registry, "modul").items[0]).toMatchObject({ text: "modules ", label: "modules" });
+  const sub = complete(registry, "modules a");
+  expect(sub.start).toBe("modules ".length);
+  expect(sub.items[0]).toMatchObject({ text: "add " });
+  expect(complete(registry, "logs --").items.length).toBeGreaterThan(0);
+  expect(complete(registry, "vers").items[0]!.label).toBe("version");
+  expect(complete(registry, "!modul").items).toEqual([]);
+});

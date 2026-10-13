@@ -337,7 +337,7 @@ export interface SdkUi {
   useRef<T>(init: T): { current: T };
 
   /** Bordered box with a title. */
-  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean }>;
+  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown }>;
   /** Children side by side, equal widths. Give each Panel `grow` so their borders match in height. */
   Row: Component<Kids>;
   Text: Component<Kids & { tone?: Tone; bold?: boolean }>;
@@ -379,6 +379,25 @@ export interface SdkUi {
   useNudge(): (msg?: string) => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
+  /**
+   * Spatial focus between sibling panels. Give each navigable `Panel` `panelRef={p.ref(id)}`; `p.pick(current, dir)`
+   * returns the id of the nearest panel on screen in that direction (by where they are drawn, so it follows the layout), or undefined.
+   */
+  usePanels(): {
+    ref(id: string): unknown;
+    pick(current: string, dir: "left" | "right" | "up" | "down"): string | undefined;
+    /**
+     * The host's two-level focus rule for one key, from the state `{ panel, inside }` (keep it with `useState`).
+     * Panel level: arrows pick the panel on that side; `enter` goes inside a panel with `size(id)` > 0 items.
+     * Inside: `up`/`down` give `move` (-1/1; the page owns the list and its edges), `enter` gives `act`, `esc` leaves.
+     * `bar`: up with no panel above. `nudge`: a message to show. Undefined: the key is not handled.
+     */
+    step(
+      focus: { panel: string; inside: boolean },
+      key: "left" | "right" | "up" | "down" | "enter" | "esc",
+      size: (id: string) => number,
+    ): { panel: string; inside: boolean; move?: -1 | 1; act?: true; bar?: true; nudge?: string } | undefined;
+  };
   /** Terminal size in cells: a page has no scroll, so a long list windows itself by it. */
   useViewport(): { cols: number; rows: number };
   /** Color tokens (`c`) and glyphs (`g`) of the active theme. */

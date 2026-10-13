@@ -18,7 +18,7 @@ import { requestTab } from "../tabs/context.ts";
 import { clean, search, type Hit } from "./search.ts";
 
 /** What the palette needs from the session. `secrets` go to `execute` as env/promptSecret, never argv. */
-export type SessionLike = Pick<SessionApi, "run" | "history" | "answer" | "subscribe" | "getSnapshot">;
+export type SessionLike = Pick<SessionApi, "run" | "history" | "answer" | "subscribe" | "getSnapshot"> & Partial<Pick<SessionApi, "cancel">>;
 
 export interface PaletteProps {
   session: SessionLike;

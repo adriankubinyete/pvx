@@ -229,18 +229,37 @@ test("layout: side by side at 120x40, stacked at 80x24; each panel and the foote
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
 });
 
-test("panels: ← → 1 2 move focus (● marks it) and nudge on an illegal move", async () => {
-  const { t } = await mount(await load());
+test("panels: the arrows follow the layout (→ side by side, ↓ stacked), 1 2 jump, enter nudges (nothing to enter)", async () => {
+  const wide = await mount(await load());
+  await open(wide.t);
+  expect(wide.t.frame()).toContain("[1] resultados ●");
+  await wide.t.press("ARROW_LEFT");
+  expect(lastLine(wide.t)).toContain("nada aqui");
+  await wide.t.press("ARROW_DOWN");
+  expect(lastLine(wide.t)).toContain("nada aqui"); // nothing below when side by side
+  await wide.t.press("ARROW_RIGHT");
+  expect(wide.t.frame()).toContain("[2] plano ●");
+  await wide.t.press("ARROW_RIGHT");
+  expect(lastLine(wide.t)).toContain("nada aqui");
+  await wide.t.press("ARROW_LEFT");
+  expect(wide.t.frame()).toContain("[1] resultados ●");
+  await wide.t.press("RETURN");
+  expect(lastLine(wide.t)).toContain("nada para selecionar");
+  await wide.t.press("2");
+  expect(wide.t.frame()).toContain("[2] plano ●");
+  await wide.t.press("1");
+  expect(wide.t.frame()).toContain("[1] resultados ●");
+  wide.t.destroy();
+
+  const { t } = await mount(await load(), { cols: 80, rows: 24 });
   await open(t);
-  expect(t.frame()).toContain("[1] resultados ●");
-  await t.press("ARROW_LEFT");
-  expect(lastLine(t)).toContain("nada aqui");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toContain("[2] plano ●");
-  await t.press("ARROW_RIGHT");
-  expect(lastLine(t)).toContain("nada aqui");
-  await t.press("1");
+  expect(lastLine(t)).toContain("nada aqui"); // stacked: nothing on the right
   expect(t.frame()).toContain("[1] resultados ●");
-  await t.press("2");
+  await t.press("ARROW_DOWN");
   expect(t.frame()).toContain("[2] plano ●");
+  await t.press("ARROW_DOWN");
+  expect(lastLine(t)).toContain("nada aqui");
+  await t.press("ARROW_UP");
+  expect(t.frame()).toContain("[1] resultados ●");
 });

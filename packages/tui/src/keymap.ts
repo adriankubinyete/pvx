@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "modwait" | "catalog" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "modwait" | "catalog" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -24,6 +24,7 @@ const base: readonly Shortcut[] = [
   { keys: "/", label: "comando", scope: "menu" },
   { keys: "ctrl+k", label: "palette", scope: "menu", footer: true },
   { keys: "tab", label: "abas", scope: "menu", footer: true },
+  { keys: "a", label: "adiciona módulo", scope: "menu" },
   { keys: "esc", label: "sobe um nível", scope: "menu" },
   { keys: "↑↓", label: "move", scope: "modules", footer: true },
   { keys: "enter", label: "abre", scope: "modules", footer: true },
@@ -31,6 +32,7 @@ const base: readonly Shortcut[] = [
   { keys: "d", label: "ativa", scope: "modules", footer: true }, // toggles: disable, or enable a disabled one
   { keys: "x", label: "remove", scope: "modules", footer: true },
   { keys: "l", label: "log", scope: "modules" },
+  { keys: "a", label: "adiciona", scope: "modules", footer: true },
   { keys: "c", label: "catálogo", scope: "modules" },
   { keys: "esc", label: "sobe um nível", scope: "modules" },
   { keys: "↑↓", label: "move", scope: "modwait", footer: true },
@@ -38,11 +40,16 @@ const base: readonly Shortcut[] = [
   { keys: "t", label: "confia", scope: "modwait", footer: true },
   { keys: "x", label: "remove", scope: "modwait", footer: true },
   { keys: "l", label: "log", scope: "modwait" },
+  { keys: "a", label: "adiciona", scope: "modwait" },
   { keys: "c", label: "catálogo", scope: "modwait" },
   { keys: "↑↓", label: "move", scope: "catalog", footer: true },
   { keys: "enter", label: "instala", scope: "catalog", footer: true },
   { keys: "c", label: "instalados", scope: "catalog", footer: true },
+  { keys: "a", label: "adiciona por repositório", scope: "catalog" },
   { keys: "tab", label: "abas", scope: "catalog", footer: true },
+  { keys: "enter", label: "clona e revisa", scope: "add", footer: true },
+  { keys: "←→", label: "cursor", scope: "add" },
+  { keys: "esc", label: "cancela", scope: "add" },
   { keys: "t", label: "confiar neste commit", scope: "review", footer: true },
   { keys: "s", label: "código", scope: "review", footer: true },
   { keys: "p", label: "permissões", scope: "review", footer: true },
@@ -51,13 +58,18 @@ const base: readonly Shortcut[] = [
   { keys: "↑↓", label: "move", scope: "files", footer: true },
   { keys: "enter", label: "abre", scope: "files", footer: true },
   { keys: "esc", label: "volta", scope: "files" },
-  { keys: "↑↓", label: "move", scope: "home", footer: true },
-  { keys: "←→", label: "painel", scope: "home", footer: true },
+  { keys: "↑↓←→", label: "painel", scope: "home", footer: true },
+  { keys: "enter", label: "entra", scope: "home", footer: true },
   { keys: "1-3", label: "painel", scope: "home" },
   { keys: "n", label: "nova nota", scope: "home" },
-  { keys: "enter", label: "usa", scope: "home", footer: true },
   { keys: "r", label: "atualiza", scope: "home", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "home" },
+  { keys: "↑↓", label: "item", scope: "homein", footer: true },
+  { keys: "enter", label: "usa", scope: "homein", footer: true },
+  { keys: "esc", label: "sai", scope: "homein", footer: true },
+  { keys: "r", label: "atualiza", scope: "homein", footer: true },
+  { keys: "n", label: "nova nota", scope: "homein" },
+
   { keys: "tab", label: "abas", scope: "home" },
   { keys: "←→", label: "troca aba", scope: "tabs", footer: true },
   { keys: "↓/enter", label: "entra na aba", scope: "tabs", footer: true },
@@ -70,6 +82,7 @@ const base: readonly Shortcut[] = [
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
   { keys: "!!", label: "repete", scope: "session", footer: true },
+  { keys: "!cmd", label: "shell do host", scope: "session" }, // root only, always audited; typed text goes to the history
   { keys: "#", label: "páginas", scope: "session", footer: true },
   { keys: "ctrl+k", label: "palette", scope: "session", footer: true },
   { keys: "ctrl+l", label: "limpa", scope: "session", footer: true },

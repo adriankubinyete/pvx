@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRenderer } from "@opentui/react";
-import { createClipboard, createHostClipboard, createRendererClipboardAdapter, type ScrollBoxRenderable } from "@opentui/core";
+import { createClipboard, createHostClipboard, createRendererClipboardAdapter } from "@opentui/core";
 import type { Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { editLine } from "../lineedit.ts";
 import { LineText } from "../LineText.tsx";
 import { useLayout } from "../layout.ts";
+import { followProps, useFollow } from "../follow.ts";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
@@ -60,7 +61,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const [note, setNote] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [fb, setFb] = useState<number | null>(null); // focused block, by id
-  const scroll = useRef<ScrollBoxRenderable>(null);
+  const follow = useFollow();
 
   const searching = search !== null;
   let start = 0;
@@ -78,12 +79,11 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   useEffect(() => {
     if (barFocused) setFb(null); // coming back from the bar lands in the input
   }, [barFocused]);
+  // Moving the focus up leaves the bottom (following pauses); the input or the last block is the bottom again.
   useEffect(() => {
-    if (focus) scroll.current?.scrollChildIntoView(`b${focus.id}`);
+    if (focus && focus !== last) follow.ref.current?.scrollChildIntoView(`b${focus.id}`);
+    else follow.toBottom();
   }, [focus?.id]);
-  useEffect(() => {
-    if (last) scroll.current?.scrollChildIntoView(`b${last.id}`);
-  }, [last?.id, last?.status]);
 
   // The spinner's only timer: it exists while a block runs.
   const running = blocks.some((b) => b.status === "running");
@@ -109,6 +109,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const submit = () => {
     const line = input;
     setInput(""), setHi(null), setSel(0);
+    follow.toBottom(); // a new command always shows its own output
     void store.run(line);
   };
   const browse = (to: number | null) => {
@@ -119,6 +120,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   useKeys((k) => {
     if (tabs?.focused === false) return;
     setNote(null);
+    if (k.name === "pageup" || k.name === "pagedown") return follow.page(k.name === "pageup" ? -1 : 1), true;
     if (matchKey(k, "ctrl+l")) return store.clear(), true;
     if (matchKey(k, "ctrl+r")) return setSearch(search ?? ""), setSel(0), true;
     if (k.name === "escape" && (searching || input)) return searching ? setSearch(null) : (setInput(""), setHi(null)), true;
@@ -128,7 +130,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       if (k.name === "down") return setFb(blocks[i + 1]?.id ?? null), true;
       if (k.name === "escape") return tabs?.focusBar(), true; // one level up: input -> blocks -> tab bar
       if (matchKey(k, "enter")) return recall(store.lineOf(focus.id)), setFb(null), true;
-      if (matchKey(k, "r")) return void store.repeat(focus.id), true;
+      if (matchKey(k, "r")) return follow.toBottom(), void store.repeat(focus.id), true;
       if (matchKey(k, "l")) return router.push({ id: "log", element: <LogScreen moduleId={focus.moduleId} /> }), true;
       if (matchKey(k, "c")) {
         const errors = focus.lines.filter((l) => l.kind === "error");
@@ -176,7 +178,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const room = Math.max(10, cols - 12 - [...hint].length - (searching ? 8 : 0));
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
-      <scrollbox ref={scroll} flexGrow={1} minHeight={0} stickyScroll stickyStart="bottom" focused={false} contentOptions={{ gap: 1 }}>
+      <scrollbox ref={follow.ref} flexGrow={1} minHeight={0} {...followProps} focused={false} contentOptions={{ gap: 1 }}>
         {blocks.map((b) => <BlockView key={b.id} b={b} focused={b === focus} tick={b.status === "running" ? tick : 0} onPick={pick} />)}
       </scrollbox>
       {items.length ? <Popup items={items} sel={at} /> : null}
@@ -184,7 +186,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
         <text>
           <span fg={inputFocused ? c.accent : c.dim}><b>{`${g.prompt} `}</b></span>
           {searching ? <span fg={c.text}>(busca) </span> : null}
-          {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} /> : <span fg={c.dim}>digite um comando</span>}
+          {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} /> : <span fg={c.dim}>digite um comando · sem segredos (histórico)</span>}
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>

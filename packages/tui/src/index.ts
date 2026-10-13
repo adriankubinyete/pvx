@@ -4,6 +4,7 @@ export { accents, glyphs, resultMarker, tokens, tokens as theme, tokensFor, type
 export { footerFor, helpFor, matchKey, shortcuts, type Scope, type Shortcut } from "./keymap.ts";
 export { KeyRouter, useKeys, type KeyHandler } from "./keys.tsx";
 export { RouterProvider, ScreenOutlet, useRouter, type Screen } from "./router.tsx";
+export { pickPanel, usePanelNav, type Dir, type Rect } from "./panelnav.ts";
 export { useLayout } from "./layout.ts";
 export * from "./session/index.ts";
 export * from "./menu/index.ts";

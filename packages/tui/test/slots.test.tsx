@@ -40,7 +40,7 @@ test("widgets fill their slots by priority; the throwing and the hanging ones ar
   expect(f).toContain("demo: revisar o painel"); // home.attention
   expect(f).toContain("widget quebrou: widget-demo.hang");
   expect(readFileSync(join(logsDir(), "core.log"), "utf8")).toMatch(/widget widget-demo\.boom quebrou: widget explodiu[\s\S]*widget widget-demo\.hang quebrou: passou de 60 ms/);
-  await t.press("ARROW_RIGHT"); // the home keeps responding
+  await t.press("ARROW_DOWN"); // the home keeps responding: atividade is below
   expect(t.frame()).toContain("› [2] atividade ●");
 });
 
@@ -54,6 +54,7 @@ test("home.attention combines the profile's pending items with a module item; en
   expect(at("demo: revisar o painel")).toBeGreaterThan(at("cap-fixture.a: pendente")); // host first, then module
   expect(at("widget quebrou: widget-demo.hang")).toBeGreaterThan(at("demo: revisar o painel"));
   expect(t.frame()).toMatch(/1 de 5/); // home.summary
+  await t.press("RETURN"); // enter the panel
   for (let i = 0; i < 4; i++) await t.press("ARROW_DOWN"); // 4 pending items from the profile, then the module's
   await t.press("RETURN");
   expect(t.frame()).toContain("❯ widget-demo read home.chips");
@@ -85,5 +86,5 @@ test.each([[80, 24], [230, 24]] as const)("chips line sits alone under the bar a
   expect(lines.filter((l) => l.includes("› máquina"))).toHaveLength(1);
   expect(lines.filter((l) => l.includes("› [1] conformidade"))).toHaveLength(1);
   expect(lines.filter((l) => l.includes("› [2] atividade"))).toHaveLength(1);
-  expect(lines[rows - 1]).toContain("↑↓ move");
+  expect(lines[rows - 1]).toContain("↑↓←→ painel");
 });

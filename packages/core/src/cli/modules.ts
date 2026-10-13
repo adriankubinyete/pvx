@@ -31,7 +31,7 @@ const done = (o: { line(l: OutLine): void }, r: Result) => {
 const approveHint = (id: string, sha: string) => `para aprovar, rode \`pvx modules trust ${id} --sha ${sha}\``;
 
 const addArgs: ArgSpec[] = [
-  { name: "url", help: "URL https ou ssh do repositório, ou id do catálogo", kind: "positional", required: true },
+  { name: "url", help: "usuario/repo (GitHub), URL https/ssh/git@host:caminho, ou id do catálogo", kind: "positional", required: true },
   { name: "ref", help: "Branch, tag ou commit", kind: "option" },
   { name: "trust", help: "Aprova este commit sem revisão em tela", kind: "option" },
 ];
@@ -85,6 +85,7 @@ export const MODULES_COMMANDS: CoreCommand[] = [
       } catch (e) {
         return usage(o, (e as Error).message);
       }
+      if (url !== p.args.url) o.line({ kind: "info", text: `repositório: ${url}` });
       const r = await addModule(url, {
         hostVersion: io.version,
         ref: p.args.ref as string | undefined,

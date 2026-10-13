@@ -51,19 +51,44 @@ test("↓ at the end of a list nudges; ↑ at the top goes to the bar without a 
   expect(footer(t)).toContain("↓/enter entra na aba");
 });
 
-test("Início: ← with no panel on the left nudges; the panels are numbered in ←/→ order and 1/2 jump", async () => {
+test("Início: arrows are spatial; nothing on a side nudges; the numbers jump and stay as labels", async () => {
   const t = await mount();
   expect(t.frame()).toContain("› [1] conformidade ●");
   expect(t.frame()).toContain("› [2] atividade");
   expect(t.frame()).not.toMatch(/› \d máquina/); // the non-navigable panel has no number
-  await t.press("ARROW_LEFT");
+  await t.press("ARROW_RIGHT"); // conformidade is the rightmost of its row
   await gone(t, "nada aqui");
-  await t.press("ARROW_RIGHT");
+  await t.press("ARROW_LEFT"); // máquina, on the left
+  expect(t.frame()).toContain("› máquina ●");
+  await t.press("RETURN"); // nothing to select in it
+  await gone(t, "nada para selecionar");
+  expect(t.frame()).toContain("› máquina ●");
+  await t.press("ARROW_DOWN");
   expect(t.frame()).toContain("› [2] atividade ●");
   await t.press("1");
   expect(t.frame()).toContain("› [1] conformidade ●");
   await t.press("2");
   expect(t.frame()).toContain("› [2] atividade ●");
+});
+
+test("Início: inside a panel the list edges only nudge; esc leaves", async () => {
+  const t = await mount();
+  await t.press("2"); // atividade, empty: nothing to enter
+  await t.press("RETURN");
+  await gone(t, "nada para selecionar");
+  await t.press("1");
+  await t.press("RETURN"); // the list of conformidade (module items)
+  expect(footer(t)).toContain("esc sai");
+  await t.press("ARROW_UP");
+  expect(footer(t)).toContain("início da lista");
+  expect(t.frame()).toContain("› [1] conformidade ●");
+  for (let i = 0; i < 12; i++) await t.press("ARROW_DOWN");
+  expect(footer(t)).toContain("fim da lista");
+  expect(t.frame()).toContain("› [1] conformidade ●"); // never jumped to another panel
+  await t.press("ESCAPE");
+  await Bun.sleep(150);
+  await t.flush();
+  expect(footer(t)).toContain("enter entra");
 });
 
 test("`/` from the focused tab bar opens Comando", async () => {

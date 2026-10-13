@@ -54,7 +54,7 @@ function Frame({ palette, pages }: Pick<AppProps, "palette" | "pages">) {
 function Root({ onExit, palette, pages }: Pick<AppProps, "onExit" | "palette" | "pages">) {
   const theme = useTheme();
   return (
-    <KeyRouter onQuit={() => (theme.flush(), onExit())}>
+    <KeyRouter onQuit={() => palette?.session.cancel?.() || (theme.flush(), onExit())}>
       <Frame palette={palette} pages={pages} />
     </KeyRouter>
   );

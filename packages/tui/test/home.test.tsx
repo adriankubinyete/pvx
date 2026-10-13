@@ -62,8 +62,10 @@ test("enter on a pending item puts its fix in the Comando input and runs nothing
   const { t, store } = await mount({ cols: 120, rows: 40 });
   await t.press("r");
   await t.flush();
+  expect(t.frame()).not.toMatch(/» /);
+  await t.press("RETURN"); // enter the panel
   expect(t.frame()).toMatch(/» . cap-fixture\.a/);
-  await t.press("RETURN");
+  await t.press("RETURN"); // enter on the item
   expect(t.frame()).toContain("tab completa"); // Comando
   expect(t.frame()).toContain("❯ cap-fixture fix-a");
   expect(store.blocks).toEqual([]);
@@ -79,22 +81,28 @@ test("focus: the focused panel has the dot, left/right move between panels, up g
   await t.flush();
   expect(t.frame()).toContain("› [1] conformidade ●");
   expect(t.frame()).not.toContain("› [2] atividade ●");
-  await t.press("ARROW_RIGHT");
+  expect(t.frame()).not.toMatch(/» /); // panel level: no item is selected
+  await t.press("ARROW_DOWN"); // atividade is below, whatever the item count of conformidade
   expect(t.frame()).toContain("› [2] atividade ●");
+  expect(t.frame()).not.toMatch(/» /);
+  await t.press("RETURN"); // enter the panel
   expect(t.frame()).toContain("★ demo greet");
   expect(t.frame()).toMatch(/✓ demo remember\s+agora/);
   expect(t.frame()).toMatch(/» ★ demo greet/);
   await t.press("ARROW_DOWN");
   expect(t.frame()).toMatch(/» . demo remember/);
-  await t.press("ARROW_UP");
-  await t.press("ARROW_UP"); // first item: the bar
+  await t.press("ESCAPE"); // back to the panel level, same panel
+  await Bun.sleep(150);
+  await t.flush();
+  expect(t.frame()).toContain("› [2] atividade ●");
   expect(t.frame()).not.toMatch(/» /);
+  await t.press("ARROW_UP"); // conformidade is above
+  expect(t.frame()).toContain("› [1] conformidade ●");
+  await t.press("ARROW_UP"); // nothing above: the bar
   expect(t.frame()).not.toContain("●");
   expect(t.frame()).toContain("tab próxima aba");
   await t.press("ARROW_DOWN"); // back to the panel that had the cursor
-  expect(t.frame()).toContain("› [2] atividade ●");
-  await t.press("RETURN");
-  expect(t.frame()).toContain("❯ demo greet");
+  expect(t.frame()).toContain("› [1] conformidade ●");
 });
 
 // Each fixed row (bar, panel titles, footer) must sit alone on its own line, whole.
@@ -108,7 +116,7 @@ test.each([[230, 24], [120, 40], [100, 30], [80, 24]] as const)("rows never over
   expect(at("› [1] conformidade")).toHaveLength(1);
   expect(at("perfil Principal")).toHaveLength(1);
   expect(at("› [2] atividade")).toHaveLength(1);
-  expect(at("↑↓ move")).toEqual([rows - 1]);
+  expect(at("↑↓←→ painel")).toEqual([rows - 1]);
   expect(lines.filter((l) => l.includes("pvx 0.1.0"))).toHaveLength(1); // the version only in the bar
   expect(lines.filter((l) => l.includes(hostname().slice(0, 12)))).toHaveLength(1); // the host only in máquina
 });
@@ -117,4 +125,30 @@ test("below the minimum size only the notice shows (no half-drawn layout)", asyn
   const { t } = await mount({ cols: 230, rows: 20 });
   const lines = t.frame().split("\n").filter((l) => l.trim());
   expect(lines).toEqual([expect.stringContaining("terminal pequeno")]);
+});
+
+test("spatial arrows at 120x40: → goes to the panel really on the right, ↓ to the one below even with a long list", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await t.press("r");
+  await t.flush();
+  await t.press("ARROW_LEFT"); // máquina
+  expect(t.frame()).toContain("› máquina ●");
+  await t.press("ARROW_RIGHT");
+  expect(t.frame()).toContain("› [1] conformidade ●");
+  await t.press("ARROW_DOWN"); // conformidade has several items; ↓ at panel level skips them
+  expect(t.frame()).toContain("› [2] atividade ●");
+  await t.press("ARROW_UP");
+  expect(t.frame()).toContain("› [1] conformidade ●");
+});
+
+test("spatial arrows at 80x24 (stacked): → has nothing on the right, ↓ goes to atividade", async () => {
+  const { t } = await mount({ cols: 80, rows: 24 });
+  await t.press("ARROW_RIGHT");
+  expect(t.frame().split("\n").at(-2)! + t.frame().split("\n").at(-1)!).toContain("nada aqui");
+  expect(t.frame()).toContain("› [1] conformidade ●");
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).toContain("› [2] atividade ●");
+  await t.press("ARROW_UP");
+  await t.press("ARROW_UP"); // máquina is above conformidade
+  expect(t.frame()).toContain("› máquina ●");
 });

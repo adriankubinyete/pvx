@@ -117,14 +117,27 @@ export function searchCatalog(cat: Pick<Catalog, "modules">, term: string): Cata
     .map((x) => x.m);
 }
 
-/** A URL is returned as is; an id is looked up in the catalog. Throws a pt-BR Error listing close matches. */
+const SHORT_RE = /^([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)$/;
+export const MODULE_REF_FORMS = "use `usuario/repositorio` (GitHub), uma URL completa (https://…, ssh://… ou git@host:caminho) ou um id do catálogo";
+const okName = (n: string) => !n.startsWith("-") && !n.includes("..") && n !== "." && n !== ".git";
+
+/**
+ * The repository a ref names: a URL is returned as is, `user/repo[.git]` means GitHub, a bare id is looked up in the catalog.
+ * Throws a pt-BR Error listing the accepted forms (and close catalog matches).
+ */
 export async function resolveModuleRef(ref: string, opts: CatalogLoadOpts = {}): Promise<string> {
   if (isModuleUrl(ref)) return ref;
+  if (ref.includes("/")) {
+    const m = SHORT_RE.exec(ref);
+    const repo = m?.[2]!.replace(/\.git$/, "");
+    if (!m || !repo || !okName(m[1]!) || !okName(repo)) throw new Error(`referência inválida "${ref}": ${MODULE_REF_FORMS}`);
+    return `https://github.com/${m[1]}/${repo}.git`;
+  }
   const cat = await loadCatalog(opts);
   const hit = cat.modules.find((m) => m.id === ref);
   if (hit) return hit.url;
   const close = searchCatalog(cat, ref).slice(0, 5).map((m) => m.id);
-  throw new Error(`módulo "${ref}" não está no catálogo (${cat.source})${close.length ? `; parecidos: ${close.join(", ")}` : ""}; use uma URL https ou ssh`);
+  throw new Error(`módulo "${ref}" não está no catálogo (${cat.source})${close.length ? `; parecidos: ${close.join(", ")}` : ""}; ${MODULE_REF_FORMS}`);
 }
 
 export const isInstalled = (id: string) => existsSync(join(usermodulesDir(), id));

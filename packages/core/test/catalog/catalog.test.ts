@@ -71,6 +71,17 @@ test("resolveModuleRef: url passthrough, id, unknown with suggestions", async ()
   await expect(resolveModuleRef("zzz", opts)).rejects.toThrow(/não está no catálogo/);
 });
 
+test("resolveModuleRef: user/repo means GitHub, anything odd is rejected with the accepted forms", async () => {
+  const gh = "https://github.com/phonevox/pvx-redes.git";
+  expect(await resolveModuleRef("phonevox/pvx-redes", { fetchImpl: down })).toBe(gh);
+  expect(await resolveModuleRef("phonevox/pvx-redes.git", { fetchImpl: down })).toBe(gh);
+  expect(await resolveModuleRef("a.b_c/d-e.f", { fetchImpl: down })).toBe("https://github.com/a.b_c/d-e.f.git");
+  expect(await resolveModuleRef("ssh://git@h.com/x/y.git", { fetchImpl: down })).toBe("ssh://git@h.com/x/y.git");
+  for (const bad of ["a/b/c", "-x/y", "x/-y", "../y", "x/..", "x/.git", "x /y", "http://a.b/c", "file:///tmp/r", "a/b?c", "/y", "x/"]) {
+    await expect(resolveModuleRef(bad, { fetchImpl: down })).rejects.toThrow(/usuario\/repositorio/);
+  }
+});
+
 test("modules search --json shape and installed mark", async () => {
   await loadCatalog({ fetchImpl: ok, ...quiet }); // fresh cache for the command
   const home = process.env.PVX_HOME!;

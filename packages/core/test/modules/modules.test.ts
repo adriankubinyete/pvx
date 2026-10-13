@@ -366,6 +366,27 @@ describe("catalog id", () => {
   });
 });
 
+describe("short ref", () => {
+  test("modules add user/repo clones from GitHub (rewritten to a local repo) and prints the URL", async () => {
+    const o = origin();
+    const save = { ...process.env };
+    process.env.GIT_CONFIG_COUNT = "1";
+    process.env.GIT_CONFIG_KEY_0 = `url.${o.url}.insteadOf`;
+    process.env.GIT_CONFIG_VALUE_0 = "https://github.com/acme/gm.git";
+    try {
+      const r = await cli("modules add acme/gm");
+      expect(r.code).toBe(0);
+      expect(r.text).toContain("repositório: https://github.com/acme/gm.git");
+      expect(existsSync(modDir())).toBe(true);
+      const bad = await cli("modules add acme/../gm");
+      expect(bad.code).toBe(2);
+      expect(bad.text).toContain("usuario/repositorio");
+    } finally {
+      for (const k of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) save[k] === undefined ? delete process.env[k] : (process.env[k] = save[k]);
+    }
+  });
+});
+
 const head = (dir: string) => sh(dir, "rev-parse", "HEAD");
 const trusted = async (id = "gm", extra: Record<string, unknown> = {}) => {
   const o = origin(id, extra);

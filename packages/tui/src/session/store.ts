@@ -2,10 +2,14 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
+import { interactiveProgram, spawnShell, type ShellRun } from "./shell.ts";
 import { auditCommand, execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
 
 export const MAX_BLOCKS = 500;
 const MAX_HISTORY = 500;
+/** A host shell block keeps its newest lines only: a flood of output costs memory and renders; the full output belongs in a file. */
+const MAX_SHELL_LINES = 2000;
+const SHELL_TIMEOUT_MS = 5 * 60_000;
 
 export interface Block {
   id: number;
@@ -41,6 +45,8 @@ export interface SessionApi {
   /** The line to recall for a block: the real one (memory only) when the shown one is masked. */
   lineOf(blockId: number): string;
   clear(): void;
+  /** Kills the running `!cmd` shell commands; false when none was running. */
+  cancel(): boolean;
   /** Pushes a synthetic block (host news such as a dev-module reload error); no history, no run. */
   notice(line: string, status: Block["status"], lines: OutLine[], moduleId?: string): void;
   /**
@@ -88,10 +94,13 @@ export interface SessionOpts {
   isRoot: boolean;
   /** Runs the core commands (`plano`, `logs`...) that are not in the registry. */
   core?: (argv: string[]) => Promise<{ exit: number; lines: CoreLine[] }>;
+  /** Limit of a `!cmd` host shell command. Default 5 minutes. */
+  shellTimeoutMs?: number;
 }
 
 export function createSessionStore(opts: SessionOpts): SessionApi {
-  const { registry, makeLogger, historyPath, isRoot, core } = opts;
+  const { registry, makeLogger, historyPath, isRoot, core, shellTimeoutMs = SHELL_TIMEOUT_MS } = opts;
+  const shells = new Set<ShellRun>();
   let state: SessionState = { blocks: [], history: loadHistory(historyPath), pending: [] };
   const subs = new Set<() => void>();
   const pageSubs = new Set<(key: string) => void>();
@@ -116,6 +125,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     let line = raw.trim();
     if (line === "!!") line = lastRaw ?? state.history.at(-1) ?? "";
     if (!line) return { exit: 0 };
+    if (line.startsWith("!")) return runShell(line);
     // `#page` is navigation, not a command: no block and no history. An unknown page falls through to an error block.
     const page = line.startsWith("#") ? resolvePage(registry, line.slice(1).trim()) : undefined;
     if (page) return pageSubs.forEach((f) => f(page.key)), { exit: 0 };
@@ -159,6 +169,52 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     settle(id, t0, exit, lines);
     const opens = found && exit === 0 && found.cmd.page ? `${found.cmd.moduleId}.${found.cmd.page}` : undefined;
     if (opens && registry.pages.has(opens)) pageSubs.forEach((f) => f(opens));
+    return { exit };
+  }
+
+  /** `!cmd`: a host shell command (`/bin/sh -c`), streamed into a block. Strict root like a module command; always audited. */
+  async function runShell(line: string): Promise<{ exit: number }> {
+    const cmd = line.slice(1).trim();
+    if (!cmd) return { exit: 0 };
+    line = `!${cmd}`;
+    const id = ++seq;
+    const t0 = Date.now();
+    lastRaw = undefined; // `!!` repeats this line, not an older masked one
+    set({ blocks: [...state.blocks, { id, line, status: "running", moduleId: "core", lines: [], at: t0 } as Block].slice(-MAX_BLOCKS) });
+    addHistory(line);
+    const out: OutLine[] = [];
+    let exit = 1;
+    const interactive = interactiveProgram(cmd);
+    if (!isRoot) out.push({ kind: "error", text: rootMessage() });
+    else if (interactive) out.push({ kind: "error", text: `\`${interactive}\` precisa de um terminal interativo e aqui não há TTY: rode-o fora do pvx` });
+    else {
+      const rest = { out: "", err: "" };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const flush = () => (timer = undefined, patchBlock(id, { lines: [...out] }));
+      const push = (stderr: boolean, text: string) => {
+        for (const t of sanitize(text)) out.push({ kind: stderr ? "warning" : "plain", text: t });
+        if (out.length > MAX_SHELL_LINES) out.splice(0, out.length - MAX_SHELL_LINES);
+        timer ??= setTimeout(flush, 50);
+      };
+      const run = spawnShell(cmd, shellTimeoutMs, (text, stderr) => {
+        const key = stderr ? "err" : "out";
+        const parts = (rest[key] + text).split("\n");
+        rest[key] = parts.pop()!;
+        if (parts.length) push(stderr, parts.join("\n"));
+      });
+      shells.add(run);
+      const r = await run.done;
+      shells.delete(run);
+      clearTimeout(timer);
+      for (const stderr of [false, true]) if (rest[stderr ? "err" : "out"]) push(stderr, rest[stderr ? "err" : "out"]);
+      clearTimeout(timer);
+      exit = r.exit;
+      if (r.reason === "timeout") out.push({ kind: "error", text: `tempo esgotado (${Math.round(shellTimeoutMs / 1000)}s): processo morto` });
+      if (r.reason === "cancel") out.push({ kind: "warning", text: "cancelado" });
+      if (exit !== 0) for (const l of out) if (l.kind === "warning" && l.text !== "cancelado") l.kind = "error"; // stderr of a failed command
+      auditCommand({ line, exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // always: the host shell is the widest door
+    }
+    settle(id, t0, exit, out);
     return { exit };
   }
 
@@ -224,6 +280,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     },
     lineOf: (blockId) => raws.get(blockId) ?? state.blocks.find((x) => x.id === blockId)?.line ?? "",
     clear: () => set({ blocks: [] }),
+    cancel: () => (shells.forEach((r) => r.cancel()), shells.size > 0),
     notice(line, status, lines, moduleId = "core") {
       const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
       set({ blocks: [...state.blocks, { id: ++seq, line, status, moduleId, lines: clean }].slice(-MAX_BLOCKS) });

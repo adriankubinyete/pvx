@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { OutLine } from "@pvx/sdk";
-import { addModule, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type UpdateCheck } from "@pvx/core";
+import { addModule, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type UpdateCheck } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
@@ -13,6 +13,7 @@ import { SessionModals } from "../session/Modals.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
+import { AddBox } from "./AddBox.tsx";
 import { ItemList, LABEL_W } from "./ItemList.tsx";
 import { MenuForm } from "./MenuForm.tsx";
 import { Result } from "./Result.tsx";
@@ -30,7 +31,7 @@ export const createMenuNav = (): MenuNav => ({ path: [], sel: {}, catalog: false
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 const source = (c: Catalog) => `fonte: ${c.source}${c.fetchedAt ? ` · ${hhmm(c.fetchedAt)}` : ""}`;
 
-type View = { kind: "list" } | { kind: "form"; item: Item } | { kind: "result"; id: number };
+type View = { kind: "list" } | { kind: "form"; item: Item } | { kind: "result"; id: number } | { kind: "add" };
 
 /** The Módulos tab: the registry as a menu (modules, then command groups, then the form and the result). Arrows and enter; esc goes up; `/` goes to the Comando tab. */
 export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi; registry: Registry; nav: MenuNav; updates?: UpdatePending[] }) {
@@ -93,6 +94,27 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
     if (added?.ok && added.status === "instalado" && added.state === "aguardando-confianca") review(added.id);
     else showResult(r.id);
   };
+  /** Manual add: resolves the ref, clones, opens the same trust review. Returns the inline error, or nothing when the screen moved on. */
+  const addRef = async (ref: string): Promise<string | undefined> => {
+    let error: string | undefined;
+    let added: Awaited<ReturnType<typeof addModule>> | undefined;
+    const r = await act(`modules add ${ref}`, async () => {
+      let url: string;
+      try {
+        url = await resolveModuleRef(ref);
+      } catch (e) {
+        return { exit: 1, lines: [{ kind: "error", text: (error = (e as Error).message) }] };
+      }
+      added = await addModule(url, { hostVersion: deps!.load.hostVersion, registry, reserved: deps!.reserved, allowFile: deps!.allowFile });
+      const a = added;
+      if (!a.ok) return { exit: 1, lines: [{ kind: "error", text: (error = a.error) }] };
+      if (a.status === "ja-instalado") return { exit: 0, lines: [{ kind: "info", text: `repositório: ${url}` }, { kind: "info", text: `${a.id}: já instalado (${a.state})` }] };
+      return { exit: 0, lines: [{ kind: "info", text: `repositório: ${url}` }, { kind: "warning", text: `${a.id} clonado em ${a.sha?.slice(0, 7)}: aguardando confiança, nada foi importado` }] };
+    });
+    if (error) return error;
+    if (added?.ok && added.status === "instalado" && added.state === "aguardando-confianca") setView({ kind: "list" }), review(added.id);
+    else showResult(r.id); // no root (fn never ran) or already installed
+  };
   const update = async (id: string) => {
     let check: UpdateCheck | undefined;
     const r = await act(`modules update ${id}`, async () => {
@@ -140,6 +162,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
     if (k.sequence === "/") return tabs?.goto("comando"), true;
     if (path.length) return;
     if (k.sequence === "c") return setCatalog(!catalog), true;
+    if (k.sequence === "a" && !k.ctrl) return deps ? setView({ kind: "add" }) : nudge("somente leitura"), true;
     const m = !catalog ? cur?.module : undefined;
     if (!m || !"udxlt".includes(k.sequence) || k.sequence.length !== 1 || k.ctrl) return;
     if (k.sequence === "l") return router.push({ id: "log", element: <LogScreen moduleId={m.id} /> }), true;
@@ -158,6 +181,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {view.kind === "form" ? <MenuForm item={view.item} onRun={runLine} onBack={back} /> : null}
+      {view.kind === "add" ? <AddBox onSubmit={addRef} onBack={back} /> : null}
       {view.kind === "result" ? <Result store={store} id={view.id} onBack={back} /> : null}
       {view.kind === "list" ? (
         <ItemList items={items} sel={sel[level]} onSel={select} onActivate={activate} onTop={tabs?.focusBar} focused={tabs?.focused ?? true}

@@ -16,12 +16,12 @@ const textOf = (children: unknown) => clean(Children.toArray(children as ReactNo
  * A Panel at the page root is the page's own frame: the host already draws the border and the `› title`, so it draws
  * neither (a second border would nest inside the first). A Panel inside another Panel keeps its border and title.
  */
-export function Panel({ title, tone: t, grow, children }: Props<"Panel">) {
+export function Panel({ title, tone: t, grow, panelRef, children }: Props<"Panel">) {
   const { c, g, box } = useTheme();
   const atRoot = useContext(RootPanelCtx);
   return (
     <RootPanelCtx.Provider value={false}>
-      <box flexDirection="column" flexShrink={0} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
+      <box ref={panelRef as never} flexDirection="column" flexShrink={0} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
         {children as ReactNode}
       </box>
     </RootPanelCtx.Provider>

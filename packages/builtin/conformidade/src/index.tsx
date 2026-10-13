@@ -33,7 +33,7 @@ const clip = (items: Line[], max: number, tail: Line[] = []): Line[] => {
 };
 
 export default (sdk: Sdk) => {
-  const { h, Fragment, Panel, Row, Text, useState, useEffect, useConformity, useKey, useNudge, useTheme, useViewport } = sdk.ui;
+  const { h, Fragment, Panel, Row, Text, useState, useEffect, useConformity, useKey, useNudge, usePanels, useTheme, useViewport } = sdk.ui;
 
   const hhmm = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
@@ -119,6 +119,7 @@ export default (sdk: Sdk) => {
     const { g } = useTheme();
     const { cols, rows } = useViewport();
     const nudge = useNudge();
+    const nav = usePanels();
     const [panel, setPanel] = useState<1 | 2>(1);
     const [run, setRun] = useState<Run | null>(null);
     // The first visit checks; `r` checks again. Both read and fill the host cache the Início panel shows.
@@ -126,8 +127,19 @@ export default (sdk: Sdk) => {
       if (!c.checkedAt) c.refresh();
     }, []);
     useKey("r", "atualiza", c.refresh);
-    useKey("←", "painel", () => (panel === 1 ? nudge("nada aqui") : setPanel(1)));
-    useKey("→", "painel", () => (panel === 2 ? nudge("nada aqui") : setPanel(2)), { help: true });
+    // Same rule as Início: the arrows go to the panel really on that side (→ side by side, ↓ stacked).
+    // The panels here have no items, so enter has nothing to enter.
+    const move = (key: "left" | "right" | "up" | "down" | "enter") => {
+      const st = nav.step({ panel: String(panel), inside: false }, key, () => 0);
+      if (!st) return;
+      if (st.bar) return nudge("nada aqui");
+      return st.nudge ? nudge(st.nudge) : setPanel(Number(st.panel) as 1 | 2);
+    };
+    useKey("←", "painel", () => move("left"));
+    useKey("→", "painel", () => move("right"), { help: true });
+    useKey("↑", "painel", () => move("up"), { help: true });
+    useKey("↓", "painel", () => move("down"), { help: true });
+    useKey("enter", "entra", () => (run?.outcomes ? setRun(null) : move("enter")), { help: true }); // a finished apply uses enter to close
     useKey("1", "resultados", () => setPanel(1), { help: true });
     useKey("2", "plano", () => setPanel(2), { help: true });
 
@@ -154,7 +166,7 @@ export default (sdk: Sdk) => {
     const wide = cols >= WIDE;
     const inner = wide ? [body - 2, body - 2] : [Math.floor(body / 2) - 2, Math.ceil(body / 2) - 2];
     const frame = (n: 1 | 2, title: string, children: unknown) => (
-      <Panel key={n} title={`[${n}] ${title}${panel === n ? ` ${g.active}` : ""}`} tone={panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
+      <Panel key={n} panelRef={nav.ref(String(n))} title={`[${n}] ${title}${panel === n ? ` ${g.active}` : ""}`} tone={panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
     );
     const header = c.running ? "verificando…" : c.checkedAt ? `verificado às ${hhmm(c.checkedAt)}` : "não verificado";
     const plan = run ? <Aplicando run={run} max={inner[1]!} onClose={() => setRun(null)} /> : <Passos c={c} max={inner[1]!} />;

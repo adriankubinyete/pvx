@@ -269,6 +269,48 @@ test("t on a module awaiting trust reviews it; enter does the same", async () =>
   expect(existsSync(marker)).toBe(false);
 });
 
+test("a opens the repository box; a short ref clones and opens the review; esc cancels; errors stay inline", async () => {
+  const o = origin("sr");
+  const save = { ...process.env };
+  process.env.GIT_CONFIG_COUNT = "1";
+  process.env.GIT_CONFIG_KEY_0 = `url.${o.url}.insteadOf`;
+  process.env.GIT_CONFIG_VALUE_0 = "https://github.com/acme/sr.git";
+  try {
+    const { t, store } = await mount();
+    await t.press("a");
+    expect(t.frame()).toContain("repositório:");
+    expect(t.frame()).toContain("usuario/repo");
+    expect(footer(t)).toContain("enter clona e revisa");
+    await t.type("../x");
+    await t.press("RETURN");
+    await see(t, (x) => x.includes("referência inválida"));
+    expect(store.blocks.at(-1)?.status).toBe("error");
+    for (let i = 0; i < 4; i++) await t.press("BACKSPACE");
+    await t.type("acme/sr");
+    await t.press("RETURN");
+    const f = await see(t, (x) => x.includes("revisão de confiança"));
+    expect(f).toContain("revisão de confiança · sr");
+    expect(JSON.stringify(store.blocks.at(-1)?.lines)).toContain("repositório: https://github.com/acme/sr.git"); // git's insteadOf rewrites the review's origin, not this line
+    expect(existsSync(dirOf("sr"))).toBe(true);
+    expect(existsSync(marker)).toBe(false); // nothing imported before t
+    await t.press("ESCAPE");
+    await see(t, (x) => !x.includes("revisão de confiança"));
+    expect(existsSync(marker)).toBe(false);
+    expect(registry.commands.has("sr hi")).toBe(false);
+  } finally {
+    for (const k of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) save[k] === undefined ? delete process.env[k] : (process.env[k] = save[k]);
+  }
+});
+
+test("a without root shows the sudo block", async () => {
+  const { t, store } = await mount({ isRoot: false });
+  await t.press("a");
+  await t.type("acme/sr");
+  await t.press("RETURN");
+  await see(t, (x) => x.includes("rode com sudo"));
+  expect(store.blocks.at(-1)?.status).toBe("error");
+});
+
 test("without root an action is blocked with the sudo block; viewing works", async () => {
   await install(origin("nr"), "nr");
   const { t, store } = await mount({ isRoot: false });

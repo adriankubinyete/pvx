@@ -4,6 +4,7 @@ import type { CommandRun, Conformity, KeySpec, Logger, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useNudge as useHostNudge } from "../nudge.tsx";
+import { usePanelNav } from "../panelnav.ts";
 import { useLayout } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
 
@@ -118,6 +119,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useConformity" | "useTheme" | "useViewport"> = {
-  useCommand, useQuery, useStore, useRouter, useKey, useNudge: useHostNudge, useConformity, useViewport, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useConformity" | "useTheme" | "useViewport" | "usePanels"> = {
+  useCommand, useQuery, useStore, useRouter, useKey, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelNav, useTheme: useModuleTheme,
 };

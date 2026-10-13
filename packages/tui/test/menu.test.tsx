@@ -112,16 +112,16 @@ test("a core tab runs once on the first visit, then only on r; it leaves no bloc
     await t.press("TAB"); // Logs
   await t.flush();
   expect(t.frame()).toContain("› logs");
-  expect(t.frame()).toMatch(/verificado às \d\d:\d\d/);
+  expect(t.frame()).toMatch(/atualizado \d\d:\d\d:\d\d/);
   expect(store.history).toEqual([]);
   expect(store.blocks).toEqual([]);
-  const first = t.frame().match(/verificado às \d\d:\d\d/)![0];
+  const first = t.frame().match(/atualizado \d\d:\d\d:\d\d/)![0];
   await t.press("TAB", { shift: true });
   await t.press("TAB"); // back: cached, not run again
   expect(t.frame()).toContain(first);
   await t.press("r");
   await t.flush();
-  expect(t.frame()).toMatch(/verificado às/);
+  expect(t.frame()).toMatch(/atualizado/);
   expect(store.blocks).toEqual([]);
   expect(store.history).toEqual([]);
 });
@@ -345,7 +345,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   const foot = () => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
   const expectScope = (scope: "tabs" | "modules" | "home") => {
     for (const s of footerFor(scope)) expect(foot()).toContain(`${s.keys} ${s.label}`);
-    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : "↑↓ move");
+    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : scope === "home" ? "↑↓←→ painel" : "↑↓ move");
     expect(foot()).not.toContain(scope === "tabs" ? "↑↓ move" : "troca aba");
   };
   expectScope("home");
