@@ -33,7 +33,8 @@ async function main(): Promise<number> {
   if (argv[0] === "logs" && argv.some((a) => a === "-f" || a === "--follow")) process.once("SIGINT", () => abort.abort());
   const base = {
     env: process.env,
-    isRoot: process.getuid?.() === 0,
+    // Windows has no uid and no sudo: the gate mirrors root owning PVX_HOME on Unix, which has no equivalent there.
+    isRoot: process.platform === "win32" || process.getuid?.() === 0,
     registry,
     makeLogger,
     profilesDir: PROFILES_DIR,
