@@ -1,7 +1,8 @@
 #!/bin/sh
 # Usage: scripts/build.sh <linux-amd64|linux-arm64|darwin-arm64|windows-amd64|host>
 # Dev build by default (version shows "(nightly, <sha>)"); PVX_RELEASE_BUILD=1 gives the plain version.
-# Test hooks: PVX_ENTRY (entry file), PVX_DIST (output dir), PVX_SKIP_DEPS=1.
+# Test hooks: PVX_ENTRY (entry file), PVX_DIST (output dir), PVX_SKIP_DEPS=1,
+# PVX_PROFILES_SRC (dir whose *.json are embedded instead of the git-tracked profiles/*.json).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -28,11 +29,24 @@ esac
 
 [ "${PVX_SKIP_DEPS:-}" = 1 ] || [ "$target" = host ] || bun install --os='*' --cpu='*'
 
+# Only git-tracked profiles are embedded: an untracked local file must never reach a release.
+if [ -n "${PVX_PROFILES_SRC:-}" ]; then
+  plist="$(ls "$PVX_PROFILES_SRC"/*.json 2>/dev/null || true)"
+elif git rev-parse --git-dir >/dev/null 2>&1; then
+  plist="$(git ls-files 'profiles/*.json')"
+else
+  echo "build: fora de um checkout git; embutindo profiles/*.json do diretório" >&2
+  plist="$(ls profiles/*.json 2>/dev/null || true)"
+fi
+export PVX_PROFILE_FILES="$plist"
+
 mkdir -p "$dist/.gen"
-# Wrapper entry: embeds profiles/*.json (sorted, like the dev dir) before the app starts.
+# Wrapper entry: embeds the selected profiles (sorted, like the dev dir) before the app starts.
 bun -e '
-const { readdirSync } = require("node:fs");
-const profiles = readdirSync("profiles").filter((n) => n.endsWith(".json")).sort().map((n) => require("./profiles/" + n));
+const { readFileSync } = require("node:fs");
+const files = (process.env.PVX_PROFILE_FILES || "").split("\n").filter(Boolean).sort();
+const profiles = files.map((f) => JSON.parse(readFileSync(f, "utf8")));
+console.error("build: perfis embutidos: " + (files.join(", ") || "nenhum"));
 require("node:fs").writeFileSync(process.argv[1] + "/.gen/entry.ts",
   `(globalThis as any).__PVX_PROFILES__ = ${JSON.stringify(profiles)};\nawait import(${JSON.stringify(require("node:path").resolve(process.argv[2]))});\n`);
 ' "$dist" "$entry"
