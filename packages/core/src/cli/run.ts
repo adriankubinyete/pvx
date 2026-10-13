@@ -6,8 +6,8 @@ import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
 import type { ModuleRow } from "../modules/index.ts";
 import type { PlanStep } from "../plan/index.ts";
-import { CORE } from "./core.ts";
-import { pathHelp, rootHelp } from "./help.ts";
+import { CORE, RESERVED } from "./core.ts";
+import { catalogOf, pathHelp, rootHelp } from "./help.ts";
 
 export interface Palette {
   text: string;
@@ -112,12 +112,10 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
     else return true;
     return false;
   });
-  io = { ...io, reservedWords: io.reservedWords ?? [...new Set(CORE.map((c) => c.key.split(" ")[0]!))] };
+  if (argv[0] === "h") argv[0] = "help";
+  io = { ...io, reservedWords: io.reservedWords ?? RESERVED };
   const o = createOutput(io, json);
-  const catalog = [
-    ...CORE,
-    ...[...io.registry.commands].map(([key, c]) => ({ key, help: c.help, args: c.args, destructive: c.destructive })),
-  ];
+  const catalog = catalogOf(CORE, io.registry);
   const fail = (exit: number, text: string) => (o.line({ kind: "error", text }), o.finish(exit));
   const showHelp = (lines: string[]) => lines.forEach((text) => o.line({ kind: "plain", text }));
 

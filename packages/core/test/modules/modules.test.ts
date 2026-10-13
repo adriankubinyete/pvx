@@ -271,6 +271,14 @@ describe("conflicts and bad input", () => {
     expect(r.text).toContain("comando do núcleo");
   });
 
+  test("module ids `help` and `h` are refused (the alias is reserved too)", async () => {
+    for (const id of ["help", "h"]) {
+      const r = await cli(`modules add ${origin(id).url}`);
+      expect(r.code).toBe(1);
+      expect(r.text).toContain("comando do núcleo");
+    }
+  });
+
   test("bad schemes are rejected; file:// only with allowFile", async () => {
     for (const u of ["http://x/y.git", "ftp://x/y", "git://x/y", "ext::sh -c id", "--upload-pack=x", "https://user:pw@h/r.git"]) {
       expect((await add(u)).ok).toBe(false);

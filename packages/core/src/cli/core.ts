@@ -6,7 +6,7 @@ import { logsDir } from "../engine/paths.ts";
 import { createStore } from "../engine/store.ts";
 import { followLogs, readLogs } from "../logs/index.ts";
 import { applyPlan, buildPlan, evaluate, loadProfiles, selectProfile, type EvalResult } from "../plan/index.ts";
-import type { Entry } from "./help.ts";
+import { catalogOf, pathHelp, rootHelp, type Entry } from "./help.ts";
 import { recordDrift, recordSnapshot, partitionIgnored } from "../journal/index.ts";
 import { IGNORE_COMMANDS } from "./ignorar.ts";
 import { catalogSearchCommand } from "../catalog/search-command.ts";
@@ -168,6 +168,16 @@ export const CORE: CoreCommand[] = [
   ...MODULES_COMMANDS,
   ...SELF_COMMANDS,
   {
+    key: "help",
+    help: "Lista os comandos; `help <módulo> [comando]` detalha (atalho: h)",
+    async run({ io, o, rest }) {
+      const lines = rest.length ? pathHelp(catalogOf(CORE, io.registry), rest) : rootHelp(io.version, CORE, io.registry);
+      if (!lines) return o.line({ kind: "error", text: `comando não encontrado: ${rest.join(" ")}` }), EXIT.NOT_FOUND;
+      lines.forEach((text) => o.line({ kind: "plain", text }));
+      return EXIT.OK;
+    },
+  },
+  {
     key: "version",
     help: "Mostra a versão",
     async run({ io, o }) {
@@ -176,6 +186,9 @@ export const CORE: CoreCommand[] = [
     },
   },
 ];
+
+/** Words a module id cannot take: the first word of every core command, plus the `h` alias of `help`. */
+export const RESERVED = [...new Set([...CORE.map((c) => c.key.split(" ")[0]!), "h"])];
 
 function usageError(o: Output, text: string): number {
   o.line({ kind: "error", text });

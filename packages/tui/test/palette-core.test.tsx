@@ -83,3 +83,17 @@ test("opening a page entry pushes it as a screen (the page is not a tab)", async
   expect(t.frame()).toMatch(/› conformidade/);
   expect(t.frame()).not.toContain("Início"); // a pushed screen hides the tab bar
 });
+
+test("typing `h` in the Comando input shows a block with the command listing", async () => {
+  const { t, store } = await mount(await fresh());
+  expect(search(await fresh(), "help").some((x) => x.core && x.key === "help")).toBe(true);
+  await t.type("/"); // goes to the Comando tab
+  await t.type("h");
+  await t.press("RETURN");
+  await t.flush();
+  expect(store.getSnapshot().blocks.map((b) => b.line)).toEqual(["h"]);
+  const lines = store.getSnapshot().blocks[0]!.lines.map((l) => l.text);
+  expect(lines).toContain("Opções globais:");
+  expect(lines).toContain("Núcleo:");
+  expect(t.frame()).toContain("`!` marca comando destrutivo.");
+});

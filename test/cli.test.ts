@@ -106,3 +106,25 @@ test("a throwing command becomes an error line and its traceback goes to the mod
   expect(r.stdout).toContain("kaboom");
   expect(readFileSync(join(process.env.PVX_HOME!, "logs/throws-on-run.log"), "utf8")).toContain("kaboom");
 });
+
+test("`help` and `h` print the --help listing; `help demo` details the module; no root needed", async () => {
+  const base = { NO_COLOR: "1" };
+  const root = await run(["--help"], base);
+  for (const a of [["help"], ["h"]]) {
+    const r = await run(a, { ...base });
+    expect(r.exit).toBe(0);
+    expect(r.stdout).toBe(root.stdout);
+  }
+  const m = await run(["help", "demo"], base);
+  expect(m.stdout).toContain("Comandos:");
+  expect(m.stdout).toContain("demo greet");
+  expect((await run(["help", "demo", "greet"], base)).stdout).toContain("uso: pvx demo greet");
+  expect((await run(["help", "nope"], base)).exit).toBe(3);
+  expect(JSON.parse((await run(["help", "--json"], base)).stdout).lines.length).toBeGreaterThan(5);
+});
+
+test("the real entrypoint starts with no args and no TTY: help and exit 2, no internal error", async () => {
+  const r = await pvx([]);
+  expect(r.stdout).not.toContain("erro interno");
+  expect(r.exit).toBe(2);
+});

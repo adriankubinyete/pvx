@@ -37,6 +37,12 @@ function detail(e: Entry): string[] {
   return out;
 }
 
+/** Core commands plus every module command: what `pathHelp` searches. */
+export const catalogOf = (core: Entry[], registry: Registry): Entry[] => [
+  ...core,
+  ...[...registry.commands].map(([key, c]) => ({ key, help: c.help, args: c.args, destructive: c.destructive })),
+];
+
 /** Help for a path (module or command). `lines: null` = nothing matches (exit 3). */
 export function pathHelp(catalog: Entry[], path: string[]): string[] | null {
   const key = path.join(" ");

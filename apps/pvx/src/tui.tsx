@@ -1,6 +1,6 @@
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { activeProfile, CORE, pvxHome, runCapture, trustGate, watchDevModules, type CliIO } from "@pvx/core";
+import { activeProfile, RESERVED, pvxHome, runCapture, trustGate, watchDevModules, type CliIO } from "@pvx/core";
 import { App, createSessionStore, createTabsNav, Tabs, ui } from "@pvx/tui";
 import { join } from "node:path";
 
@@ -23,7 +23,7 @@ export async function openTui(io: Omit<CliIO, "argv" | "out" | "isTTY">): Promis
   // Live load after trust/update/enable: same gate as the startup load, so nothing unapproved is ever imported.
   const modules = {
     load: { hostVersion: version, makeLogger, ui, canImport: trustGate({ warn: (m) => makeLogger("core").warn(m) }) },
-    reserved: [...new Set(CORE.map((c) => c.key.split(" ")[0]!))],
+    reserved: RESERVED,
   };
   const profile = (await activeProfile(io.profilesDir, io.env))?.title ?? null;
   const renderer = await createCliRenderer({ exitOnCtrlC: false });
