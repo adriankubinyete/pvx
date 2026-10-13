@@ -80,12 +80,12 @@ const base: readonly Shortcut[] = [
   { keys: "r", label: "atualiza", scope: "tabs" }, // core tabs only (conformidade, plano, logs); shown inline there, not in the footer
   { keys: "←→", label: "cursor", scope: "session" },
   { keys: "↑", label: "histórico", scope: "session", footer: true },
-  { keys: "ctrl+r", label: "busca", scope: "session", footer: true },
-  { keys: "!!", label: "repete", scope: "session", footer: true },
-  { keys: "!cmd", label: "shell do host", scope: "session" }, // root only, always audited; typed text goes to the history
-  { keys: "#", label: "páginas", scope: "session", footer: true },
+  { keys: "ctrl+r", label: "busca", scope: "session" },
+  { keys: "!!", label: "repete", scope: "session" },
+  { keys: "!cmd", label: "shell do host", scope: "session", footer: true }, // root only, always audited; typed text goes to the history
+  { keys: "#", label: "páginas", scope: "session" },
   { keys: "ctrl+k", label: "palette", scope: "session", footer: true },
-  { keys: "ctrl+l", label: "limpa", scope: "session", footer: true },
+  { keys: "ctrl+l", label: "limpa", scope: "session" },
   { keys: "tab", label: "completa", scope: "session" },
   { keys: "esc", label: "foca os blocos", scope: "session" }, // empty input; with no blocks it focuses the tab bar (shift+tab always does)
   { keys: "enter", label: "roda", scope: "session" },
