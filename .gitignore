@@ -36,4 +36,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # project stuff
 *.bin
 scripts/_*
+.agents/
+.claude/skills/
+.claude/settings.local.json
 .dev/
