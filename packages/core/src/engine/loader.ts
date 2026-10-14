@@ -3,7 +3,7 @@ import { packagesKit } from "./packages.ts";
 import { strategyKit } from "./strategy.ts";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import type { BuiltinModule, Logger, Manifest, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
+import type { BuiltinModule, Logger, Manifest, ModuleFactory, Sdk, SdkUi, SessionInfo } from "@pvx/sdk";
 import { readManifest } from "./manifest.ts";
 import { createGranted, createReadCtx } from "./permissions.ts";
 import { usermodulesDir } from "./paths.ts";
@@ -26,6 +26,8 @@ export interface LoadOpts {
   ui?: SdkUi;
   /** Modules that ship with pvx (the app's static barrel): registered first, trusted, official. Not read from disk. */
   builtin?: readonly BuiltinModule[];
+  /** `ctx.session` of the read contexts. Default: the real host session (tests hand a fixed one). */
+  session?: SessionInfo;
   /** Trust hook (`trustGate`). Default: allow everything. Returning false skips the module silently: its state comes from `listModules`, not from an error. */
   canImport?: (dir: string, manifest: Manifest) => boolean | Promise<boolean>;
 }
@@ -38,7 +40,7 @@ const sdkFor = (manifest: Manifest, opts: LoadOpts): Sdk => {
 
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */
 export async function loadModules(registry: Registry, opts: LoadOpts): Promise<void> {
-  registry.readCtx = (id) => createReadCtx(id, registry.modules.get(id)?.permissions, opts.makeLogger, registry.query);
+  registry.readCtx = (id) => createReadCtx(id, registry.modules.get(id)?.permissions, opts.makeLogger, registry.query, opts.session);
   for (const { manifest, factory } of opts.builtin ?? []) {
     try {
       registry.register(manifest, factory(sdkFor(manifest, opts)));

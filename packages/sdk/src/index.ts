@@ -95,6 +95,7 @@ export interface CommandCtx {
   store: Store;
   query: QueryFn;
   slots: SlotsApi;
+  session: SessionInfo;
   /** Runs a program (no shell). Only commands whose basename is in `permissions.exec`. */
   exec(cmd: string, args?: string[], opts?: ExecOpts): Promise<ExecResult>;
   /** Helpers over `exec` (same allowlist): `run` returns the result, `must` throws a `StepError`, `ok` answers a boolean. */
@@ -135,6 +136,16 @@ export interface Jobs {
   list(): Promise<(JobStatus & { name: string })[]>;
   /** Log lines. `since`: skip that many lines first (poll with the count you already have); `tail`: only the last N. */
   log(name: string, opts?: { tail?: number; since?: number }): Promise<string[]>;
+}
+
+/** Who is operating pvx, as the host found out. Read-only. */
+export interface SessionInfo {
+  /**
+   * IP (v4 or v6) of the SSH client of the operator, or `undefined` on a console or serial login. The host looks in the
+   * environment (`SSH_CONNECTION`/`SSH_CLIENT`), then in the environment of the parent processes (survives `sudo`), then in the
+   * `who` line of the terminal. Detected once per process, on first read.
+   */
+  readonly sshClient: string | undefined;
 }
 
 /** The subset of `fetch` a module needs (the SDK carries no DOM types). */
@@ -237,6 +248,7 @@ export interface ReadCtx {
   log: Logger;
   store: Pick<Store, "get">;
   query: QueryFn;
+  session: SessionInfo;
   exec: CommandCtx["exec"];
   fs: Pick<ModuleFs, "read" | "exists" | "list">;
   jobs: Pick<Jobs, "status" | "list" | "log">;

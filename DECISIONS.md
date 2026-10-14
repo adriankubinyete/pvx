@@ -89,6 +89,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Fases com retomada (`ctx.phases`, `useRun`), `useJob().view` com `stale`, `useQuery().refetch` → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
 - `List` com janela (`maxRows`) e `onAction`, `Panel shrink`, `Notice`, `LogTail focused`, `useNudge` com tom `ok`; "precisa aplicar" como convenção (UI.md, seção 13) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
 - Sistema falso para testes de módulo em `@pvx/testing` (`fakeSystem`, `fakeCommandCtx`, `fakeReadCtx`, `fakeSdk`) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
+- `ctx.session.sshClient`: o host acha o IP do cliente SSH (ambiente, ambiente dos processos pais, `who`) e o audit grava `from` → [Sessão SSH no host: `ctx.session.sshClient`](#2026-10-14--sessão-ssh-no-host-ctxsessionsshclient)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec

@@ -505,6 +505,16 @@ const factory: ModuleFactory = (sdk) => ({
 export default factory;
 ```
 
+## Sessão: `ctx.session.sshClient`
+
+`ctx.session.sshClient` (em `CommandCtx` e em `ReadCtx`) é o IP, v4 ou v6, do cliente SSH do técnico, ou `undefined` num login de console ou serial. É só leitura. O host acha o IP uma vez por processo, na primeira leitura, e guarda a resposta. Ele tenta, nesta ordem, e para na primeira que responde:
+
+1. `SSH_CONNECTION` ou `SSH_CLIENT` no ambiente do pvx.
+2. O ambiente dos processos pais (`/proc/<pid>/environ`, de pai em pai até o pid 1). Isso sobrevive a `sudo`, `sudo -i` e `su -`, que limpam o ambiente do pvx mas não o do shell de login acima deles. Só no Linux; entrada ilegível é ignorada.
+3. O terminal do pvx (`/proc/self/fd/0`, 1 ou 2) casado com a linha do `who`, e o `(ip)` dela. Só no Linux.
+
+Use no lugar de ler `SSH_CLIENT` ou rodar `who -m`: o primeiro some com `sudo`, e o segundo não enxerga o terminal quando o `exec` do módulo usa `stdin` em pipe. O audit (`audit.jsonl`) grava o mesmo IP em `from` nos eventos de comando e de módulo. Nos testes, `runCommand`, `runSession` e `renderPage` aceitam `sshClient`; sem ele o valor é `undefined`.
+
 ## Permissões: `ctx.exec`, `ctx.net`, `ctx.fs`
 
 Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest listou em `permissions`. Fora disso, lançam um erro claro e o host registra a violação no log do módulo e no `core.log`.
@@ -520,7 +530,7 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 
 `$PVX_HOME` (dados da central) e `$PVX_PROFILED_DIR` (`/etc/profile.d`, onde ficam ganchos de login) valem em `permissions.fs` e nos caminhos de `ctx.fs` (o host os expande). Fora de um comando, `sdk.fs` segue as mesmas regras (use-o só no que não tem `ReadCtx`).
 
-**Contexto de só leitura (`ReadCtx`).** `prove()`, as consultas (`this`) e o `data()` dos widgets recebem `{ log, store, query, exec, fs, jobs }` com estas diferenças:
+**Contexto de só leitura (`ReadCtx`).** `prove()`, as consultas (`this`) e o `data()` dos widgets recebem `{ log, store, query, session, exec, fs, jobs, phases }` com estas diferenças:
 
 | Campo | Em `ReadCtx` |
 | --- | --- |
@@ -528,6 +538,7 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | `fs` | Só `read`, `exists` e `list`: não existem `write`, `append` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
 | `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo. |
 | `jobs` | Só `status`, `list` e `log` (veja Jobs em segundo plano). |
+| `phases` | Só `state` (veja Fases com retomada). |
 
 Capacidade, consulta e widget são **só leitura** por contrato. O `exec` não tem como ser só leitura por construção: neste contexto o módulo roda apenas sondas (`systemctl is-active`, `nft list ruleset`, `--version`) e nunca algo que mude o sistema. É o mesmo modelo de confiança dos comandos: a revisão humana do commit é a barreira.
 
@@ -931,7 +942,7 @@ export default (sdk: Sdk) => {
 
 ## Como testar com `@pvx/testing`
 
-`runCommand(moduleDir, linha, { env?, secrets?, confirmed? })` carrega **só** aquele módulo num `PVX_HOME` temporário novo, roda a linha (módulo primeiro, como na CLI) pelo `execute` do núcleo e devolve `{ ok, exit, lines }`. `secrets` entra como `PVX_SECRET_<NOME>`; `confirmed: true` equivale a `--yes`.
+`runCommand(moduleDir, linha, { env?, secrets?, confirmed?, sshClient? })` carrega **só** aquele módulo num `PVX_HOME` temporário novo, roda a linha (módulo primeiro, como na CLI) pelo `execute` do núcleo e devolve `{ ok, exit, lines }`. `secrets` entra como `PVX_SECRET_<NOME>`; `confirmed: true` equivale a `--yes`; `sshClient` é o `ctx.session.sshClient` do comando.
 
 `renderPage(moduleDir, página, { cols, rows })` monta a página com o `sdk.ui` real do host num terminal sem tela e devolve `{ frame(), press(tecla), type(texto), destroy(), ... }`. Chame `destroy()` no `afterEach`. Teclas são nomes do OpenTUI: `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`, ou o próprio caractere (`" "` para o espaço).
 
@@ -974,7 +985,7 @@ test("sequência e página no mesmo estado", async () => {
 });
 ```
 
-**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store? })` (um `exec` que grava as chamadas e responde pelas regras `(chamada) => { code?, stdout?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args? })` (o `ctx` de um comando, com `shell` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages` e `strategy` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
+**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, sshClient? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; um `exec` que grava as chamadas e responde pelas regras `(chamada) => { code?, stdout?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args? })` (o `ctx` de um comando, com `shell` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages` e `strategy` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
 
 ```ts
 import { expect, test } from "bun:test";

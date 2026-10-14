@@ -1,6 +1,7 @@
 import { argGetters } from "./helpers.ts";
 import { EXIT } from "@pvx/sdk";
-import type { Logger, OutLine } from "@pvx/sdk";
+import type { Logger, OutLine, SessionInfo } from "@pvx/sdk";
+import { hostSession } from "../host/ssh.ts";
 import { auditCommand, lineOf } from "../journal/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
 import { createJobs } from "./jobs.ts";
@@ -19,6 +20,8 @@ export interface ExecOpts extends ParseOpts {
   onLine?: (l: OutLine) => void;
   /** What `ctx.jobLog` writes to; without it `ctx.jobLog` does nothing. */
   jobLog?: (line: string) => void;
+  /** `ctx.session` of the command. Default: the real host session (tests hand a fixed one). */
+  session?: SessionInfo;
 }
 export interface ExecResult {
   ok: boolean;
@@ -49,6 +52,7 @@ export async function execute(registry: Registry, input: string | string[], opts
     return { ...err(EXIT.USAGE, `comando destrutivo: passe --yes para confirmar`), masked };
   }
 
+  const session = opts.session ?? hostSession;
   const log = opts.makeLogger(cmd.moduleId);
   log.info(`run ${key} ${JSON.stringify(masked)}`);
   const lines: OutLine[] = [];
@@ -70,6 +74,7 @@ export async function execute(registry: Registry, input: string | string[], opts
       store,
       query: registry.query,
       slots: registry.slots,
+      session,
       jobs: createJobs(cmd.moduleId),
       jobLog: opts.jobLog ?? (() => {}),
       ...granted,
@@ -82,6 +87,6 @@ export async function execute(registry: Registry, input: string | string[], opts
   }
   const failed = lines.some((l) => l.kind === "error");
   // Masked by construction: `parseArgs` refuses a secret in argv (it comes from stdin, env or the prompt), so the line has none.
-  auditCommand({ line: lineOf(argv), exit: failed ? EXIT.ERROR : EXIT.OK, ms: Date.now() - t0, destructive: Boolean(cmd.destructive) });
+  auditCommand({ line: lineOf(argv), exit: failed ? EXIT.ERROR : EXIT.OK, ms: Date.now() - t0, destructive: Boolean(cmd.destructive), session: opts.session });
   return { ok: !failed, exit: failed ? EXIT.ERROR : EXIT.OK, lines, masked };
 }

@@ -1,7 +1,7 @@
 // A fake machine for module tests: the seam that lets a command, a proof or a query run without touching the real system.
 // `fakeCommandCtx` builds the same `ctx` a command gets (shell and phases included) over a fake exec, fs and store, so a test
 // calls `command.run(ctx)` and reads what was printed, run and written. Nothing real runs and nothing real is written.
-import type { CommandCtx, ExecOpts, ExecResult, Logger, ModuleFs, OutLine, ReadCtx, Sdk, Store } from "@pvx/sdk";
+import type { CommandCtx, ExecOpts, ExecResult, Logger, ModuleFs, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
 import { argGetters, createPhases, createShell, packagesKit, proofKit, strategyKit } from "@pvx/core";
 
 export interface Call {
@@ -23,6 +23,8 @@ export interface FakeSystemOptions {
   rules?: Rule[];
   files?: Record<string, string>;
   store?: Record<string, unknown>;
+  /** `ctx.session.sshClient` of the contexts built over this system. Default: none. */
+  sshClient?: string;
 }
 
 export interface FakeSystem {
@@ -30,6 +32,7 @@ export interface FakeSystem {
   calls: Call[];
   fs: FakeFs;
   store: FakeStore;
+  session: SessionInfo;
   /** The calls as command lines, in order (`dnf install -y a b`). */
   lines(): string[];
   /** Index of the first call whose line starts with `prefix`, or -1. */
@@ -103,6 +106,7 @@ export function fakeSystem(options: FakeSystemOptions = {}): FakeSystem {
     calls,
     fs: fakeFs(options.files),
     store: memStore(options.store),
+    session: { sshClient: options.sshClient },
     lines: () => calls.map(callLine),
     indexOf: (prefix) => calls.findIndex((call) => callLine(call).startsWith(prefix)),
   };
@@ -148,6 +152,7 @@ export function fakeCommandCtx(system: FakeSystem, options: FakeCommandOptions =
     log: quietLog,
     store: system.store,
     query: async () => undefined,
+    session: system.session,
     slots: { read: () => undefined },
     exec: system.exec,
     shell: createShell(system.exec),
@@ -167,6 +172,7 @@ export function fakeReadCtx(system: FakeSystem): ReadCtx {
     log: quietLog,
     store: system.store,
     query: async () => undefined,
+    session: system.session,
     exec: system.exec,
     fs: system.fs,
     jobs: noJobs,

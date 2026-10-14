@@ -15,7 +15,7 @@ process.on("exit", () => homes.forEach((d) => rmSync(d, { recursive: true, force
  * Loads ONE module (a symlink to `moduleDir` in a fresh `usermodules/`) through the real loader, with a temp `PVX_HOME`.
  * It points PVX_HOME and PVX_USERMODULES at the temp dirs and leaves them set: a test file owns the process env.
  */
-async function loadOne(moduleDir: string): Promise<{ registry: Registry; id: string; home: string }> {
+async function loadOne(moduleDir: string, sshClient?: string): Promise<{ registry: Registry; id: string; home: string }> {
   const dir = resolve(moduleDir);
   const { id } = JSON.parse(readFileSync(join(dir, "pvx-module.json"), "utf8")) as { id: string };
   const home = mkdtempSync(join(tmpdir(), "pvx-mod-"));
@@ -25,7 +25,7 @@ async function loadOne(moduleDir: string): Promise<{ registry: Registry; id: str
   process.env.PVX_HOME = home;
   process.env.PVX_USERMODULES = join(home, "usermodules");
   const registry = createRegistry();
-  await loadModules(registry, { hostVersion: HOST_VERSION, makeLogger: (n) => createLogger(logsDir(), n), ui });
+  await loadModules(registry, { hostVersion: HOST_VERSION, makeLogger: (n) => createLogger(logsDir(), n), ui, session: { sshClient } });
   const err = registry.errors[0];
   if (err) throw new Error(`módulo "${err.id}" não carregou: ${err.error}`);
   return { registry, id, home };
@@ -37,6 +37,8 @@ export interface RunCommandOpts {
   secrets?: Record<string, string>;
   /** Same as `--yes`: lets a `destructive` command run. */
   confirmed?: boolean;
+  /** `ctx.session.sshClient` of the commands. Default: none (a test never reads the real session of the machine). */
+  sshClient?: string;
 }
 
 const runOn = async (registry: Registry, line: string, opts: RunCommandOpts) => {
@@ -45,13 +47,14 @@ const runOn = async (registry: Registry, line: string, opts: RunCommandOpts) => 
     makeLogger: (n) => createLogger(logsDir(), n),
     env: { ...opts.env, ...secretEnv },
     confirmed: opts.confirmed,
+    session: { sshClient: opts.sshClient },
   });
   return { ok, exit, lines, text: lines.map((l) => l.text).join("\n") };
 };
 
 /** Runs a command line (`"<id> status --flag"`, module id first, as in the CLI) through the core `execute`, in a fresh home. */
 export async function runCommand(moduleDir: string, line: string, opts: RunCommandOpts = {}): Promise<{ ok: boolean; exit: number; lines: OutLine[] }> {
-  const { ok, exit, lines } = await runOn((await loadOne(moduleDir)).registry, line, opts);
+  const { ok, exit, lines } = await runOn((await loadOne(moduleDir, opts.sshClient)).registry, line, opts);
   return { ok, exit, lines };
 }
 
@@ -70,8 +73,8 @@ const mount = async (registry: Registry, id: string, pageName: string, { cols = 
 };
 
 /** Mounts the module's page `pageName` with the real host `sdk.ui` in a headless terminal, in a fresh home. Call `destroy()` at the end. */
-export async function renderPage(moduleDir: string, pageName: string, size: { cols?: number; rows?: number } = {}): Promise<TuiHarness> {
-  const { registry, id } = await loadOne(moduleDir);
+export async function renderPage(moduleDir: string, pageName: string, size: { cols?: number; rows?: number; sshClient?: string } = {}): Promise<TuiHarness> {
+  const { registry, id } = await loadOne(moduleDir, size.sshClient);
   return mount(registry, id, pageName, size);
 }
 
@@ -85,7 +88,7 @@ export interface Session {
 }
 
 /** Like `runCommand` and `renderPage`, but ONE temp `PVX_HOME` for several calls, so a test can run a sequence ("add", then "list") and then look at the page. */
-export async function runSession(moduleDir: string): Promise<Session> {
-  const { registry, id, home } = await loadOne(moduleDir);
-  return { home, run: (line, opts = {}) => runOn(registry, line, opts), renderPage: (pageName, size) => mount(registry, id, pageName, size) };
+export async function runSession(moduleDir: string, { sshClient }: { sshClient?: string } = {}): Promise<Session> {
+  const { registry, id, home } = await loadOne(moduleDir, sshClient);
+  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, size) };
 }
