@@ -76,7 +76,8 @@ Exemplos no código:
 - Texto que não cabe termina em `…`.
 - Só a linha selecionada da lista ativa rola o texto cortado (letreiro, vai e volta).
 - Seleção por id, nunca por índice: a lista muda de ordem e de tamanho.
-- Uma lista longa se janela pelo tamanho do terminal (`useViewport`); a página não rola.
+- Uma lista longa se janela pelo tamanho do terminal: `List maxRows={...}` (calculado por `useViewport`) desenha só as linhas visíveis e mantém a seleção dentro da janela. O `Panel` que a carrega leva `shrink`, para o cabeçalho e o rodapé do host nunca saírem da tela. A página não rola.
+- Ação da linha: `List onAction`. `enter` na linha selecionada (o rodapé mostra `enter abrir`) e o clique abrem o formulário da linha (`Fields` com os campos e `onDelete`); o `remover` pede a confirmação do framework. Não ponha atalhos soltos (`x`, `c`) para remover ou copiar.
 
 ```text
  REGRA        ORIGEM          AÇÃO
@@ -224,7 +225,8 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo |
 | `ProgressBar` | progresso global de uma tarefa | `━` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
 | `CellGrid` | um quadrado por item (pacotes, hosts, arquivos) | `▪` feito/rodando/falhou em tons, `▫` pendente; quebra na largura, legenda com contagens; hover realça, clique ou `enter` age |
-| `LogTail` | saída ao vivo | acompanha o fim; a roda do mouse sobe e solta |
+| `LogTail` | saída ao vivo | acompanha o fim; a roda do mouse sobe e solta; com `focused`, `↑↓`, `pgup`/`pgdn`, `home` e `end` rolam |
+| `Notice` | aviso que fica na tela ("precisa aplicar") | bloco em linha `[✓]`/`[!]`/`[✗]` na cor do nível; só tokens do tema |
 | `Loading`, `useAsync` | toda espera visível | spinner e texto |
 | `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
 
@@ -236,6 +238,24 @@ Exemplos no código:
 - `packages/tui/src/sdk-ui/copy.tsx` (`useCopy`, painel de cópia).
 - `packages/tui/src/sdk-ui/kit.tsx` (`Steps`, `LogTail`) e `packages/tui/src/sdk-ui/fields.tsx`.
 
+## 13. Precisa aplicar
+
+Quando o estado salvo difere do que está aplicado (uma lista mudou, mas o firewall ainda tem a regra velha), o módulo avisa sempre do mesmo jeito. Nunca finja que já vale.
+
+- **Na página:** um `Notice level="warn"` fixo, no topo, com o texto `precisa aplicar` e o motivo curto, e o botão principal (`Button primary`, rótulo `aplicar`) ao lado. Some quando o salvo e o aplicado voltam a ser iguais; o `Notice` não some por tempo.
+- **No comando:** depois de gravar, uma linha `ctx.out.info` no formato "<o que mudou>, mas só vale depois de <comando de aplicar>" (o comando entre crases). O texto e o comando moram em `texts.ts` (`NEEDS_APPLY`, `FIX.apply`); o comando de correção é o mesmo da capacidade.
+- **Na prova:** a capacidade devolve `warn` com `fix` apontando para o mesmo comando (`sdk.proof.warn("listas mudaram desde a última aplicação", { fix })`), então o Início e o plano também mostram a pendência.
+- Um sucesso de gravação continua sendo `useNudge()(msg, "ok")`: o `✓` passa; o `precisa aplicar` fica.
+
+```text
+ [!] precisa aplicar: 2 regras mudaram desde a última aplicação     [ aplicar ]
+```
+
+Exemplos no código:
+
+- `packages/sdk/README.md` (`Notice`, `List onAction`).
+- `packages/tui/src/sdk-ui/kit.tsx` (`Notice`).
+
 ## Checklist antes de entregar uma tela
 
 - [ ] Setas, `enter`, `esc` e `↑` para a barra seguem os quatro níveis de foco.
@@ -246,6 +266,7 @@ Exemplos no código:
 - [ ] Estado tem cor e palavra; vazio é `—`; só tokens do tema; sem texto explicativo fixo.
 - [ ] Formulário tem `salvar` e `cancelar`, erro inline e confirmação em `remover`.
 - [ ] Sucesso volta para a lista com `✓`; erro mostra a tela de resultado.
+- [ ] Se o salvo pode diferir do aplicado, a tela mostra `precisa aplicar` (seção 13).
 - [ ] Usei um componente do framework onde ele existe (seção 12); nenhuma espera passa de ~300 ms sem `Loading`.
 - [ ] Nada quebra em 80x24, 100 e 120 colunas (testes de frame).
 - [ ] Teste de regressão escrito e entrada em `DECISIONS.md`.

@@ -1,11 +1,14 @@
 import { Children, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { Component, SdkUi, Tone } from "@pvx/sdk";
+import { useKeyboard } from "@opentui/react";
+import type { ScrollBoxRenderable } from "@opentui/core";
+import type { Component, ListItem, SdkUi, Tone } from "@pvx/sdk";
 import { followProps } from "../follow.ts";
 import { clean } from "../palette/search.ts";
 import { columnWidths, fit, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
 import { levelOf, meter } from "../tabs/home.ts";
 import { useTheme } from "../theme-context.tsx";
-import { RootPanelCtx } from "./host.tsx";
+import { HostCtx, RootPanelCtx, useKey } from "./host.tsx";
+import { windowStart } from "./window.ts";
 import type { Tokens } from "../theme.ts";
 
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
@@ -15,16 +18,19 @@ const len = (s: string) => [...s].length;
 /** Module text never carries ANSI or control characters into `<text>`. */
 const textOf = (children: unknown) => clean(Children.toArray(children as ReactNode).map(String).join(""));
 
+/** A shrinkable panel gives up height first (`minHeight` 0 lets it go below its content) and clips, so the host's tab bar and footer stay on screen. */
+const SHRINKABLE = { flexShrink: 1, minHeight: 0, overflow: "hidden" as const };
+
 /**
  * A Panel at the page root is the page's own frame: the host already draws the border and the `› title`, so it draws
  * neither (a second border would nest inside the first). A Panel inside another Panel keeps its border and title.
  */
-export function Panel({ title, tone: t, grow, panelRef, onPress, children }: Props<"Panel">) {
+export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, children }: Props<"Panel">) {
   const { c, g, box } = useTheme();
   const atRoot = useContext(RootPanelCtx);
   return (
     <RootPanelCtx.Provider value={false}>
-      <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" flexShrink={0} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
+      <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
         {children as ReactNode}
       </box>
     </RootPanelCtx.Provider>
@@ -92,7 +98,22 @@ export function Table({ columns, rows }: Props<"Table">) {
   );
 }
 
-export function List({ items, selected, columns, onPress, onHover }: Props<"List">) {
+const DEFAULT_ACTION_LABEL = "abrir";
+
+/** The rows of the window around the selection; `windowAt` remembers where it was so the rows hold still while the selection moves inside it. */
+function visibleRows(items: ListItem[], selected: string | undefined, size: number, windowAt: { current: number }): ListItem[] {
+  const selectedIndex = items.findIndex((item) => item.id === selected);
+  windowAt.current = windowStart(items.length, selectedIndex, size, windowAt.current);
+  return items.slice(windowAt.current, windowAt.current + size);
+}
+
+/** Registers `enter` for the page while a row is selected, so the footer shows the row action. */
+function ActionKey({ label, selected, onAction }: { label: string; selected: string; onAction: (id: string) => void }) {
+  useKey("enter", label, () => onAction(selected));
+  return null;
+}
+
+export function List({ items, selected, columns, onPress, onHover, maxRows, onAction, actionLabel = DEFAULT_ACTION_LABEL }: Props<"List">) {
   const { c, g } = useTheme();
   const [over0, setOver] = useState<string | undefined>(undefined); // the row under the mouse
   const marks = items.some((it) => it.mark);
@@ -100,6 +121,8 @@ export function List({ items, selected, columns, onPress, onHover }: Props<"List
   const box = useRef<{ width: number } | null>(null);
   const [width, setWidth] = useState<number | undefined>(undefined);
   const [tick, setTick] = useState({ id: selected, n: 0 });
+  const windowAt = useRef(0);
+  const inPage = useContext(HostCtx) !== null;
   const cell = (it: Props<"List">["items"][number], id: string) => {
     const v = it.cells?.[id];
     return { text: clean(typeof v === "string" ? v : v?.text ?? ""), tone: typeof v === "object" ? v.tone : undefined };
@@ -118,6 +141,11 @@ export function List({ items, selected, columns, onPress, onHover }: Props<"List
     return () => clearInterval(timer);
   }, [selected, moving]);
   const n = tick.id === selected ? tick.n : 0;
+  const pressRow = (id: string) => {
+    onPress?.(id);
+    onAction?.(id);
+  };
+  const visible = maxRows === undefined ? items : visibleRows(items, selected, Math.max(0, maxRows), windowAt);
   const measure = cols ? { ref: box, onSizeChange: () => box.current && setWidth(box.current.width) } : {};
   return (
     <box flexDirection="column" flexShrink={0} {...(measure as object)}>
@@ -126,11 +154,12 @@ export function List({ items, selected, columns, onPress, onHover }: Props<"List
           {" ".repeat(lead) + cols.map((col, i) => fit(clean(col.title ?? ""), widths[i]!, col.align)).join(" ".repeat(GAP)).trimEnd()}
         </text>
       ) : null}
-      {items.map((it) => {
+      {onAction && selected !== undefined && inPage ? <ActionKey label={actionLabel} selected={selected} onAction={onAction} /> : null}
+      {visible.map((it) => {
         const hot = it.id === over0 && it.id !== selected; // hover only tints (panel background and a dim ›): it never looks selected
         return (
         <box key={it.id} flexShrink={0} backgroundColor={it.id === selected ? c.selected : hot ? c.panel : undefined}
-          onMouseOver={() => (setOver(it.id), onHover?.(it.id))} onMouseOut={() => (setOver((o) => (o === it.id ? undefined : o)), onHover?.(undefined))} onMouseDown={onPress ? () => onPress(it.id) : undefined}>
+          onMouseOver={() => (setOver(it.id), onHover?.(it.id))} onMouseOut={() => (setOver((o) => (o === it.id ? undefined : o)), onHover?.(undefined))} onMouseDown={onPress || onAction ? () => pressRow(it.id) : undefined}>
           <text wrapMode="none">
             {it.id === selected ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{hot ? `${g.query} ` : "  "}</span>}
             {marks ? <span fg={it.mark ? tone(c, it.mark.tone) : c.dim}>{it.mark ? `${clean(it.mark.text)} ` : "  "}</span> : null}
@@ -197,11 +226,45 @@ export function Steps({ items }: Props<"Steps">) {
   );
 }
 
-export function LogTail({ lines, follow = true }: Props<"LogTail">) {
+/** What each key does to a focused `LogTail`. Reaching the end resumes following. */
+const LOG_KEYS: Record<string, (scroll: ScrollBoxRenderable) => void> = {
+  up: (scroll) => scroll.scrollBy(-1),
+  down: (scroll) => scroll.scrollBy(1),
+  pageup: (scroll) => scroll.scrollBy(-Math.max(1, scroll.viewport.height - 1)),
+  pagedown: (scroll) => scroll.scrollBy(Math.max(1, scroll.viewport.height - 1)),
+  home: (scroll) => scroll.scrollTo(0),
+  end: (scroll) => scroll.scrollTo(scroll.scrollHeight),
+};
+
+/** Mounted only while the log has the keyboard. */
+function LogKeys({ scroll }: { scroll: { current: ScrollBoxRenderable | null } }) {
+  useKeyboard((key) => {
+    const scrollTo = LOG_KEYS[key.name];
+    if (scrollTo && scroll.current) scrollTo(scroll.current);
+  });
+  return null;
+}
+
+export function LogTail({ lines, follow = true, focused = false }: Props<"LogTail">) {
   const { c } = useTheme();
+  const scroll = useRef<ScrollBoxRenderable>(null);
   return (
-    <scrollbox flexGrow={1} minHeight={0} {...(follow ? followProps : {})} focused={false}>
+    <scrollbox ref={scroll} flexGrow={1} minHeight={0} {...(follow ? followProps : {})} focused={false}>
+      {focused ? <LogKeys scroll={scroll} /> : null}
       {lines.length ? lines.map((l, i) => <text key={i} fg={c.text} wrapMode="none" flexShrink={0}>{clean(l)}</text>) : <text fg={c.dim}>—</text>}
     </scrollbox>
+  );
+}
+
+/** An inline result block: the level's marker and the text beside it. */
+export function Notice({ level, children }: Props<"Notice">) {
+  const { result, c } = useTheme();
+  const { marker, color } = result(level);
+  const text = textOf(children);
+  return (
+    <text flexShrink={0}>
+      <span fg={color}>{`${marker} `}</span>
+      <span fg={c.text}>{text}</span>
+    </text>
   );
 }

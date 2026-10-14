@@ -233,8 +233,8 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), e `Conversation`, `Button`, `ProgressBar`, `CellGrid` e `Loading` (veja Componentes de fluxo).
-- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` (veja Jobs em segundo plano); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
+- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja List em colunas) e `Conversation`, `Button`, `ProgressBar`, `CellGrid` e `Loading` (veja Componentes de fluxo).
+- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
 
 **List em colunas.** Com `columns` a `List` alinha as células de cada item em colunas, mesmo com textos de tamanhos diferentes. Cada coluna é `{ id, title?, width?, grow?, align? }`: `width` é fixa e nunca encolhe; `grow` divide o que sobra (peso relativo); sem nenhuma das duas a coluna ocupa o tamanho do conteúdo e é a primeira a encolher se faltar espaço. `align` é `"left"` (padrão) ou `"right"`. Se alguma coluna tem `title`, aparece uma linha de cabeçalho (dim). O item traz `cells: { [idDaColuna]: texto | { text, tone? } }` (`label` e `detail` são ignorados nesse modo; `tone` e `mark` valem). Célula que não cabe é cortada com `…`. A largura vem da própria lista, então acompanha o redimensionamento.
@@ -281,6 +281,62 @@ export default (sdk: Sdk) => {
   return { pages: { regras: { title: "Regras", render: () => <Regras /> } } };
 };
 ```
+
+**Janela (`maxRows`).** Uma lista longa desenha só `maxRows` linhas (o cabeçalho fica) e mantém a `selected` dentro da janela, movendo-a o mínimo: as linhas não pulam enquanto a seleção anda dentro dela. Calcule `maxRows` pelo `useViewport()`; sem `maxRows` toda linha é desenhada. A largura das colunas continua vindo de todas as linhas, então elas não mexem ao rolar. Mostre a posição (`3/13`) no título se o usuário precisa saber que há mais.
+
+**`Panel shrink`.** Um `Panel` com `shrink` cede altura quando a página é baixa e corta o conteúdo, em vez de empurrar a barra de abas e o rodapé do host para fora da tela. Use-o no painel que carrega a lista, junto de `maxRows`.
+
+**Ação da linha (`onAction`).** `onAction(id)` é a ação padrão de uma linha: `enter` na linha selecionada (o rodapé mostra `enter <actionLabel>`, padrão "abrir") e o clique numa linha (depois do `onPress`). Ela abre o formulário da linha: um `Fields` com os campos editáveis e `onDelete` para o `remover`, que o framework confirma (UI.md, seção 4). Não mapeie também o `enter` da mesma lista na página: dispararia duas vezes.
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, Panel, List, Fields, Notice, useState, useViewport, useStore } = sdk.ui;
+  const CHROME_ROWS = 10;
+
+  function Regras() {
+    const store = useStore();
+    const { rows } = useViewport();
+    const [aberta, setAberta] = useState<string | undefined>(undefined);
+    const [selected, setSelected] = useState("0");
+    const itens = Array.from({ length: 40 }, (_, i) => ({ id: String(i), label: `regra ${i}` }));
+    if (aberta !== undefined) {
+      return (
+        <Fields
+          fields={[{ id: "comentario", label: "comentário", kind: "line" }]}
+          onSubmit={() => setAberta(undefined)}
+          onCancel={() => setAberta(undefined)}
+          onDelete={() => {
+            store.delete(`regra:${aberta}`);
+            setAberta(undefined);
+          }}
+        />
+      );
+    }
+    return (
+      <Panel>
+        <Panel title="regras" shrink>
+          <List items={itens} selected={selected} maxRows={Math.max(3, rows - CHROME_ROWS)} onPress={setSelected} onAction={setAberta} />
+        </Panel>
+        <Notice level="warn">precisa aplicar</Notice>
+      </Panel>
+    );
+  }
+
+  return { pages: { regras: { title: "Regras", render: () => <Regras /> } } };
+};
+```
+
+**`Notice`.** `Notice({ level, children })` é um bloco de resultado em linha, no formato do tema (`[✓]`, `[!]`, `[✗]`) e na cor do nível (`ok`, `warn`, `error`); o texto pode ter várias linhas. Só tokens do tema. Use-o para avisos que ficam na tela ("precisa aplicar", "a última aplicação foi revertida"); o `useNudge` é para o aviso que passa.
+
+**`useNudge(msg, "ok")`.** O segundo argumento `"ok"` mostra um sucesso no rodapé (`✓ msg`, cerca de 4 s); sem ele é o aviso curto de movimento inválido.
+
+**`useQuery(...).refetch()`.** Lê a consulta de novo agora, mantendo os dados antigos até os novos chegarem; devolve uma promessa. Chame depois de uma ação que mudou o que a consulta lê (`await command.run(); await query.refetch()`). Se uma leitura já está em andamento, ela termina e uma nova roda em seguida (a primeira pode ser anterior à mudança).
 
 Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança "UI indisponível na CLI": por isso componentes só rodam dentro de `render()`.
 
@@ -458,6 +514,7 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs, onLine, signal, buffer })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão) e devolve `{ code, stdout, stderr }`. Veja Streaming e cancelamento. |
 | `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. |
 | `ctx.fs.read / write / exists / list` | O caminho (resolvido, com symlinks) fica sob um prefixo de `permissions.fs`. O prefixo `rw:` libera escrita; sem ele, só leitura. O diretório de estado do próprio módulo é sempre permitido. |
+| `ctx.fs.write(path, texto, { mode, atomic })` | Mesma regra de `rw:`. `mode` (`0o600`) trava o arquivo antes de o conteúdo entrar, mesmo sobre um arquivo antigo mais aberto; `atomic` grava um temporário ao lado e o renomeia sobre `path`, então quem lê vê o arquivo antigo ou o novo inteiro. Sem opções, a escrita é a de sempre. |
 | `ctx.fs.remove(path)` | Mesma regra de `rw:`. Apaga o arquivo; não erra se ele não existe. |
 | `ctx.fs.append(path, texto)` | Mesma regra de `rw:`. Uma única chamada de escrita com `O_APPEND` (arquivo criado com modo 0644): dois processos acrescentando linhas ao mesmo arquivo nunca as misturam. |
 
@@ -551,6 +608,150 @@ const factory: ModuleFactory = () => ({
 export default factory;
 ```
 
+## `ctx.shell`, `store.update` e `sdk.strategy`
+
+`ctx.shell` é uma camada sobre `ctx.exec` e **respeita a mesma lista `permissions.exec`**: um programa fora dela lança o erro de permissão, nunca vira código de saída.
+
+| API | O que faz |
+| --- | --- |
+| `shell.run(cmd, args?, opts?)` | Devolve `{ code, stdout, stderr, tail }`. Não lança por saída ruim; um programa que não inicia dá `code` 127. `tail` guarda as últimas linhas úteis (barras de progresso saem). |
+| `shell.must(cmd, args?, opts?)` | Como `run`, mas uma saída diferente de 0 lança um `StepError` (`name`, `command`, `code`, `output`): a causa e as linhas que importam da saída. |
+| `shell.ok(cmd, args?, opts?)` | `true` se a saída foi 0. |
+
+`opts` é o de `ctx.exec` mais `display` (o texto do comando no `StepError`, para quando o argv leva um segredo). O corredor de fases (`ctx.phases`) grava o `command`, o `code` e o `output` de um `StepError` na falha da fase.
+
+`store.update(chave, mudar)` lê o valor (`undefined` se faltar), aplica `mudar` e grava o resultado, que também devolve: `store.update<number>("contagem", (atual) => (atual ?? 0) + 1)`.
+
+`sdk.strategy.pick(estratégias, { setting, none })` escolhe o backend que o módulo dirige. Cada estratégia é `{ id, available() }`. Com `setting` ausente ou `"auto"` vale a primeira disponível, na ordem da lista (`auto: true`); se nenhuma está, devolve `{ error: none }`. Com um `setting` explícito vale esse `id` sem perguntar `available` (o módulo explica depois por que ele não roda); um `id` desconhecido é `{ error }`.
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["systemctl", "nft", "iptables"], "fs": ["rw:/etc/meu-modulo"] }
+const factory: ModuleFactory = (sdk) => ({
+  commands: {
+    aplicar: {
+      help: "Aplica com o primeiro engine disponível",
+      async run(ctx) {
+        const engines = [
+          { id: "nftables", available: () => ctx.shell.ok("nft", ["--version"]) },
+          { id: "iptables", available: () => ctx.shell.ok("iptables", ["--version"]) },
+        ];
+        const picked = await sdk.strategy.pick(engines, { setting: ctx.option("engine"), none: "nenhum engine neste host" });
+        if ("error" in picked) {
+          ctx.out.error(picked.error);
+          return;
+        }
+        ctx.store.update<number>("aplicacoes", (atual) => (atual ?? 0) + 1);
+        await ctx.fs.write("/etc/meu-modulo/ultimo", picked.strategy.id, { mode: 0o600, atomic: true });
+        ctx.out.success(`aplicado com ${picked.strategy.id}`);
+      },
+      args: [{ name: "engine", help: "auto, nftables ou iptables", kind: "option" }],
+    },
+  },
+});
+export default factory;
+```
+
+## Fases com retomada: `ctx.phases` e `useRun`
+
+Uma tarefa longa (um instalador) é uma lista de fases com nome, rodadas em ordem. `ctx.phases.run(nome, fases, { fresh? })` grava no `store` (chave `phases:<nome>`) o que cada fase fez, a cada mudança. Rodar de novo **retoma**: a fase pronta é pulada e as outras rodam. A fase que falhou (ou que o processo deixou rodando) roda de novo. `fresh: true`, ou uma lista de ids diferente, recomeça do zero. Para na primeira fase que lança e devolve `{ ok: false, failedPhase, error }`; o motivo fica em `state.failure` (`phase`, `message` e, se a causa foi um `StepError`, `command`, `code`, `output`). Cada fase escreve em `ctx.out` (`fase <rótulo>: iniciando`, `concluída`, `pulada (...)`, `falhou: ...`).
+
+Cada fase é `{ id, label, weight?, run(phase) }`. `run` pode devolver `{ detail }` (nota guardada) ou `{ skipped: "motivo" }` (nada a fazer: vira `skipped`); `phase.report(texto)` atualiza o detalhe enquanto roda (grava o `store`: não chame centenas de vezes por segundo). `weight` (padrão 1) pesa no progresso. `ctx.phases.state(nome)` lê o estado (também no `ReadCtx`, para consultas) e `ctx.phases.reset(nome)` o esquece.
+
+Na página, `useRun(nome, { tail?, staleMs? })` junta o job `nome` e as fases do mesmo nome:
+
+| Campo | Significado |
+| --- | --- |
+| `steps` | As linhas de `Steps`, uma por fase, com o tempo. |
+| `progress` | 0 a 1, pelo peso das fases (`ProgressBar value`). |
+| `view` | `idle`, `running`, `stale`, `done` ou `failed`. `done` continua `done` depois que o job sumiu (por exemplo, no reinício da central); um job que acabou antes da última fase é `failed`. |
+| `current` | `false` quando o estado é sobra de um job mais velho que o que o host conhece: mostre o fluxo de início, não a execução. |
+| `state` | O `PhasesState` cru (`phases`, `startedAt`, `runStartedAt`, `failure`). |
+| `status`, `lines`, `jobView`, `start`, `stop` | Os de `useJob`. |
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { CommandCtx, RunView, Sdk } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["dnf"] }
+export default (sdk: Sdk) => {
+  const { h, Panel, Steps, ProgressBar, Notice, useRun, useKey } = sdk.ui;
+  const BAR_STATE: Record<RunView, "running" | "failed" | "done"> = { idle: "running", running: "running", stale: "running", failed: "failed", done: "done" };
+
+  function Instalador() {
+    const run = useRun("instala");
+    useKey("i", "instala", () => void run.start("instalar").catch(() => {}));
+    return (
+      <Panel>
+        <Steps items={run.steps} />
+        <ProgressBar value={run.progress} state={BAR_STATE[run.view]} />
+        {run.state?.failure ? <Notice level="error">{`${run.state.failure.phase}: ${run.state.failure.message}`}</Notice> : null}
+      </Panel>
+    );
+  }
+
+  return {
+    commands: {
+      instalar: {
+        help: "Instala em fases; rodar de novo retoma",
+        async run(ctx: CommandCtx) {
+          const result = await ctx.phases.run("instala", [
+            {
+              id: "pacotes",
+              label: "pacotes",
+              weight: 10,
+              run: async (phase) => {
+                phase.report("httpd");
+                await ctx.shell.must("dnf", ["-y", "install", "httpd"], { timeoutMs: 40 * 60_000 });
+              },
+            },
+            { id: "limpeza", label: "limpeza", run: () => ({ skipped: "nada a limpar" }) },
+          ]);
+          if (!result.ok) ctx.out.error(`parou em ${result.failedPhase}`);
+        },
+      },
+    },
+    pages: { instalador: { title: "Instalador", render: () => <Instalador /> } },
+  };
+};
+```
+
+## Saída de `dnf` e `apt`: `sdk.packages`
+
+`sdk.packages.tracker("dnf" | "apt", progressSalvo?)` lê a saída de uma instalação linha a linha (passe cada linha do `onLine`) e mantém o andamento por pacote. `tracker.progress` é `{ total, done, running, failed }` (`done` e `running` trazem `name`, `version` e, no `dnf`, `arch`, `repo` e `size`; `running` traz também `phase`); `tracker.phase` diz a parte da transação da última linha (`download`, `install` ou `verify`; o `apt` não tem `verify`). `feed(linha)` devolve `true` quando algo que a página mostra mudou (grave o estado só então). Ao fim de cada execução do gerenciador, `endRun(ok)` fecha o que estava rodando (como feito, se `ok`; como falho, se não) e soma o total. `fail(nome)` marca um pacote que a saída não nomeou. A linha de barra de progresso (`\r`) só marca "baixando", nunca "feito". O `progress` é um objeto vivo, mudado no lugar: guarde `tracker.progress` no `store` para uma retomada (`tracker("dnf", salvo)`) e alimente um `CellGrid`.
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["dnf"] }
+const factory: ModuleFactory = (sdk) => ({
+  commands: {
+    pacotes: {
+      help: "Instala o httpd e guarda o andamento",
+      async run(ctx) {
+        const tracker = sdk.packages.tracker("dnf");
+        const result = await ctx.shell.run("dnf", ["-y", "install", "httpd"], {
+          timeoutMs: 40 * 60_000,
+          buffer: false,
+          onLine: (line) => {
+            if (tracker.feed(line)) ctx.store.set("andamento", tracker.progress);
+          },
+        });
+        tracker.endRun(result.code === 0);
+        ctx.out.info(`${tracker.progress.done.length}/${tracker.progress.total} pacotes (${tracker.phase ?? "fim"})`);
+      },
+    },
+  },
+});
+export default factory;
+```
+
 ## Streaming e cancelamento de `ctx.exec`
 
 - `onLine(linha, "stdout" | "stderr")` recebe cada linha assim que chega. O corte é em `\n`, `\r\n` e `\r` sozinho: a barra de progresso do `dnf`, que se redesenha com `\r`, chega como uma linha por redesenho.
@@ -578,7 +779,7 @@ Estado e log ficam em `$PVX_HOME/modules/<id>/jobs/<nome>.json` e `<nome>.log`. 
 
 **CLI.** `pvx jobs [list]` lista todos; `pvx jobs log <módulo> <nome> [--tail N] [-f]` mostra (e com `-f` segue até o job acabar); `pvx jobs stop <módulo> <nome>` para. (`pvx jobs run` é interno: o host o usa para iniciar o job.)
 
-**Na UI.** `useJob(nome, { tail? })` devolve `{ status, lines, start(linha, { secrets? }), stop() }`, atualizado a cada 1 s; a página só renderiza de novo quando o estado ou as últimas `tail` linhas (padrão 200) mudam. `ui.Steps({ items })` desenha as fases (`{ id, label, state: "pending" | "running" | "done" | "failed" | "skipped", elapsedMs?, detail? }`): `✓` concluído, spinner rodando, `○` pendente, `✗` falhou, `-` pulado, sempre com a palavra do estado; o spinner só anda enquanto há um item rodando. `ui.LogTail({ lines, follow? })` é um log que rola: acompanha o fim até o usuário subir com a roda do mouse e volta a acompanhar ao chegar no fim; ele ocupa a altura que o pai der.
+**Na UI.** `useJob(nome, { tail?, staleMs? })` devolve `{ status, lines, view, start(linha, { secrets? }), stop() }`, atualizado a cada 1 s; a página só renderiza de novo quando o estado, as últimas `tail` linhas (padrão 200) ou o `view` mudam. `view` é `idle`, `running`, `stale`, `done`, `failed` ou `stopped`: `stale` é um job que diz estar rodando mas não escreveu nada no log há `staleMs` (padrão 30 s, contados desde que a página começou a olhar): pinte o progresso como velho ("sem notícias há 30 s") em vez de mostrá-lo como vivo. `ui.Steps({ items })` desenha as fases (`{ id, label, state: "pending" | "running" | "done" | "failed" | "skipped", elapsedMs?, detail? }`): `✓` concluído, spinner rodando, `○` pendente, `✗` falhou, `-` pulado, sempre com a palavra do estado; o spinner só anda enquanto há um item rodando. `ui.LogTail({ lines, follow?, focused? })` é um log que rola: acompanha o fim até o usuário subir com a roda do mouse e volta a acompanhar ao chegar no fim; ele ocupa a altura que o pai der. Com `focused`, o teclado também rola: `↑`/`↓` uma linha, `pgup`/`pgdn` uma página, `home` o começo, `end` o fim (e volta a acompanhar). Sem `focused` as teclas ficam com a página.
 
 <!-- test -->
 ```tsx
@@ -770,6 +971,22 @@ test("sequência e página no mesmo estado", async () => {
   expect((await s.run("meumodulo list")).text).toContain("item");
   t = await s.renderPage("contador");
   expect(t.frame()).toContain("item");
+});
+```
+
+**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store? })` (um `exec` que grava as chamadas e responde pelas regras `(chamada) => { code?, stdout?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args? })` (o `ctx` de um comando, com `shell` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages` e `strategy` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
+
+```ts
+import { expect, test } from "bun:test";
+import { fakeCommandCtx, fakeSystem } from "@pvx/testing";
+import { aplicar } from "../src/commands/aplicar.ts";
+
+test("aplicar roda o nft e grava o marcador com modo 0600", async () => {
+  const system = fakeSystem({ rules: [(call) => (call.cmd === "nft" ? { lines: ["nftables v1.0"] } : undefined)] });
+  const ctx = fakeCommandCtx(system, { args: { engine: "nftables" } });
+  await aplicar.run(ctx);
+  expect(system.lines()[0]).toBe("nft --version");
+  expect(system.fs.modes.get("/etc/meu-modulo/ultimo")).toBe(0o600);
 });
 ```
 

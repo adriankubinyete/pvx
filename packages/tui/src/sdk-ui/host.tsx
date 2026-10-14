@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createJobs, createStore, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
-import type { CommandRun, Conformity, JobStatus, KeySpec, Logger, SdkUi } from "@pvx/sdk";
+import { phasesKey } from "@pvx/core";
+import type { CommandRun, Conformity, JobState, JobStatus, JobView, KeySpec, Logger, PhasesState, QueryState, RunState, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useNudge as useHostNudge } from "../nudge.tsx";
@@ -8,6 +9,7 @@ import { usePanelNav } from "../panelnav.ts";
 import { useTabs } from "../tabs/context.ts";
 import { useLayout } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
+import { DEFAULT_STALE_MS, isCurrentRun, jobViewOf, progressOf, runViewOf, stepsOf } from "./run.ts";
 
 /** What the page hooks need from the host. Provided once by `App` (`pages` prop). */
 export interface PageDeps {
@@ -88,55 +90,77 @@ const sameJson = (a: unknown, b: unknown) => {
   }
 };
 
-/** `useQuery(name, ...args)` or `useQuery(name, args, { refreshMs })`: the second form re-runs on an interval (min 500 ms) and keeps the old data meanwhile. */
-function useQuery<T = unknown>(name: string, ...rest: unknown[]) {
+/** `useQuery(name, ...args)` or `useQuery(name, args, { refreshMs })`: the second form re-runs on an interval (min 500 ms) and keeps the old data meanwhile. `refetch()` reads again now. */
+function useQuery<T = unknown>(name: string, ...rest: unknown[]): QueryState<T> {
   const { deps } = useHost();
   const opts = rest.length === 2 && Array.isArray(rest[0]) && typeof (rest[1] as { refreshMs?: unknown } | null)?.refreshMs === "number" ? (rest[1] as { refreshMs: number }) : undefined;
   const args = opts ? (rest[0] as unknown[]) : rest;
   const every = opts ? Math.max(500, opts.refreshMs) : 0;
   const [state, setState] = useState<{ data?: T; error?: string; loading: boolean }>({ loading: true });
+  const refetchNow = useRef<() => Promise<void>>(async () => {});
   const argsKey = JSON.stringify(args);
   useEffect(() => {
     let live = true;
     let busy = false;
-    const run = (first: boolean) => {
-      if (busy) return;
-      busy = true;
+    let again = false;
+    const read = async (first: boolean): Promise<void> => {
       if (first) setState({ loading: true });
-      Promise.resolve()
-        .then(() => deps.registry.query(name, ...args))
-        .then(
-          (data) => live && setState((s) => (!first && !s.error && !s.loading && sameJson(s.data, data) ? s : { data: data as T, loading: false })),
-          (e) => live && setState((s) => (first ? { error: (e as Error).message, loading: false } : { data: s.data, error: (e as Error).message, loading: false })),
-        )
-        .finally(() => void (busy = false));
+      try {
+        const data = (await deps.registry.query(name, ...args)) as T;
+        if (live) setState((current) => (!first && !current.error && !current.loading && sameJson(current.data, data) ? current : { data, loading: false }));
+      } catch (error) {
+        const message = (error as Error).message;
+        if (live) setState((current) => (first ? { error: message, loading: false } : { data: current.data, error: message, loading: false }));
+      }
     };
-    run(true);
-    const timer = every ? setInterval(() => run(false), every) : undefined;
+    /** A poll skips while a read is out; a `refetch` asked meanwhile reads once more after it, since that one may predate the change. */
+    const run = async (first: boolean, forced: boolean): Promise<void> => {
+      if (busy) {
+        again = again || forced;
+        return;
+      }
+      busy = true;
+      await read(first);
+      busy = false;
+      if (again && live) {
+        again = false;
+        await run(false, false);
+      }
+    };
+    refetchNow.current = () => run(false, true);
+    void run(true, false);
+    const timer = every ? setInterval(() => void run(false, false), every) : undefined;
     return () => {
       live = false;
       if (timer) clearInterval(timer);
     };
   }, [deps, name, argsKey, every]);
-  return state;
+  const refetch = useCallback(() => refetchNow.current(), []);
+  return { ...state, refetch };
 }
 
-/** A job of this module, polled every second; the page re-renders only when the status or the tail changed. */
-function useJob(name: string, opts?: { tail?: number }) {
+/** Polls the job `name` every second; the page re-renders only when the status, the tail or the stale flag changed. */
+function useJob(name: string, opts?: { tail?: number; staleMs?: number }): JobState {
   const { moduleId, deps } = useHost();
   const tail = opts?.tail ?? 200;
+  const staleMs = opts?.staleMs ?? DEFAULT_STALE_MS;
   const jobs = useMemo(() => createJobs(moduleId), [moduleId]);
-  const [snap, setSnap] = useState<{ status: JobStatus; lines: string[] }>({ status: { state: "none" }, lines: [] });
+  const [snap, setSnap] = useState<{ status: JobStatus; lines: string[]; view: JobView }>({ status: { state: "none" }, lines: [], view: "idle" });
   const poll = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     let live = true;
-    let last = "";
+    let lastContent = "";
+    let lastView = "";
+    let changedAt = Date.now();
     poll.current = async () => {
       const [status, lines] = await Promise.all([jobs.status(name), jobs.log(name, { tail })]);
-      const key = JSON.stringify([status, lines]);
-      if (!live || key === last) return;
-      last = key;
-      setSnap({ status, lines });
+      const content = JSON.stringify([status, lines]);
+      if (content !== lastContent) changedAt = Date.now();
+      const view = jobViewOf(status, Date.now() - changedAt, staleMs);
+      if (!live || (content === lastContent && view === lastView)) return;
+      lastContent = content;
+      lastView = view;
+      setSnap({ status, lines, view });
     };
     void poll.current();
     const timer = setInterval(() => void poll.current(), 1000);
@@ -144,7 +168,7 @@ function useJob(name: string, opts?: { tail?: number }) {
       live = false;
       clearInterval(timer);
     };
-  }, [jobs, name, tail]);
+  }, [jobs, name, tail, staleMs]);
   const root = () => {
     if (!deps.isRoot) throw new Error(rootMessage());
   };
@@ -163,6 +187,32 @@ function useJob(name: string, opts?: { tail?: number }) {
   };
 }
 
+/** The phases a command keeps in the store (`ctx.phases.run(name, ...)`), polled every second; the page re-renders only when they changed. */
+function usePhasesState(name: string): PhasesState | undefined {
+  const { moduleId } = useHost();
+  const store = useMemo(() => createStore(moduleId), [moduleId]);
+  const [state, setState] = useState<PhasesState | undefined>(() => store.get<PhasesState>(phasesKey(name)));
+  useEffect(() => {
+    const read = () => {
+      const next = store.get<PhasesState>(phasesKey(name));
+      setState((current) => (sameJson(current, next) ? current : next));
+    };
+    read();
+    const timer = setInterval(read, 1000);
+    return () => clearInterval(timer);
+  }, [store, name]);
+  return state;
+}
+
+/** A phased run: the job `name` plus its phases. */
+function useRun(name: string, opts?: { tail?: number; staleMs?: number }): RunState {
+  const { view: jobView, ...job } = useJob(name, opts);
+  const state = usePhasesState(name);
+  const current = isCurrentRun(state, job.status);
+  const shown = current ? state : undefined;
+  return { ...job, jobView, view: runViewOf(jobView, state, current), state, current, steps: stepsOf(shown), progress: progressOf(shown) };
+}
+
 function useStore() {
   const { moduleId } = useHost();
   return useMemo(() => createStore(moduleId), [moduleId]);
@@ -175,7 +225,7 @@ function useRouter() {
 }
 
 /** Pages call it in render, so `handler` closes over the component state; the host registers it while mounted. */
-function useKey(keys: string, label: string, handler: () => void, opts?: { help?: boolean }) {
+export function useKey(keys: string, label: string, handler: () => void, opts?: { help?: boolean }) {
   const { addKey } = useHost();
   const latest = useRef(handler);
   latest.current = handler;
@@ -223,6 +273,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused"> = {
-  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused"> = {
+  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useTheme: useModuleTheme,
 };

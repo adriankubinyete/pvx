@@ -84,6 +84,10 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Estrutura padrão de módulo = a do `pvx-firewall` reescrito → [Estrutura padrão de módulo](#2026-10-14--estrutura-padrão-de-módulo-a-do-pvx-firewall-reescrito)
 - Firewall: listas lado a lado só a partir de 120 colunas (exceção ao 100 do UI.md) → [Firewall: listas lado a lado a partir de 120 colunas](#2026-10-14--firewall-listas-lado-a-lado-a-partir-de-120-colunas)
 - Firewall: ações de linha por `enter` → formulário com `remover` e confirmação do framework → [Firewall: ações de linha pelo formulário](#2026-10-14--firewall-ações-de-linha-pelo-formulário)
+- `ctx.shell`, `ctx.fs.write` com `mode` e `atomic`, `store.update`, `sdk.strategy` e `sdk.packages` (`dnf` e `apt`) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
+- Fases com retomada (`ctx.phases`, `useRun`), `useJob().view` com `stale`, `useQuery().refetch` → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
+- `List` com janela (`maxRows`) e `onAction`, `Panel shrink`, `Notice`, `LogTail focused`, `useNudge` com tom `ok`; "precisa aplicar" como convenção (UI.md, seção 13) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
+- Sistema falso para testes de módulo em `@pvx/testing` (`fakeSystem`, `fakeCommandCtx`, `fakeReadCtx`, `fakeSdk`) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1128,3 +1132,20 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Decisão:** No firewall, as ações da linha saíram dos atalhos `x` e `c`. Agora `enter` na linha abre um formulário com o campo de comentário e o botão `remover`, e a remoção pede a confirmação do framework.
 
 **Motivo:** os atalhos soltos eram difíceis de descobrir e removiam sem confirmar. Aprovado pelo dono na reescrita do firewall.
+
+## 2026-10-14 — SDK: peças genéricas extraídas dos módulos firewall e issabel
+
+**Status:** vigente
+
+**Decisão:** O dono aprovou levar para o framework o que os módulos `pvx-firewall` e `pvx-issabel` tinham escrito por conta própria. Cada módulo passa a usar a peça do SDK e apaga a sua.
+
+- `ctx.shell` (`run`, `must`, `ok`) sobre `ctx.exec`, com a mesma lista `permissions.exec`: a violação de permissão ainda lança (`PermissionDenied`) e nunca vira código; um programa que não inicia dá 127. `must` lança `StepError` (`command`, `code`, `output`).
+- `ctx.fs.write(path, texto, { mode, atomic })`: `mode` cria o arquivo vazio e travado antes de o conteúdo entrar; `atomic` grava um temporário ao lado e renomeia. `store.update(chave, mudar)` lê, muda e grava numa chamada.
+- `ctx.phases.run(nome, fases, { fresh? })`: as fases rodam em ordem, o estado vai ao `store` (`phases:<nome>`), a execução seguinte retoma da fase que falhou e pula as prontas. `useRun(nome)` junta o job e as fases (`steps`, `progress`, `view`, `current`). `useJob().view` ganha `stale`: um job que roda mas não escreve no log há `staleMs` (30 s). `useQuery().refetch()` lê de novo agora.
+- `sdk.packages.tracker("dnf" | "apt")` lê a saída do gerenciador (pacote atual, feitos e total, fase `download`/`install`/`verify`); `sdk.strategy.pick` escolhe o primeiro backend disponível, ou o pedido.
+- UI: `List maxRows` (janela com a seleção sempre à vista), `List onAction` (`enter` e clique), `Panel shrink`, `Notice`, `LogTail focused` (teclado) e `useNudge(msg, "ok")` tipado no SDK. "Precisa aplicar" é uma convenção no UI.md (seção 13), sem componente próprio.
+- `@pvx/testing` ganha `fakeSystem`, `fakeCommandCtx`, `fakeReadCtx` e `fakeSdk`: o ponto de troca do `SystemOverrides` do issabel, sem o módulo precisar de um parâmetro na fábrica.
+
+**Motivo:** firewall e issabel reescreveram as mesmas peças (corredor de fases, leitor de `dnf`, `run`/`runOrFail`, escolha de engine, janela de lista); o dono quer cada peça genérica no framework.
+
+**Limite:** `ctx.phases` guarda o estado por nome no `store`; duas execuções ao mesmo tempo do mesmo nome não são protegidas (o job tem um só processo por nome). `ReadCtx` não tem `shell`. O `apt` não tem fase `verify`. `onAction` e o `enter` de `usePanels().step` não devem se somar na mesma lista. `useJob().view` conta o silêncio desde que a página começou a olhar, não desde a última linha escrita (o job não grava a hora da última escrita).
