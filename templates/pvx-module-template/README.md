@@ -21,7 +21,7 @@ Segue a seção "Estrutura de um módulo" do `CODIGO.md` (referência completa: 
 - `src/health/prove.ts`: a capacidade, por `sdk.proof.firstProblem`.
 - `src/state.ts`: o tipo persistido e `STORE_KEY`. `src/texts.ts`: textos e `FIX.*`.
 - `src/page/`: `Painel.tsx` (`usePanels`, `List`, `Button`, `Loading`, como o UI.md), `rows.ts` e `index.tsx`.
-- `test/`: `fake.ts` (`fakeSdk`) e `module.test.ts` (`runSession`).
+- `test/`: `fake.ts` (`fakeSdk` e `memStore`, reexportados de `@pvx/testing`) e `module.test.ts` (`runSession`).
 
 O modelo não executa programas, então não tem `exec.ts` nem `health/summary.ts`, `queries.ts` e `widgets.ts`; crie-os quando o módulo precisar, no mesmo lugar.
 

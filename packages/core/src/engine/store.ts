@@ -18,6 +18,12 @@ export function createStore(id: string): Store {
     set(key, value) {
       write({ ...read(), [key]: value });
     },
+    update<T>(key: string, change: (current: T | undefined) => T): T {
+      const data = read();
+      const next = change(data[key] as T | undefined);
+      write({ ...data, [key]: next });
+      return next;
+    },
     delete(key) {
       const d = read();
       if (key in d) {

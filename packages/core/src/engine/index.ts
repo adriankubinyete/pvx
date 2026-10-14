@@ -12,3 +12,8 @@ export * from "./platform.ts";
 export * from "./jobs.ts";
 export { killExecGroups } from "./exec.ts";
 export * from "./helpers.ts";
+export * from "./errors.ts";
+export * from "./shell.ts";
+export * from "./phases.ts";
+export { strategyKit } from "./strategy.ts";
+export { packagesKit } from "./packages.ts";

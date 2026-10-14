@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { CapabilityDef } from "@pvx/sdk";
 import { evaluate, type Profile } from "../../src/plan/index.ts";
 
-const ctx = { log: {} as any, store: {} as any, query: (() => {}) as any, exec: {} as any, fs: {} as any, jobs: {} as any };
+const ctx = { log: {} as any, store: {} as any, query: (() => {}) as any, exec: {} as any, fs: {} as any, jobs: {} as any, phases: {} as any };
 const cap = (id: string, prove: CapabilityDef["prove"], extra: Partial<CapabilityDef> = {}): CapabilityDef =>
   ({ id, title: id, goal: "g", prove, ...extra });
 const profile = (requires: string[]): Profile => ({ id: "p", title: "P", requires });

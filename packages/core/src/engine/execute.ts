@@ -5,6 +5,8 @@ import { auditCommand, lineOf } from "../journal/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
 import { createJobs } from "./jobs.ts";
 import { createGranted } from "./permissions.ts";
+import { createPhases } from "./phases.ts";
+import { createShell } from "./shell.ts";
 import { resolveCommand, type Registry } from "./registry.ts";
 import { createStore } from "./store.ts";
 import { tokenize } from "./tokenize.ts";
@@ -56,18 +58,23 @@ export async function execute(registry: Registry, input: string | string[], opts
     lines.push(l);
     opts.onLine?.(l);
   };
+  const store = createStore(cmd.moduleId);
+  const granted = createGranted(cmd.moduleId, registry.modules.get(cmd.moduleId)?.permissions, log, opts.makeLogger("core"));
+  const out = { success: add("success"), warning: add("warning"), error: add("error"), info: add("info"), plain: add("plain") };
   try {
     await cmd.run({
       args: parsed.args,
       ...argGetters(parsed.args),
-      out: { success: add("success"), warning: add("warning"), error: add("error"), info: add("info"), plain: add("plain") },
+      out,
       log,
-      store: createStore(cmd.moduleId),
+      store,
       query: registry.query,
       slots: registry.slots,
       jobs: createJobs(cmd.moduleId),
       jobLog: opts.jobLog ?? (() => {}),
-      ...createGranted(cmd.moduleId, registry.modules.get(cmd.moduleId)?.permissions, log, opts.makeLogger("core")),
+      ...granted,
+      shell: createShell(granted.exec),
+      phases: createPhases(store, out),
     });
   } catch (e) {
     log.error(`exceção em ${key}: ${(e as Error).stack ?? e}`);

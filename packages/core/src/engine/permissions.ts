@@ -1,6 +1,8 @@
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, rmSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import type { CommandCtx, Logger, Manifest, QueryFn, ReadCtx } from "@pvx/sdk";
+import type { CommandCtx, Logger, Manifest, PhasesState, QueryFn, ReadCtx, WriteOpts } from "@pvx/sdk";
+import { PermissionDenied } from "./errors.ts";
+import { phasesKey } from "./phases.ts";
 import { moduleStateDir, profiledDir, pvxHome } from "./paths.ts";
 import { runProgram } from "./exec.ts";
 import { createJobs } from "./jobs.ts";
@@ -27,6 +29,25 @@ function real(p: string): string {
 }
 const inside = (p: string, prefix: string) => p === prefix || p.startsWith(prefix.endsWith(sep) ? prefix : prefix + sep);
 
+/** Creates `file` empty and locked to `mode` before any content goes in (a plain write keeps the mode of a file that exists, and `writeFile` obeys the umask). */
+function createWithMode(file: string, mode: number): void {
+  writeFileSync(file, "", { mode });
+  chmodSync(file, mode);
+}
+
+/** Plain write, a write that never shows wider bits than `mode`, and/or one that appears whole by a rename (temp file in the same directory). */
+function writeFileWithOptions(file: string, data: string, { mode, atomic }: WriteOpts): void {
+  const target = atomic ? `${file}.${process.pid}.tmp` : file;
+  try {
+    if (mode !== undefined) createWithMode(target, mode);
+    writeFileSync(target, data);
+    if (atomic) renameSync(target, file);
+  } catch (error) {
+    if (atomic) rmSync(target, { force: true });
+    throw error;
+  }
+}
+
 /**
  * `ctx.exec`, `ctx.net`, `ctx.fs`: they refuse anything the manifest did not list. NOT a sandbox: the module runs in this
  * process and can still call Bun.spawn itself. A violation throws and is logged to the module log and to core.log.
@@ -39,7 +60,7 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
         l.error(m);
       } catch {}
     }
-    throw new Error(m);
+    throw new PermissionDenied(m);
   };
   const fsRules = () => [
     { prefix: real(moduleStateDir(id)), write: true },
@@ -70,10 +91,10 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
     },
     fs: {
       read: (p) => Bun.file(path(p, false)).text(),
-      async write(p, data) {
+      async write(p, data, opts) {
         const r = path(p, true);
         mkdirSync(dirname(r), { recursive: true });
-        await Bun.write(r, data);
+        writeFileWithOptions(r, data, opts ?? {});
       },
       exists: async (p) => existsSync(path(p, false)),
       list: async (p) => readdirSync(path(p, false)).sort(),
@@ -106,5 +127,6 @@ export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: 
     },
     fs: { read: g.fs.read, exists: g.fs.exists, list: g.fs.list },
     jobs: (({ status, list, log }) => ({ status, list, log }))(createJobs(id)),
+    phases: { state: (name) => createStore(id).get<PhasesState>(phasesKey(name)) },
   };
 }

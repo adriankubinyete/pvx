@@ -97,6 +97,10 @@ export interface CommandCtx {
   slots: SlotsApi;
   /** Runs a program (no shell). Only commands whose basename is in `permissions.exec`. */
   exec(cmd: string, args?: string[], opts?: ExecOpts): Promise<ExecResult>;
+  /** Helpers over `exec` (same allowlist): `run` returns the result, `must` throws a `StepError`, `ok` answers a boolean. */
+  shell: Shell;
+  /** Named phases run in order with the progress kept in the store, so a failed run resumes where it stopped. */
+  phases: Phases;
   /** Only hosts (`host[:port]`) listed in `permissions.net`; redirects are not followed. */
   net: { fetch(url: string, init?: NetInit): Promise<NetResponse> };
   /** Only paths under `permissions.fs` (`rw:` prefix allows write) and the module's own state dir. */
@@ -170,9 +174,14 @@ export interface ExecResult {
   stdout: string;
   stderr: string;
 }
+export interface WriteOpts {
+  mode?: number;
+  atomic?: boolean;
+}
 export interface ModuleFs {
   read(path: string): Promise<string>;
-  write(path: string, data: string): Promise<void>;
+  /** `mode` is the file's permission bits (`0o600`): the file never exists with wider ones, not even for an instant. `atomic` writes a temp file beside it and renames it over `path`, so a reader sees the old file or the whole new one. */
+  write(path: string, data: string, opts?: WriteOpts): Promise<void>;
   exists(path: string): Promise<boolean>;
   list(path: string): Promise<string[]>;
   /** Deletes a file (no error when it is missing). Needs `rw:`. */
@@ -211,6 +220,8 @@ export interface Store {
   get<T = unknown>(key: string): T | undefined;
   set(key: string, value: unknown): void;
   delete(key: string): void;
+  /** Reads `key`, applies `change` (it gets `undefined` when the key is missing) and stores the result, which it also returns. */
+  update<T>(key: string, change: (current: T | undefined) => T): T;
 }
 
 /** Cross-module read: ctx.query("module.name", ...args). */
@@ -229,6 +240,7 @@ export interface ReadCtx {
   exec: CommandCtx["exec"];
   fs: Pick<ModuleFs, "read" | "exists" | "list">;
   jobs: Pick<Jobs, "status" | "list" | "log">;
+  phases: Pick<Phases, "state">;
 }
 
 /** A query function. The host calls it with `this` set to the module's `ReadCtx` (use `function` or method syntax to reach it; an arrow function just ignores it). */
@@ -267,12 +279,157 @@ export interface ProofKit {
   firstProblem(...steps: (() => Proof | undefined | Promise<Proof | undefined>)[]): Promise<Proof | undefined>;
 }
 
+/** An error a failed step throws: what was run, its exit code and the useful lines of its output. `shell.must` throws it; the phase runner records it. */
+export interface StepError extends Error {
+  name: "StepError";
+  command: string;
+  code: number | undefined;
+  output: string[];
+}
+
+export interface ShellOpts {
+  cwd?: string;
+  env?: Record<string, string>;
+  stdin?: string;
+  /** Default 30000, as `exec`. */
+  timeoutMs?: number;
+  /** Sees every output line (a package tracker, a log). */
+  onLine?(line: string, stream: "stdout" | "stderr"): void;
+  signal?: AbortSignalLike;
+  /** `false` keeps `stdout` and `stderr` empty (the `tail` is kept anyway). */
+  buffer?: boolean;
+  /** What a `StepError` shows for the command instead of its argv (when the argv holds a secret). */
+  display?: string;
+}
+export interface ShellResult extends ExecResult {
+  /** The last lines of output worth keeping (progress redraws dropped), for a failure message. */
+  tail: string[];
+}
+/** Over `ctx.exec`: the same `permissions.exec` allowlist (a violation still throws; it is never turned into an exit code). */
+export interface Shell {
+  /** Never throws for a bad exit. A program that cannot start answers exit 127. */
+  run(command: string, args?: string[], opts?: ShellOpts): Promise<ShellResult>;
+  /** Like `run`, but a bad exit throws a `StepError`. */
+  must(command: string, args?: string[], opts?: ShellOpts): Promise<ShellResult>;
+  /** True when the exit was 0. */
+  ok(command: string, args?: string[], opts?: ShellOpts): Promise<boolean>;
+}
+
+export type PhaseState = "pending" | "running" | "done" | "failed" | "skipped";
+export interface PhaseOutcome {
+  /** A short note kept with the phase ("adiado"). */
+  detail?: string;
+  /** Nothing to do: the phase is marked skipped, with this as the reason. */
+  skipped?: string;
+}
+export interface PhaseDef {
+  id: string;
+  label: string;
+  /** Share of the overall progress (default 1). */
+  weight?: number;
+  /** `report(text)` updates the phase's detail while it runs (it writes the store: do not call it hundreds of times a second). */
+  run(phase: { report(detail: string): void }): void | PhaseOutcome | Promise<void | PhaseOutcome>;
+}
+export interface PhaseRecord {
+  id: string;
+  label: string;
+  weight: number;
+  state: PhaseState;
+  startedAt?: number;
+  endedAt?: number;
+  detail?: string;
+}
+export interface PhaseFailure {
+  phase: string;
+  message: string;
+  /** Set when the cause was a `StepError`. */
+  command?: string;
+  code?: number;
+  output?: string[];
+}
+/** What `phases` keeps in the store (key `phases:<name>`). */
+export interface PhasesState {
+  phases: PhaseRecord[];
+  /** When the run began (kept across resumes). */
+  startedAt: number;
+  /** When the latest run (or resume) began: compare it with `JobStatus.startedAt` to tell a leftover of an older job. */
+  runStartedAt: number;
+  failure?: PhaseFailure;
+}
+export type PhasesResult = { ok: true } | { ok: false; failedPhase: string; error: unknown };
+export interface Phases {
+  /**
+   * Runs the phases in order and saves the state at every change. With a saved state for `name` and the same phase ids, a finished
+   * phase is skipped and the others run again (a resume); `fresh: true` (or a different list of ids) starts over. It stops at the
+   * first phase that throws, records why (`PhasesState.failure`) and resolves `{ ok: false }`. Each phase says so on `ctx.out`.
+   */
+  run(name: string, phases: PhaseDef[], opts?: { fresh?: boolean }): Promise<PhasesResult>;
+  state(name: string): PhasesState | undefined;
+  /** Forgets the saved state of `name`. */
+  reset(name: string): void;
+}
+
+export type PackageManager = "dnf" | "apt";
+/** `download`, `install` (unpack, configure) and `verify`, the three parts of a package transaction. */
+export type PackagePhase = "download" | "install" | "verify";
+export interface PackageRef {
+  name: string;
+  version: string;
+  arch?: string;
+  repo?: string;
+  size?: string;
+}
+export interface RunningPackage extends PackageRef {
+  phase: PackagePhase;
+}
+export interface PackageProgress {
+  /** Packages the transaction(s) will handle; grows as they are announced. */
+  total: number;
+  done: PackageRef[];
+  running: RunningPackage[];
+  /** Names of the packages that failed. */
+  failed: string[];
+}
+/** Reads the output of `dnf install` or `apt-get install` line by line (feed it from `onLine`). It mutates `progress` in place. */
+export interface PackageTracker {
+  readonly progress: PackageProgress;
+  /** The part of the transaction the latest line belonged to. */
+  readonly phase: PackagePhase | undefined;
+  /** Applies one line; true when something a page shows changed. */
+  feed(line: string): boolean;
+  /** One package manager run ended. A good one commits its total and finishes what was running; a failed one marks it failed. */
+  endRun(ok: boolean): void;
+  /** Marks a package failed that the output did not name. */
+  fail(name: string): void;
+}
+export interface PackagesKit {
+  /** `progress` continues a saved one (a resume). */
+  tracker(manager: PackageManager, progress?: PackageProgress): PackageTracker;
+}
+
+/** A way of doing something (an engine, a backend): `available` says whether this machine can use it. */
+export interface Strategy {
+  id: string;
+  available(): boolean | Promise<boolean>;
+}
+export interface StrategyKit {
+  /**
+   * `setting` `"auto"` (or missing): the first available strategy, in the list's order, with `auto: true`; `error` (your text) when none is.
+   * Any other `setting` picks that id without asking `available` (use it to explain why a chosen one cannot run); an unknown id is an `error`.
+   */
+  pick<Item extends Strategy>(strategies: Item[], opts: { setting?: string; none: string }): Promise<{ strategy: Item; auto: boolean } | { error: string }>;
+}
+
 /** What the host injects into the factory. */
 export interface Sdk {
   version: 1;
   log: Logger;
   ui: SdkUi;
   proof: ProofKit;
+  /** Parsers of `dnf` and `apt` output (see `PackageTracker`). */
+  packages: PackagesKit;
+  /** Picks which of several strategies (backends, engines) a module drives. */
+  strategy: StrategyKit;
   /** Same permission rules as `ctx.fs`, for code that has no command context (queries, widgets). */
   fs: ModuleFs;
 }
@@ -345,6 +502,11 @@ export interface WidgetDef {
 // ---- sdk.ui: injected by the host, so a module never imports React ----
 
 export type Tone = "ok" | "warn" | "error" | "info" | "accent" | "dim" | "text";
+/** What a job is doing, from the page's side: `stale` is a job that says it runs but has written nothing for `staleMs`. */
+export type JobView = "idle" | "running" | "stale" | "done" | "failed" | "stopped";
+/** What a phased run is doing: `idle` (nothing, or only what an older job left), the job's own view while it runs, `done`, `failed` (a phase failed, or the job ended before the last one). */
+export type RunView = "idle" | "running" | "stale" | "done" | "failed";
+
 /** `unknown`, not ReactNode: this package has no React types. */
 export interface Kids {
   children?: unknown;
@@ -446,6 +608,36 @@ export interface CellItem {
   label?: string;
 }
 
+export interface QueryState<T> {
+  data?: T;
+  error?: string;
+  loading: boolean;
+  /** Reads again now, keeping the old data until the new arrive. Call it after an action changed what the query reads. */
+  refetch(): Promise<void>;
+}
+
+export interface JobState {
+  status: JobStatus;
+  lines: string[];
+  /** `stale` while the job runs but its log did not change for `staleMs` (default 30000, counted from when the page began watching). */
+  view: JobView;
+  start(line: string, opts?: { secrets?: Record<string, string> }): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export interface RunState extends Omit<JobState, "view"> {
+  /** Of the whole run (see `RunView`). */
+  view: RunView;
+  /** Of the job alone. */
+  jobView: JobView;
+  state?: PhasesState;
+  steps: StepItem[];
+  /** 0..1 by the weight of the phases. */
+  progress: number;
+  /** False when `state` belongs to an older job than the one the host knows. */
+  current: boolean;
+}
+
 export interface SdkUi {
   /** JSX factory. A module file needs the classic-runtime pragmas (jsxRuntime classic, jsx h, jsxFrag Fragment), else Bun imports React. */
   h(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
@@ -456,7 +648,7 @@ export interface SdkUi {
   useRef<T>(init: T): { current: T };
 
   /** Bordered box with a title. */
-  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
+  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
   /** Children side by side, equal widths. Give each Panel `grow` so their borders match in height. */
   Row: Component<Kids>;
   Text: Component<Kids & { tone?: Tone; bold?: boolean }>;
@@ -473,14 +665,28 @@ export interface SdkUi {
    * enters a row and `onHover(undefined)` when it leaves. The row under the mouse that is not `selected` gets a light tint
    * (panel background and a dim `›`); hover never changes `selected` by itself: the page decides in `onHover`.
    */
-  List: Component<{ items: ListItem[]; selected?: string; columns?: ListColumn[]; onPress?: (id: string) => void; onHover?: (id: string | undefined) => void }>;
+  List: Component<{
+    items: ListItem[];
+    selected?: string;
+    columns?: ListColumn[];
+    onPress?: (id: string) => void;
+    onHover?: (id: string | undefined) => void;
+    /** Draws only this many rows (the window) and keeps `selected` inside it; the header stays. Without it, every row is drawn. */
+    maxRows?: number;
+    /** The row's action: `enter` on the selected row (the page's footer shows it) and a click on a row call it. It opens the row's form (`Fields` with `onDelete`). Do not also map `enter` to the same thing in the page. */
+    onAction?: (id: string) => void;
+    /** The footer label of the `enter` key (default "abrir"). */
+    actionLabel?: string;
+  }>;
   /** Form of one of the module's commands (generated from its ArgSpec). enter runs it; esc cancels. */
   Form: Component<{ command: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
   Spacer: Component<{ size?: number }>;
   /** Phases of a long task, one row each: `✓` done, a spinner running, `○` pending, `✗` failed, `-` skipped. The spinner ticks only while an item is running. */
   Steps: Component<{ items: StepItem[] }>;
   /** Scrolling log: follows the end until the user scrolls up with the mouse wheel, and resumes at the end. Give it a parent with a height (it grows to fill it). */
-  LogTail: Component<{ lines: string[]; follow?: boolean }>;
+  LogTail: Component<{ lines: string[]; follow?: boolean; /** Takes the keyboard: up/down a line, pgup/pgdn a page, home the start, end the end (and follows again). Default false: the page owns the keys. */ focused?: boolean }>;
+  /** An inline result block: `[✓]`, `[!]` or `[✗]` in the level's color and the text beside it (several lines allowed). Theme tokens only. */
+  Notice: Component<Kids & { level: Level }>;
   /**
    * An editable form: `area` (multiline), `line` (one line), `toggle` (checkbox), `secret` (masked line), `choice` (radio) and
    * `multi` (checkbox list) fields, then the buttons
@@ -564,11 +770,18 @@ export interface SdkUi {
   /** Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. */
   useCommand(line: string): { run(opts?: { args?: string[]; stdin?: string }): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
   /** Same, and re-runs every `refreshMs` (min 500) while the page is mounted. The old data stays until the new arrives (`loading` is only true for the first run). */
-  useQuery<T = unknown>(name: string, args: unknown[], opts: { refreshMs: number }): { data?: T; error?: string; loading: boolean };
+  useQuery<T = unknown>(name: string, args: unknown[], opts: { refreshMs: number }): QueryState<T>;
   /** Calls `ctx.query`-style: `useQuery("module.name", ...args)`. Re-runs when name or args change. */
-  useQuery<T = unknown>(name: string, ...args: unknown[]): { data?: T; error?: string; loading: boolean };
+  useQuery<T = unknown>(name: string, ...args: unknown[]): QueryState<T>;
   /** A job of this module, polled every second. It re-renders only when the status or the last `tail` lines (default 200) changed. `start` and `stop` need root like any command. */
-  useJob(name: string, opts?: { tail?: number }): { status: JobStatus; lines: string[]; start(line: string, opts?: { secrets?: Record<string, string> }): Promise<void>; stop(): Promise<void> };
+  useJob(name: string, opts?: { tail?: number; staleMs?: number }): JobState;
+  /**
+   * A phased run (`ctx.phases.run(name, ...)` inside the job `name`): the job plus the phases the command keeps in the store, polled every second.
+   * `steps` feed `Steps`, `progress` feeds `ProgressBar`, `view` says what to show (`done` stays done after the job went away),
+   * and `current` is false when `state` is a leftover of an older job (show the start flow, not the run). `start` runs `line`
+   * as the job; the command resumes by itself when it calls `ctx.phases.run` again.
+   */
+  useRun(name: string, opts?: { tail?: number; staleMs?: number }): RunState;
   /** This module's own store (one state.json). */
   useStore(): Store;
   /** Pages of this module only: `push("name")`, `pop()`. */
@@ -589,7 +802,7 @@ export interface SdkUi {
    */
   usePageFocused(): boolean;
   /** Shows the host's short notice ("nada aqui") for a key that has no effect. */
-  useNudge(): (msg?: string) => void;
+  useNudge(): (msg?: string, tone?: "ok") => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
   /**
