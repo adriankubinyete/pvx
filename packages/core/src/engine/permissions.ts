@@ -1,12 +1,14 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
+import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import type { CommandCtx, Logger, Manifest, PhasesState, QueryFn, ReadCtx, SessionInfo, WriteOpts } from "@pvx/sdk";
+import type { CommandCtx, Logger, Manifest, NetInit, NetResponse, PhasesState, QueryFn, ReadCtx, SessionInfo, WriteOpts, AbortSignalLike } from "@pvx/sdk";
 import { hostIsRoot } from "../host/root.ts";
 import { hostSession } from "../host/ssh.ts";
 import { PermissionDenied } from "./errors.ts";
 import { phasesKey } from "./phases.ts";
 import { moduleStateDir, profiledDir, pvxHome } from "./paths.ts";
 import { runProgram } from "./exec.ts";
+import { diskUsage, listEntries, makeDirectory, removePath, spaceOf, statOf } from "./fs-ops.ts";
+import { DEFAULT_NET_TIMEOUT_MS, explainNetError, multipartBody, requestSignal, withoutFramingHeaders } from "./net.ts";
 import { createJobs } from "./jobs.ts";
 import { createReadShell } from "./shell.ts";
 import { createStore } from "./store.ts";
@@ -52,69 +54,144 @@ function writeFileWithOptions(file: string, data: string, { mode, atomic }: Writ
   }
 }
 
+type Deny = (what: string) => never;
+/** `path` resolves symlinks and checks the result; `entry` (for `remove`) resolves the folder of the entry, so a symlink is itself the thing deleted. */
+interface FsGuard {
+  path(path: string, write: boolean): string;
+  entry(path: string): string;
+}
+type NetApi = CommandCtx["net"];
+type FsApi = CommandCtx["fs"];
+
+/** `host[:port]` of an http(s) URL in `permissions.net`, or a denial. Redirects are never followed, so the check holds for the whole request. */
+function allowedUrl(url: string, perms: Perms | undefined, deny: Deny): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return deny(`URL inválida ${url}`);
+  }
+  if (!/^https?:$/.test(parsed.protocol) || !perms?.net?.includes(parsed.host)) deny(`net ${parsed.host} (manifest: net ${perms?.net?.join(", ") || "nada"})`);
+  return parsed;
+}
+
+/** The body of a plain request: text, bytes, or a file streamed from disk (a `Blob` that Bun reads lazily). */
+function bodyOf(init: NetInit, readable: (path: string) => string): string | Uint8Array | ReturnType<typeof Bun.file> | undefined {
+  if (init.body !== undefined && init.bodyFile !== undefined) throw new Error("net: passe body ou bodyFile, não os dois");
+  if (init.bodyFile !== undefined) return Bun.file(readable(init.bodyFile));
+  return init.body;
+}
+
+/** Sends the request under one signal (the caller's abort and the timeout); the headers go to the wire and nowhere else. */
+async function send(url: URL, request: RequestInit, signal: AbortSignalLike | undefined, timeoutMs: number): Promise<NetResponse> {
+  try {
+    return await fetch(url, { ...request, redirect: "manual", signal: requestSignal(signal, timeoutMs) });
+  } catch (error) {
+    throw explainNetError(error, url.host, timeoutMs);
+  }
+}
+
+function regularFileSize(path: string): number {
+  const stats = statSync(path, { throwIfNoEntry: false });
+  if (!stats?.isFile()) throw new Error(`net: ${path} não é um arquivo que dê para enviar`);
+  return stats.size;
+}
+
+function createNet(perms: Perms | undefined, deny: Deny, guard: FsGuard): NetApi {
+  const readable = (path: string) => guard.path(path, false);
+  return {
+    async fetch(url, init = {}) {
+      const target = allowedUrl(url, perms, deny);
+      const request = { method: init.method, headers: init.headers, body: bodyOf(init, readable) };
+      return send(target, request, init.signal, init.timeoutMs ?? DEFAULT_NET_TIMEOUT_MS);
+    },
+    async upload(url, init) {
+      const target = allowedUrl(url, perms, deny);
+      const file = readable(init.file);
+      const multipart = multipartBody({ path: file, size: regularFileSize(file), field: init.field ?? "file", filename: init.filename ?? basename(file), fields: init.fields ?? {} });
+      const headers = { ...withoutFramingHeaders(init.headers), "content-type": multipart.contentType, "content-length": String(multipart.contentLength) };
+      return send(target, { method: init.method ?? "POST", headers, body: multipart.stream }, init.signal, init.timeoutMs ?? DEFAULT_NET_TIMEOUT_MS);
+    },
+  };
+}
+
+function createFs(guard: FsGuard): FsApi {
+  const readable = (path: string) => guard.path(path, false);
+  const writable = (path: string) => guard.path(path, true);
+  return {
+    read: (path) => Bun.file(readable(path)).text(),
+    async write(path, data, opts) {
+      const resolved = writable(path);
+      mkdirSync(dirname(resolved), { recursive: true });
+      writeFileWithOptions(resolved, data, opts ?? {});
+    },
+    exists: async (path) => existsSync(readable(path)),
+    list: async (path) => readdirSync(readable(path)).sort(),
+    entries: async (path) => listEntries(readable(path)),
+    stat: async (path) => statOf(readable(path)),
+    du: async (path) => diskUsage(readable(path)),
+    free: async (path) => spaceOf(readable(path)),
+    async mkdir(path, opts) {
+      makeDirectory(writable(path), opts?.mode);
+    },
+    async remove(path, opts) {
+      removePath(guard.entry(path), opts?.recursive ?? false);
+    },
+    async append(path, text) {
+      const resolved = writable(path);
+      mkdirSync(dirname(resolved), { recursive: true });
+      const fd = openSync(resolved, "a", 0o644); // O_APPEND: the kernel places each write at the end, so lines from two processes never mix
+      try {
+        writeSync(fd, text); // one call: the whole event or nothing
+      } finally {
+        closeSync(fd);
+      }
+    },
+  };
+}
+
 /**
  * `ctx.exec`, `ctx.net`, `ctx.fs`: they refuse anything the manifest did not list. NOT a sandbox: the module runs in this
  * process and can still call Bun.spawn itself. A violation throws and is logged to the module log and to core.log.
  */
 export function createGranted(id: string, perms: Perms | undefined, log: Logger, coreLog: Logger): Granted {
-  const deny = (what: string): never => {
-    const m = `permissão negada para o módulo "${id}": ${what}`;
-    for (const l of [log, coreLog]) {
+  const deny: Deny = (what) => {
+    const message = `permissão negada para o módulo "${id}": ${what}`;
+    for (const logger of [log, coreLog]) {
       try {
-        l.error(m);
+        logger.error(message);
       } catch {}
     }
-    throw new PermissionDenied(m);
+    throw new PermissionDenied(message);
   };
   const fsRules = () => [
     { prefix: real(moduleStateDir(id)), write: true },
-    ...(perms?.fs ?? []).map((e) => ({ prefix: real(expand(e.replace(/^rw:/, ""))), write: e.startsWith("rw:") })),
+    ...(perms?.fs ?? []).map((entry) => ({ prefix: real(expand(entry.replace(/^rw:/, ""))), write: entry.startsWith("rw:") })),
   ];
-  const path = (p: string, write: boolean) => {
-    const r = real(expand(p));
-    if (!fsRules().some((x) => inside(r, x.prefix) && (x.write || !write))) deny(`fs ${write ? "escrita" : "leitura"} em ${p} (manifest: fs ${perms?.fs?.join(", ") || "nada"})`);
-    return r;
+  const allow = (resolved: string, shown: string, write: boolean): string => {
+    if (!fsRules().some((rule) => inside(resolved, rule.prefix) && (rule.write || !write))) deny(`fs ${write ? "escrita" : "leitura"} em ${shown} (manifest: fs ${perms?.fs?.join(", ") || "nada"})`);
+    return resolved;
+  };
+  const guard: FsGuard = {
+    path: (path, write) => allow(real(expand(path)), path, write),
+    entry(path) {
+      const expanded = resolve(expand(path));
+      return allow(join(real(dirname(expanded)), basename(expanded)), path, true);
+    },
   };
   return {
-    async exec(cmd, args = [], o = {}) {
+    async exec(cmd, args = [], opts = {}) {
       if (!perms?.exec?.includes(basename(cmd))) deny(`exec ${cmd} (manifest: exec ${perms?.exec?.join(", ") || "nada"})`);
-      return runProgram(cmd, args, o);
+      return runProgram(cmd, args, opts);
     },
-    net: {
-      fetch(url, init) {
-        let u: URL;
-        try {
-          u = new URL(url);
-        } catch {
-          return deny(`URL inválida ${url}`);
-        }
-        if (!/^https?:$/.test(u.protocol) || !perms?.net?.includes(u.host)) deny(`net ${u.host} (manifest: net ${perms?.net?.join(", ") || "nada"})`);
-        // Redirects could leave the allowed host: never followed.
-        return fetch(u, { ...init, redirect: "manual" });
-      },
-    },
-    fs: {
-      read: (p) => Bun.file(path(p, false)).text(),
-      async write(p, data, opts) {
-        const r = path(p, true);
-        mkdirSync(dirname(r), { recursive: true });
-        writeFileWithOptions(r, data, opts ?? {});
-      },
-      exists: async (p) => existsSync(path(p, false)),
-      list: async (p) => readdirSync(path(p, false)).sort(),
-      remove: async (p) => rmSync(path(p, true), { force: true }),
-      async append(p, text) {
-        const r = path(p, true);
-        mkdirSync(dirname(r), { recursive: true });
-        const fd = openSync(r, "a", 0o644); // O_APPEND: the kernel places each write at the end, so lines from two processes never mix
-        try {
-          writeSync(fd, text); // one call: the whole event or nothing
-        } finally {
-          closeSync(fd);
-        }
-      },
-    },
+    net: createNet(perms, deny, guard),
+    fs: createFs(guard),
   };
+}
+
+/** The reads of `ctx.fs` and nothing else: the writers do not exist on the read-only context. */
+function readOnlyFs(fs: FsApi): ReadCtx["fs"] {
+  return { read: fs.read, exists: fs.exists, list: fs.list, entries: fs.entries, stat: fs.stat, du: fs.du, free: fs.free };
 }
 
 /** The read-only context of `prove`, queries and widgets: no `store.set`, no `fs` writes (they do not exist, not just refuse); `exec` is the same allowlist, logged. */
@@ -134,7 +211,7 @@ export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: 
     exec,
     shell: createReadShell(exec),
     strategy: strategyKit,
-    fs: { read: g.fs.read, exists: g.fs.exists, list: g.fs.list },
+    fs: readOnlyFs(g.fs),
     jobs: (({ status, list, log }) => ({ status, list, log }))(createJobs(id)),
     phases: { state: (name) => createStore(id).get<PhasesState>(phasesKey(name)) },
   };

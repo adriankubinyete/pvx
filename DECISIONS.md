@@ -97,6 +97,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 - `bun run dev:link <pasta>` (script do repo, não do binário) liga um módulo local em `.dev/pvx` pela mesma lógica do `modules link`, sem root; `renderPage` e `runSession` repassam `sshClient` e `isRoot` também aos comandos que uma página roda → [Dev link e sessão nos comandos de página](#2026-10-14--dev-link-e-sessão-nos-comandos-de-página)
 - Duas `List` com `onAction` na mesma tela: só a lista que tem uma linha com o id de `selected` registra o `enter` (o rodapé o mostra uma vez, sem chave duplicada no React) → [List: só a lista dona da seleção registra o enter](#2026-10-14--list-só-a-lista-dona-da-seleção-registra-o-enter)
+- `ctx.net.fetch` com `body` binário, `bodyFile`, `signal` e `timeoutMs` (30 s); `ctx.net.upload` (multipart em fluxo, sem carregar o arquivo); `ctx.fs` com `entries`, `stat`, `du`, `free`, `mkdir` e `remove` recursivo (as leituras também no `ReadCtx`); `@pvx/testing` com `buffer: false` honrado, `fs` e `net` falsos completos → [SDK: envio binário em `ctx.net`, mais operações em `ctx.fs` e fakes completos](#2026-10-14--sdk-envio-binário-em-ctx-net-mais-operações-em-ctx-fs-e-fakes-completos)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1268,3 +1269,20 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o autobackup contornou com uma linha de ação dentro da tabela, só para não ter dois `List` com `onAction`.
 
 **Limite:** duas listas que têm uma linha com o mesmo id disputam o `enter`; ids de linha são únicos na tela por convenção.
+
+## 2026-10-14 — SDK: envio binário em `ctx.net`, mais operações em `ctx.fs` e fakes completos
+
+**Status:** vigente.
+
+**Decisão:** o módulo deixa de usar `curl` e `du`/`df`/`mkdir`/`rm` só para fazer o que `ctx.net` e `ctx.fs` não faziam, e os fakes do `@pvx/testing` passam a se comportar como o real.
+
+- **`ctx.net.fetch`.** `body` aceita `Uint8Array` (sem `Blob`: o SDK não tem tipos de DOM), `bodyFile` lê um arquivo do disco aos poucos (precisa de leitura em `permissions.fs`), `signal` e `timeoutMs` (30 s, como o `exec`) valem também enquanto a resposta é lida. Redirecionamento continua manual (nunca seguido).
+- **`ctx.net.upload(url, { file, field, fields, filename, headers, method, signal, timeoutMs })`.** Multipart montado pelo host: campos de texto, depois o arquivo, com `Content-Length` exato. O arquivo sai de `Bun.file(...).slice(0, size).stream()` por um `ReadableStream` com `pull`, então a memória fica plana (600 MB esparsos custam bem menos de 200 MB no teste). Um `Blob` com `Bun.file` dentro foi descartado: no Bun 1.3 a parte do arquivo some do corpo. Aspas e quebras de linha em `field` e `filename` viram `%22`, `%0D`, `%0A`.
+- **Permissões e segredo.** `permissions.net` vale para as duas chamadas, e o arquivo (de `upload` ou `bodyFile`) passa pela leitura de `permissions.fs`. O host não registra pedidos nem cabeçalhos: a violação mostra só `host:porta`, e os erros de rede (`timeoutMs`, cancelamento) não repetem cabeçalho nenhum. Há teste de que um `Authorization` não aparece no log do módulo nem no `core.log`.
+- **`ctx.fs`.** `entries` (tipo por entrada; symlink é `symlink`), `stat` (`undefined` se falta), `du` (blocos em disco, assíncrono, hard link uma vez, não segue symlink, pula o que sumiu), `free` (`fs.statfs`, `availableBytes` é o `Avail` do `df`; sobe ao primeiro pai que existe), `mkdir` (`mode` forçado com `chmod` na pasta criada, pasta existente não muda) e `remove` com `recursive`. As leituras entram também no `ReadCtx.fs` (`ReadFsMethod`), para uma prova medir espaço.
+- **`remove`.** Recusa `/` (a raiz do sistema de arquivos) mesmo com `rw:/` no manifest. A permissão resolve a pasta da entrada e não a entrada: apagar um symlink apaga o link, nunca o alvo (antes seguia o link). Fora dos prefixos `rw:` continua negado.
+- **`@pvx/testing`.** O `exec` falso honra `buffer: false` (resultado sem `stdout` e `stderr`, linhas só no `onLine`), generalizando o `honorBuffer` do autobackup. `fakeFs` (agora em `fake-fs.ts`) responde `list`, `entries`, `stat`, `du`, `free` e `mkdir` sobre os arquivos falsos, generalizando o `listFilesUnder`; uma pasta inexistente lança `ENOENT` como a real (antes `list` devolvia `[]`). `fakeSystem({ netRules, space })` traz um `net` falso (grava `system.netCalls`; sem regra, "rede indisponível no teste") e `onFakeMachine` o entrega aos comandos.
+
+**Motivo:** o autobackup enviava o arquivo por `curl -K -` (o `NetInit.body` só tinha texto) e media espaço com `du -sk` e `df -Pk` por `ctx.shell`, e os dois tinham fakes de `exec` próprios.
+
+**Limite:** `du` e `free` medem o que o sistema operacional diz (num sistema de arquivos com compressão ou quotas, `Avail` pode enganar). Não há `Blob` em `body`, nem leitura de cabeçalhos da resposta, nem `net` com redirecionamento controlado. O fake de `fs` não simula permissão de manifest, e o `du` falso conta bytes de texto, não blocos.

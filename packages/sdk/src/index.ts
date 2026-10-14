@@ -105,7 +105,7 @@ export interface CommandCtx {
   /** Named phases run in order with the progress kept in the store, so a failed run resumes where it stopped. */
   phases: Phases;
   /** Only hosts (`host[:port]`) listed in `permissions.net`; redirects are not followed. */
-  net: { fetch(url: string, init?: NetInit): Promise<NetResponse> };
+  net: ModuleNet;
   /** Only paths under `permissions.fs` (`rw:` prefix allows write) and the module's own state dir. */
   fs: ModuleFs;
   /** Background jobs of this module: commands that outlive pvx and the SSH session. */
@@ -157,14 +157,46 @@ export interface SessionInfo {
 /** The subset of `fetch` a module needs (the SDK carries no DOM types). */
 export interface NetInit {
   method?: string;
+  /** Sent as given and never logged (an `Authorization` header stays out of the module log and of `core.log`). */
   headers?: Record<string, string>;
-  body?: string;
+  /** Text or raw bytes. Give either `body` or `bodyFile`, not both. */
+  body?: string | Uint8Array;
+  /** A file streamed from disk as the body (never loaded whole into memory); the path needs read access in `permissions.fs`. */
+  bodyFile?: string;
+  /** Aborting cancels the request, also while its response is being read. */
+  signal?: AbortSignalLike;
+  /** Default 30000; the request is cancelled after it, also while its response is being read. Set it explicitly for a long transfer. */
+  timeoutMs?: number;
+}
+/** `ctx.net.upload`: one `multipart/form-data` request whose file part streams from disk. */
+export interface NetUploadInit {
+  /** The file to send; the path needs read access in `permissions.fs`. */
+  file: string;
+  /** Form field of the file part (default `file`). */
+  field?: string;
+  /** Name sent for the file (default: the file's own name). */
+  filename?: string;
+  /** Text fields, sent before the file part (a server that streams reads them first). */
+  fields?: Record<string, string>;
+  /** `Content-Type` and `Content-Length` are set by the upload and replace any given here. Never logged. */
+  headers?: Record<string, string>;
+  /** Default `POST`. */
+  method?: string;
+  signal?: AbortSignalLike;
+  /** Default 30000, as `fetch`: a large file needs an explicit value. */
+  timeoutMs?: number;
 }
 export interface NetResponse {
   status: number;
   ok: boolean;
   text(): Promise<string>;
   json(): Promise<unknown>;
+}
+/** `ctx.net`: only hosts (`host[:port]`) listed in `permissions.net`, only `http` and `https`, redirects never followed. */
+export interface ModuleNet {
+  fetch(url: string, init?: NetInit): Promise<NetResponse>;
+  /** Sends a file as `multipart/form-data` without loading it into memory (a multi-GB archive is fine). */
+  upload(url: string, init: NetUploadInit): Promise<NetResponse>;
 }
 
 /** The part of the standard `AbortSignal` that `exec` reads (the SDK carries no DOM types): pass a real `AbortSignal`. */
@@ -195,14 +227,45 @@ export interface WriteOpts {
   mode?: number;
   atomic?: boolean;
 }
+export type FsEntryType = "file" | "dir" | "symlink" | "other";
+/** One entry of a directory. A symlink is reported as itself (`symlink`), not as what it points to. */
+export interface FsEntry {
+  name: string;
+  type: FsEntryType;
+}
+export interface FsStat {
+  /** Bytes. */
+  size: number;
+  isDir: boolean;
+  /** Permission bits only (`0o644`). */
+  mode: number;
+  /** Last modification, ms since epoch. */
+  mtimeMs: number;
+}
+export interface FsSpace {
+  totalBytes: number;
+  /** What a process that is not root may still write (the `Avail` of `df`). */
+  availableBytes: number;
+}
 export interface ModuleFs {
   read(path: string): Promise<string>;
   /** `mode` is the file's permission bits (`0o600`): the file never exists with wider ones, not even for an instant. `atomic` writes a temp file beside it and renames it over `path`, so a reader sees the old file or the whole new one. */
   write(path: string, data: string, opts?: WriteOpts): Promise<void>;
   exists(path: string): Promise<boolean>;
+  /** Names in a directory, sorted. */
   list(path: string): Promise<string[]>;
-  /** Deletes a file (no error when it is missing). Needs `rw:`. */
-  remove(path: string): Promise<void>;
+  /** Like `list`, with the type of each entry (a file, a directory, a symlink), sorted by name. */
+  entries(path: string): Promise<FsEntry[]>;
+  /** Size, kind, permission bits and modification time of `path`, or `undefined` when it does not exist. */
+  stat(path: string): Promise<FsStat | undefined>;
+  /** Disk space `path` uses, in bytes, like `du -s`: a directory is summed recursively, symlinks are not followed, a hard link counts once, and an entry that vanishes or cannot be read is skipped. `0` when `path` does not exist. */
+  du(path: string): Promise<number>;
+  /** Total and available space of the filesystem that holds `path` (or, when `path` does not exist yet, its nearest existing parent): `df` without a process. */
+  free(path: string): Promise<FsSpace>;
+  /** Creates the directory and its parents. `mode` (`0o700`) is set on the directory it creates, whatever the umask says; a directory that exists is left as it is. Needs `rw:`. */
+  mkdir(path: string, opts?: { mode?: number }): Promise<void>;
+  /** Deletes a file (no error when it is missing). With `recursive` it deletes a directory and everything in it. Needs `rw:`; refuses `/` and a path outside the `rw:` prefixes. */
+  remove(path: string, opts?: { recursive?: boolean }): Promise<void>;
   /** One write call with O_APPEND (file mode 0644 when created): concurrent appenders never interleave a line. Needs `rw:`. */
   append(path: string, text: string): Promise<void>;
 }
@@ -244,9 +307,12 @@ export interface Store {
 /** Cross-module read: ctx.query("module.name", ...args). */
 export type QueryFn = (name: string, ...args: unknown[]) => unknown | Promise<unknown>;
 
+/** What `ReadCtx.fs` keeps of `ModuleFs`: the methods that only look. */
+export type ReadFsMethod = "read" | "exists" | "list" | "entries" | "stat" | "du" | "free";
+
 /**
- * Context of `prove()`, query functions and widget `data()`: READ ONLY. `store` has only `get`; `fs` has only `read`,
- * `exists` and `list` (no `write`, `append` or `remove`). `exec` follows `permissions.exec`, with the same timeout, and each
+ * Context of `prove()`, query functions and widget `data()`: READ ONLY. `store` has only `get`; `fs` has only the reads
+ * (`read`, `exists`, `list`, `entries`, `stat`, `du`, `free`; no `write`, `append`, `mkdir` or `remove`). `exec` follows `permissions.exec`, with the same timeout, and each
  * call is logged. It cannot be made read-only by the host: run probes there (status, is-active, --version), never anything
  * that changes the system. Same trust model as commands.
  */
@@ -262,7 +328,7 @@ export interface ReadCtx {
   strategy: StrategyKit;
   /** Same as `CommandCtx.isRoot`. */
   isRoot: boolean;
-  fs: Pick<ModuleFs, "read" | "exists" | "list">;
+  fs: Pick<ModuleFs, ReadFsMethod>;
   jobs: Pick<Jobs, "status" | "list" | "log">;
   phases: Pick<Phases, "state">;
 }

@@ -1,7 +1,8 @@
 // A fake machine for module tests: the seam that lets a command, a proof or a query run without touching the real system.
 // `fakeCommandCtx` builds the same `ctx` a command gets (shell and phases included) over a fake exec, fs and store, so a test
 // calls `command.run(ctx)` and reads what was printed, run and written. Nothing real runs and nothing real is written.
-import type { AbortSignalLike, CommandCtx, ExecOpts, ExecResult, Logger, ModuleFs, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
+import type { AbortSignalLike, CommandCtx, ExecOpts, ExecResult, FsSpace, Logger, ModuleFs, ModuleNet, NetInit, NetResponse, NetUploadInit, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
+import { fakeFs, type FakeFs } from "./fake-fs.ts";
 import { argGetters, createPhases, createReadShell, createShell, errorsKit, packagesKit, phasesKit, proofKit, strategyKit } from "@pvx/core";
 
 export interface Call {
@@ -16,13 +17,30 @@ export interface Reply extends Partial<ExecResult> {
 /** Answers a call, or returns undefined to let the next rule try. */
 export type Rule = (call: Call) => Reply | undefined;
 
-export type FakeFs = ModuleFs & { files: Map<string, string>; modes: Map<string, number> };
+/** One request a module made through `ctx.net`: `fetch` fills `init`, `upload` fills `upload`. */
+export interface NetCall {
+  url: string;
+  init?: NetInit;
+  upload?: NetUploadInit;
+}
+/** What a fake server answers; `body` is sent as text (an object as JSON). */
+export interface NetReply {
+  status: number;
+  body?: unknown;
+}
+/** Answers a request, or returns undefined to let the next rule try. No rule answering means the network is down. */
+export type NetRule = (call: NetCall) => NetReply | undefined;
+
 export type FakeStore = Store & { data: Record<string, unknown> };
 
 export interface FakeSystemOptions {
   rules?: Rule[];
   files?: Record<string, string>;
   store?: Record<string, unknown>;
+  /** Answers `ctx.net.fetch` and `ctx.net.upload`, first match wins; with none, every request fails ("rede indisponível no teste"). */
+  netRules?: NetRule[];
+  /** What `fs.free` answers (default: roomy). A test moves `system.fs.space` later to fill the disk. */
+  space?: Partial<FsSpace>;
   /** `ctx.session.sshClient` of the contexts built over this system. Default: none. */
   sshClient?: string;
   /** The time of the system: `phases` stamps with it, and a test moves it by changing `now`. Default: the real clock. */
@@ -35,6 +53,9 @@ export interface FakeSystem {
   exec: CommandCtx["exec"];
   calls: Call[];
   fs: FakeFs;
+  /** `ctx.net` over `netRules`; `netCalls` records every request. */
+  net: ModuleNet;
+  netCalls: NetCall[];
   store: FakeStore;
   session: SessionInfo;
   isRoot: boolean;
@@ -47,28 +68,6 @@ export interface FakeSystem {
 }
 
 export const callLine = (call: Call): string => `${call.cmd} ${call.args.join(" ")}`.trim();
-
-export function fakeFs(initial: Record<string, string> = {}): FakeFs {
-  const files = new Map(Object.entries(initial));
-  const modes = new Map<string, number>();
-  return {
-    files,
-    modes,
-    read: async (path) => {
-      const text = files.get(path);
-      if (text === undefined) throw new Error(`sem arquivo ${path}`);
-      return text;
-    },
-    async write(path, data, opts) {
-      files.set(path, data);
-      if (opts?.mode !== undefined) modes.set(path, opts.mode);
-    },
-    exists: async (path) => files.has(path),
-    list: async () => [],
-    remove: async (path) => void files.delete(path),
-    append: async (path, text) => void files.set(path, (files.get(path) ?? "") + text),
-  };
-}
 
 export function memStore(initial: Record<string, unknown> = {}): FakeStore {
   const data: Record<string, unknown> = structuredClone(initial);
@@ -112,12 +111,16 @@ export function fakeSystem(options: FakeSystemOptions = {}): FakeSystem {
     calls.push(call);
     const reply = replyTo(rules, call);
     streamLines(reply, opts);
-    return resultOf(reply);
+    return withBuffering(resultOf(reply), opts);
   };
+  const fs = fakeFs(options.files, options.space);
+  const netCalls: NetCall[] = [];
   return {
     exec,
     calls,
-    fs: fakeFs(options.files),
+    fs,
+    net: fakeNet(options.netRules ?? [], netCalls, fs),
+    netCalls,
     store: memStore(options.store),
     session: { sshClient: options.sshClient },
     isRoot: options.isRoot ?? true,
@@ -127,17 +130,53 @@ export function fakeSystem(options: FakeSystemOptions = {}): FakeSystem {
   };
 }
 
+/** Like the real exec: `buffer: false` keeps `stdout` and `stderr` of the result empty (the lines already went to `onLine`). A probe that forgets `buffer: true` then fails here as it does on a machine. */
+function withBuffering(result: ExecResult, opts: ExecOpts | undefined): ExecResult {
+  if (opts?.buffer === false) return { ...result, stdout: "", stderr: "" };
+  return result;
+}
+
 /** A reply that gave `lines` but no `stdout` still has the lines as stdout. */
 function resultOf(reply: Reply): ExecResult {
   return { code: reply.code ?? 0, stdout: reply.stdout ?? (reply.lines ?? []).join("\n"), stderr: reply.stderr ?? "" };
 }
 
 const quietLog: Logger = { debug() {}, info() {}, warn() {}, error() {} };
-const unavailableNet: CommandCtx["net"] = {
-  fetch: async () => {
-    throw new Error("rede indisponível no teste");
-  },
-};
+
+function answerOf(reply: NetReply): NetResponse {
+  const text = typeof reply.body === "string" ? reply.body : JSON.stringify(reply.body ?? {});
+  return { status: reply.status, ok: reply.status >= 200 && reply.status < 300, text: async () => text, json: async () => JSON.parse(text) };
+}
+
+function replyToRequest(rules: NetRule[], call: NetCall): NetResponse {
+  for (const rule of rules) {
+    const reply = rule(call);
+    if (reply) return answerOf(reply);
+  }
+  throw new Error("rede indisponível no teste");
+}
+
+/** Like the real `upload`: the file must be there. Its bytes are never read: the test sees the call, not the multipart. */
+async function requireFile(fs: ModuleFs, path: string): Promise<void> {
+  const stat = await fs.stat(path);
+  if (!stat || stat.isDir) throw new Error(`net: ${path} não é um arquivo que dê para enviar`);
+}
+
+function fakeNet(rules: NetRule[], calls: NetCall[], fs: ModuleFs): ModuleNet {
+  return {
+    async fetch(url, init) {
+      const call: NetCall = { url, init };
+      calls.push(call);
+      return replyToRequest(rules, call);
+    },
+    async upload(url, upload) {
+      await requireFile(fs, upload.file);
+      const call: NetCall = { url, upload };
+      calls.push(call);
+      return replyToRequest(rules, call);
+    },
+  };
+}
 const noJobs: CommandCtx["jobs"] = {
   start: async () => {},
   stop: async () => {},
@@ -179,7 +218,7 @@ export function fakeCommandCtx(system: FakeSystem, options: FakeCommandOptions =
     isRoot: system.isRoot,
     signal,
     phases: createPhases(system.store, out, system.now),
-    net: unavailableNet,
+    net: system.net,
     fs: system.fs,
     jobs: noJobs,
     jobLog,

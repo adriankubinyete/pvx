@@ -1,6 +1,6 @@
 // Runs a module's REAL factory on a fake machine, for the tests that go through the host (`runSession`, `renderPage`): the loader
 // imports the module as always, and every `exec`, `shell`, `fs` and `isRoot` its commands, proofs, queries and widgets get comes from a `FakeSystem`.
-import type { CapabilityDef, CommandCtx, CommandDef, ModuleDef, ModuleFactory, ModuleFs, ModuleQuery, ReadCtx, WidgetDef } from "@pvx/sdk";
+import type { CapabilityDef, CommandCtx, CommandDef, ModuleDef, ModuleFactory, ModuleFs, ModuleQuery, ReadCtx, ReadFsMethod, WidgetDef } from "@pvx/sdk";
 import { createReadShell, createShell } from "@pvx/core";
 import type { FakeSystem } from "./fake-system.ts";
 
@@ -9,24 +9,36 @@ export interface FakeMachineOptions {
   real?: (path: string) => boolean;
 }
 
-type ReadFs = Pick<ModuleFs, "read" | "exists" | "list">;
+type ReadFs = Pick<ModuleFs, ReadFsMethod>;
 
-const readFsOf = (system: FakeSystem, real: ReadFs, isReal: (path: string) => boolean): ReadFs => ({
-  read: (path) => (isReal(path) ? real.read(path) : system.fs.read(path)),
-  exists: (path) => (isReal(path) ? real.exists(path) : system.fs.exists(path)),
-  list: (path) => system.fs.list(path),
-});
+/** The fake fs, except for the paths that stay real (the module's state dir under the temp `PVX_HOME`). */
+const readFsOf = (system: FakeSystem, real: ReadFs, isReal: (path: string) => boolean): ReadFs => {
+  const target = (path: string): ReadFs => (isReal(path) ? real : system.fs);
+  return {
+    read: (path) => target(path).read(path),
+    exists: (path) => target(path).exists(path),
+    list: (path) => target(path).list(path),
+    entries: (path) => target(path).entries(path),
+    stat: (path) => target(path).stat(path),
+    du: (path) => target(path).du(path),
+    free: (path) => target(path).free(path),
+  };
+};
 
-const commandFsOf = (system: FakeSystem, real: ModuleFs, isReal: (path: string) => boolean): ModuleFs => ({
-  ...readFsOf(system, real, isReal),
-  write: (path, data, opts) => (isReal(path) ? real.write(path, data, opts) : system.fs.write(path, data, opts)),
-  remove: (path) => (isReal(path) ? real.remove(path) : system.fs.remove(path)),
-  append: (path, text) => (isReal(path) ? real.append(path, text) : system.fs.append(path, text)),
-});
+const commandFsOf = (system: FakeSystem, real: ModuleFs, isReal: (path: string) => boolean): ModuleFs => {
+  const target = (path: string): ModuleFs => (isReal(path) ? real : system.fs);
+  return {
+    ...readFsOf(system, real, isReal),
+    write: (path, data, opts) => target(path).write(path, data, opts),
+    mkdir: (path, opts) => target(path).mkdir(path, opts),
+    remove: (path, opts) => target(path).remove(path, opts),
+    append: (path, text) => target(path).append(path, text),
+  };
+};
 
 function commandOnMachine(ctx: CommandCtx, system: FakeSystem, isReal: (path: string) => boolean): CommandCtx {
   const shell = createShell(system.exec, { jobLog: ctx.jobLog, signal: ctx.signal });
-  return { ...ctx, exec: system.exec, shell, isRoot: system.isRoot, fs: commandFsOf(system, ctx.fs, isReal) };
+  return { ...ctx, exec: system.exec, shell, isRoot: system.isRoot, net: system.net, fs: commandFsOf(system, ctx.fs, isReal) };
 }
 
 function readOnMachine(ctx: ReadCtx, system: FakeSystem, isReal: (path: string) => boolean): ReadCtx {

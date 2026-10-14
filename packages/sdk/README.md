@@ -522,11 +522,19 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | API | Regra |
 | --- | --- |
 | `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs, onLine, signal, buffer })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão) e devolve `{ code, stdout, stderr }`. Veja Streaming e cancelamento. |
-| `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. |
+| `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. `init`: `method`, `headers`, `body` (texto ou `Uint8Array`), `bodyFile` (um arquivo lido do disco aos poucos, com o tamanho no `Content-Length`; o caminho precisa de leitura em `permissions.fs`; `body` e `bodyFile` juntos dão erro), `signal` e `timeoutMs` (30 s se omitido; vale também enquanto se lê a resposta). |
+| `ctx.net.upload(url, { file, field?, fields?, filename?, headers?, method?, signal?, timeoutMs? })` | As mesmas regras de host. Envia `file` como `multipart/form-data` **sem carregá-lo na memória** (um arquivo de vários GB custa alguns MB): os `fields` de texto vão primeiro, depois a parte do arquivo (`field`, padrão `file`; `filename`, padrão o nome do arquivo), e o tamanho total vai no `Content-Length`. O caminho precisa de leitura em `permissions.fs`; algo que não é um arquivo regular dá erro. `Content-Type` e `Content-Length` em `headers` são trocados pelos do envio. Um envio grande precisa de `timeoutMs` explícito. |
 | `ctx.fs.read / write / exists / list` | O caminho (resolvido, com symlinks) fica sob um prefixo de `permissions.fs`. O prefixo `rw:` libera escrita; sem ele, só leitura. O diretório de estado do próprio módulo é sempre permitido. |
 | `ctx.fs.write(path, texto, { mode, atomic })` | Mesma regra de `rw:`. `mode` (`0o600`) trava o arquivo antes de o conteúdo entrar, mesmo sobre um arquivo antigo mais aberto; `atomic` grava um temporário ao lado e o renomeia sobre `path`, então quem lê vê o arquivo antigo ou o novo inteiro. Sem opções, a escrita é a de sempre. |
-| `ctx.fs.remove(path)` | Mesma regra de `rw:`. Apaga o arquivo; não erra se ele não existe. |
+| `ctx.fs.entries(path)` | Leitura. Como `list`, mas devolve `{ name, type }[]` (`file`, `dir`, `symlink`, `other`), em ordem de nome. Um symlink aparece como `symlink`, não como o alvo. |
+| `ctx.fs.stat(path)` | Leitura. `{ size, isDir, mode, mtimeMs }` (`mode` só com os bits de permissão), ou `undefined` se não existe. |
+| `ctx.fs.du(path)` | Leitura. Bytes que `path` ocupa em disco, como `du -s`: soma uma pasta por inteiro, não segue symlink, conta um hard link uma vez e pula o que sumiu ou não dá para ler. `0` se não existe. Roda sem travar a TUI. |
+| `ctx.fs.free(path)` | Leitura. `{ totalBytes, availableBytes }` do sistema de arquivos de `path` (`availableBytes` é o que um usuário comum ainda grava, o `Avail` do `df`). Se `path` ainda não existe, vale o primeiro pai que existe: dá para medir o destino antes de criá-lo. |
+| `ctx.fs.mkdir(path, { mode? })` | Mesma regra de `rw:`. Cria a pasta e os pais. `mode` (`0o700`) vale na pasta criada, seja qual for o umask; uma pasta que já existe fica como está. |
+| `ctx.fs.remove(path, { recursive? })` | Mesma regra de `rw:`. Apaga o arquivo (não erra se ele não existe); com `recursive`, uma pasta e tudo dentro dela. Recusa `/` mesmo que o manifest tenha `rw:/`, e um caminho fora dos prefixos `rw:` (ou sob um prefixo só de leitura). Apagar um symlink apaga o link, nunca o alvo. Sem `recursive`, uma pasta dá erro. |
 | `ctx.fs.append(path, texto)` | Mesma regra de `rw:`. Uma única chamada de escrita com `O_APPEND` (arquivo criado com modo 0644): dois processos acrescentando linhas ao mesmo arquivo nunca as misturam. |
+
+**Cabeçalhos nunca vão para o log.** O host registra uma violação de permissão (só `host:porta`, nunca a URL completa nem os cabeçalhos) e não registra pedidos: um `Authorization` em `headers` só vai para a rede. Os erros de `ctx.net` não repetem cabeçalhos. Mesmo assim, o módulo não deve pôr o token no texto de um erro que ele mesmo escreve.
 
 `$PVX_HOME` (dados da central) e `$PVX_PROFILED_DIR` (`/etc/profile.d`, onde ficam ganchos de login) valem em `permissions.fs` e nos caminhos de `ctx.fs` (o host os expande). Fora de um comando, `sdk.fs` segue as mesmas regras (use-o só no que não tem `ReadCtx`).
 
@@ -535,7 +543,7 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | Campo | Em `ReadCtx` |
 | --- | --- |
 | `store` | Só `get`: não existe `set` nem `delete`. |
-| `fs` | Só `read`, `exists` e `list`: não existem `write`, `append` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
+| `fs` | Só as leituras (`read`, `exists`, `list`, `entries`, `stat`, `du`, `free`): não existem `write`, `append`, `mkdir` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
 | `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo. |
 | `jobs` | Só `status`, `list` e `log` (veja Jobs em segundo plano). |
 | `shell` | Só `run` e `ok`, sobre o `exec` acima (mesma lista, mesmo log): uma sonda relata, não lança, então não existe `must`. Veja `ctx.shell`. |
@@ -614,6 +622,48 @@ const factory: ModuleFactory = () => ({
         await ctx.fs.write("/var/lib/meu-modulo/ultimo", stdout);
         const res = await ctx.net.fetch("https://example.com/ping");
         ctx.out.info(`ping: ${res.status}`);
+      },
+    },
+  },
+});
+export default factory;
+```
+
+Um comando que mede o espaço, envia o arquivo mais novo sem carregá-lo na memória e apaga a pasta velha:
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "net": ["uoe.example.com"], "fs": ["rw:/var/backups/meu-modulo"] }
+const factory: ModuleFactory = () => ({
+  commands: {
+    envia: {
+      help: "Envia o arquivo mais novo e apaga a pasta velha",
+      async run(ctx) {
+        const dir = "/var/backups/meu-modulo";
+        await ctx.fs.mkdir(dir, { mode: 0o700 });
+        const { availableBytes } = await ctx.fs.free(dir);
+        const files = (await ctx.fs.entries(dir)).filter((entry) => entry.type === "file");
+        const newest = files.at(-1);
+        if (!newest) {
+          ctx.out.info(`nada a enviar (${availableBytes} bytes livres, ${await ctx.fs.du(dir)} em uso)`);
+          return;
+        }
+        const token = ctx.store.get<string>("token") ?? "";
+        const reply = await ctx.net.upload("https://uoe.example.com/v1/upload", {
+          file: `${dir}/${newest.name}`,
+          fields: { path: "/clientes/x" },
+          headers: { authorization: `Bearer ${token}` },
+          signal: ctx.signal,
+          timeoutMs: 2 * 60 * 60_000,
+        });
+        if (!reply.ok) {
+          ctx.out.error(`envio recusado (${reply.status})`);
+          return;
+        }
+        await ctx.fs.remove(`${dir}/velho`, { recursive: true });
+        ctx.out.success(`${newest.name} enviado`);
       },
     },
   },
@@ -1001,7 +1051,7 @@ test("sequência e página no mesmo estado", async () => {
 });
 ```
 
-**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, sshClient?, clock?, isRoot? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; `clock: { now }` é a hora do sistema, que o `phases` usa e que o teste move mudando `now` (padrão: o relógio real); `isRoot` vira o `ctx.isRoot` (padrão `true`); um `exec` que grava as chamadas, transmite `lines` (stdout) e as linhas de `stderr` ao `onLine`, como o `exec` real (então entram no `tail` do `shell`), e responde pelas regras `(chamada) => { code?, stdout?, stderr?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args?, signal? })` (`signal` é o `ctx.signal`) (o `ctx` de um comando, com `shell`, `strategy` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas, com `shell.run`/`shell.ok` e `strategy`) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages`, `strategy` e `errors` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
+**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, netRules?, space?, sshClient?, clock?, isRoot? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; `clock: { now }` é a hora do sistema, que o `phases` usa e que o teste move mudando `now` (padrão: o relógio real); `isRoot` vira o `ctx.isRoot` (padrão `true`); um `exec` que grava as chamadas, transmite `lines` (stdout) e as linhas de `stderr` ao `onLine`, como o `exec` real (então entram no `tail` do `shell`), respeita `buffer: false` como o real (o resultado volta com `stdout` e `stderr` vazios, só o `onLine` vê as linhas: uma sonda que esquece `buffer: true` falha no teste como falharia na central) e responde pelas regras `(chamada) => { code?, stdout?, stderr?, lines? } | undefined`, um `fs` e um `store` em memória, e um `net`), `fakeCommandCtx(system, { args?, signal? })` (`signal` é o `ctx.signal`) (o `ctx` de um comando, com `shell`, `strategy` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas, com `shell.run`/`shell.ok` e `strategy`) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages`, `strategy` e `errors` reais). O `fs` falso trata os `files` como uma árvore: uma pasta existe porque há um arquivo debaixo dela ou porque o `mkdir` a criou (`system.fs.dirs`). `list` e `entries` (com o tipo `file` ou `dir`) respondem sobre essa árvore e lançam `ENOENT` se a pasta não existe, como o real; `stat` dá `size` (bytes do texto), `isDir`, `mode` (`system.fs.modes`, padrão 0o644 e 0o755) e `mtimeMs` (`system.fs.mtimes`, padrão 0); `du` soma os bytes dos arquivos sob o caminho; `free` responde `system.fs.space` (`{ totalBytes, availableBytes }`, folgado por padrão: o teste muda `availableBytes` para simular o disco cheio); `remove` de uma pasta exige `recursive` e `/` é recusado. As permissões do manifest não são simuladas. O `net` falso responde pelas `netRules` `(chamada) => { status, body? } | undefined` (a `chamada` traz `url` e `init` de um `fetch`, ou `upload` de um `ctx.net.upload`), grava tudo em `system.netCalls` e, sem regra que responda, lança "rede indisponível no teste"; o `upload` falso exige que o arquivo exista no `fs` falso e nunca lê os bytes. O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -1017,7 +1067,7 @@ test("aplicar roda o nft e grava o marcador com modo 0600", async () => {
 });
 ```
 
-**A fábrica real numa máquina falsa: `onFakeMachine(fábrica, system, { real? })`.** Para os testes que passam pelo host (`runSession`, `renderPage`) sem tocar a máquina, o módulo de teste (um diretório com `pvx-module.json`) exporta `onFakeMachine(fábrica, system)`: o loader importa a fábrica real como sempre, e todo comando, prova, consulta e widget recebe o `exec`, o `shell`, o `fs` e o `isRoot` do `FakeSystem`. `real(caminho)` devolve `true` para o que continua real (o diretório de estado do módulo, para o teste ler o que ele gravou). O teste importa o `system` do módulo de teste para armar regras e ler `system.lines()`, `system.fs.files` e `system.isRoot` (mude-o entre as chamadas).
+**A fábrica real numa máquina falsa: `onFakeMachine(fábrica, system, { real? })`.** Para os testes que passam pelo host (`runSession`, `renderPage`) sem tocar a máquina, o módulo de teste (um diretório com `pvx-module.json`) exporta `onFakeMachine(fábrica, system)`: o loader importa a fábrica real como sempre, e todo comando, prova, consulta e widget recebe o `exec`, o `shell`, o `fs` e o `isRoot` do `FakeSystem` (o comando recebe também o `net`). `real(caminho)` devolve `true` para o que continua real (o diretório de estado do módulo, para o teste ler o que ele gravou). O teste importa o `system` do módulo de teste para armar regras e ler `system.lines()`, `system.fs.files` e `system.isRoot` (mude-o entre as chamadas).
 
 ```ts
 // test/fixture/index.ts

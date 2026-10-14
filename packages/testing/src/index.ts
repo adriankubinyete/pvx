@@ -3,3 +3,4 @@ export { renderPage, runCommand, runSession, type RunCommandOpts, type Session }
 export { useFixtureModules } from "./fixtures.ts";
 export * from "./fake-system.ts";
 export { onFakeMachine, type FakeMachineOptions } from "./machine.ts";
+export * from "./fake-fs.ts";
