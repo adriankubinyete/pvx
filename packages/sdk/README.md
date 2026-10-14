@@ -1040,7 +1040,9 @@ sudo -E pvx modules link ~/src/meu-modulo
 sudo -E pvx meumodulo status
 ```
 
-Para testes use `@pvx/testing` (`runSession`), que não precisa de root.
+No repositório do pvx há um atalho sem root: `bun run dev:link ../meu-modulo` registra a pasta em `.dev/pvx` (o `PVX_HOME` do `bun dev`), valida o `pvx-module.json` e imprime id e caminho; depois rode `bun dev`. Sem argumento, `bun run dev:link` lista os módulos linkados; `bun run dev:unlink <id>` remove o link. É um script do repositório: o binário continua exigindo root e não tem atalho.
+
+Para testes use `@pvx/testing` (`runSession`), que não precisa de root. `renderPage` e `runSession` aceitam `sshClient` e `isRoot`, e valem também para os comandos que a página roda.
 
 ## O que um módulo nunca faz
 

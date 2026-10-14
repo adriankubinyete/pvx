@@ -61,12 +61,12 @@ export async function runCommand(moduleDir: string, line: string, opts: RunComma
   return { ok, exit, lines };
 }
 
-const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30, isRoot = true }: { cols?: number; rows?: number; isRoot?: boolean } = {}): Promise<TuiHarness> => {
+const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30, isRoot = true, sshClient }: { cols?: number; rows?: number; isRoot?: boolean; sshClient?: string } = {}): Promise<TuiHarness> => {
   const page = registry.pages.get(`${id}.${pageName}`);
   if (!page) throw new Error(`página "${pageName}" não existe em "${id}" (tem: ${[...registry.pages.keys()].join(", ") || "nenhuma"})`);
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const session = createSessionStore({
-    registry, makeLogger, isRoot, historyPath: join(pvxHome(), "tui-history"),
+    registry, makeLogger, isRoot, session: { sshClient }, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: HOST_VERSION, theme }, argv),
   });
   return renderTui(
@@ -93,5 +93,5 @@ export interface Session {
 /** Like `runCommand` and `renderPage`, but ONE temp `PVX_HOME` for several calls, so a test can run a sequence ("add", then "list") and then look at the page. */
 export async function runSession(moduleDir: string, { sshClient, isRoot }: { sshClient?: string; isRoot?: boolean } = {}): Promise<Session> {
   const { registry, id, home } = await loadOne(moduleDir, sshClient, isRoot);
-  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, isRoot, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, { isRoot, ...size }) };
+  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, isRoot, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, { isRoot, sshClient, ...size }) };
 }

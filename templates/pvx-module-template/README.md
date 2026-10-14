@@ -32,3 +32,14 @@ bun test
 ```
 
 `test/module.test.ts` usa `runSession` de `@pvx/testing` e o `fakeSdk` de `test/fake.ts`. Dentro do repositório do pvx o `@pvx/*` resolve pelo `tsconfig.json` da raiz; num repositório próprio, dependa de `@pvx/sdk` e `@pvx/testing`.
+
+## Desenvolver
+
+Dentro do repositório do pvx, ligue a pasta e abra a TUI (o módulo recarrega ao salvar):
+
+```sh
+bun run dev:link ../meu-modulo
+bun dev
+```
+
+`bun run dev:link` sem argumento lista os módulos linkados; `bun run dev:unlink <id>` remove o link.

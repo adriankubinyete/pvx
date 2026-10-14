@@ -16,7 +16,7 @@ export * from "./trust.ts";
 export * from "./dev.ts";
 export * from "./update.ts";
 export * from "./live.ts";
-export { audit, invalidateUpdateCache, type Result };
+export { audit, devLinks, invalidateUpdateCache, type Result };
 export { GitError, checkUrl } from "./git.ts";
 export { analyze };
 export type { Hit, ReviewFile, CommandSummary, PermissionSummary };

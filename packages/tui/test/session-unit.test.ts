@@ -118,3 +118,13 @@ test("act hands `choose` to the body: a choice pending resolves with the answere
   expect(picked).toBe(1);
   expect(store.getSnapshot().pending).toHaveLength(0);
 });
+
+test("the injected session reaches the commands the store runs", async () => {
+  const reg = createRegistry();
+  reg.register({ id: "m", version: "1", entry: "x" }, {
+    commands: { who: { help: "w", run: (ctx) => ctx.out.success(`from ${ctx.session.sshClient}`) } },
+  });
+  const store = createSessionStore({ registry: reg, makeLogger: () => ({ debug: noop, info: noop, warn: noop, error: noop }), historyPath: join(pvxHome(), "h3"), isRoot: true, session: { sshClient: "10.0.0.9 1 22" } });
+  await store.run("m who");
+  expect(store.blocks.at(-1)!.lines.map((line) => line.text)).toEqual(["from 10.0.0.9 1 22"]);
+});

@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Logger, OutLine } from "@pvx/sdk";
+import type { Logger, OutLine, SessionInfo } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
 import { interactiveProgram, spawnShell, type ShellRun } from "./shell.ts";
 import { auditCommand, execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
@@ -103,6 +103,8 @@ export interface SessionOpts {
   historyPath: string;
   /** Real uid 0 (strict root: injected so tests can pass true). */
   isRoot: boolean;
+  /** `ctx.session` of the commands the store runs. Default: the real host session (tests hand a fixed one). */
+  session?: SessionInfo;
   /** Runs the core commands (`plano`, `logs`...) that are not in the registry. */
   core?: (argv: string[]) => Promise<{ exit: number; lines: CoreLine[] }>;
   /** Limit of a `!cmd` host shell command. Default 5 minutes. */
@@ -110,7 +112,7 @@ export interface SessionOpts {
 }
 
 export function createSessionStore(opts: SessionOpts): SessionApi {
-  const { registry, makeLogger, historyPath, isRoot, core, shellTimeoutMs = SHELL_TIMEOUT_MS } = opts;
+  const { registry, makeLogger, historyPath, isRoot, session, core, shellTimeoutMs = SHELL_TIMEOUT_MS } = opts;
   const shells = new Map<number, ShellRun>();
   let state: SessionState = { blocks: [], history: loadHistory(historyPath), pending: [] };
   const subs = new Set<() => void>();
@@ -169,6 +171,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
               makeLogger,
               confirmed,
               isRoot,
+              session,
               env: ro.secrets ? { ...process.env, ...secretEnv(ro.secrets) } : undefined,
               readStdin: async () => ro.stdin ?? "",
               promptSecret: (name) => ask<string | undefined>({ kind: "secret", name }),

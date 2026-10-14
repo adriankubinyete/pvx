@@ -19,6 +19,8 @@
     "build:windows-amd64": "sh scripts/build.sh windows-amd64",
     "build:all": "bun run build:linux-amd64 && bun run build:linux-arm64 && bun run build:darwin-arm64 && bun run build:windows-amd64",
     "build:deps": "bun install --os='*' --cpu='*'",
+    "dev:link": "bun scripts/dev-link.ts link",
+    "dev:unlink": "bun scripts/dev-link.ts unlink",
     "release": "sh scripts/release.sh"
   },
   "devDependencies": {

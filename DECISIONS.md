@@ -94,6 +94,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `List actionOnClick` (clique só seleciona, `enter` ou segundo clique abre), `useNudge` com tons `warn` e `error`, `stderr` do falso transmitido ao `tail` → [SDK: lacunas achadas ao migrar o firewall](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-firewall)
 - `phase.progress(fração)` e `sdk.phases` (`progress`, `finished`), `useRun` com `trailing`, `loading` e tempos vivos, `ctx.shell.echoing`, `sdk.errors.stepError`, `ctx.isRoot`, `ctx.signal`, `fakeSystem` com `clock` e `isRoot` e `onFakeMachine` no `@pvx/testing` → [SDK: lacunas achadas ao migrar o issabel](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-issabel)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
+- `bun run dev:link <pasta>` (script do repo, não do binário) liga um módulo local em `.dev/pvx` pela mesma lógica do `modules link`, sem root; `renderPage` e `runSession` repassam `sshClient` e `isRoot` também aos comandos que uma página roda → [Dev link e sessão nos comandos de página](#2026-10-14--dev-link-e-sessão-nos-comandos-de-página)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1224,3 +1225,17 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** A migração do issabel manteve código local para cada item: a barra parada na fase longa de pacotes (8% em vez de 45%), `isInstalled`, um tique de 1 s na página, `withJobLog`, `stepError`, `process.getuid` e o invólucro `onFakeMachine`.
 
 **Limite:** `echoing` não adivinha segredo no argv: sem `display`, o argv aparece (e só o mascaramento de `secrets` do job o protege). `phase.progress` só persiste o último valor gravado: o intervalo entre duas escritas não é visto por quem lê o `store`. Nada foi pulado.
+
+## 2026-10-14 — Dev link e sessão nos comandos de página
+
+**Status:** vigente.
+
+**Decisão:** `bun run dev:link <pasta>` registra um módulo local em `.dev/pvx`, e `createSessionStore` repassa `session` ao `execute`.
+
+- **`dev:link` e `dev:unlink`.** `scripts/dev-link.ts` chama `linkModule` e `removeModule` do núcleo: o formato do registro (symlink em `usermodules/` e `modules.json`) é o mesmo do `modules link`. Sem argumento, lista os módulos linkados. Valida a pasta e o `pvx-module.json` e imprime id e caminho.
+- **Sem root, só no script.** É ferramenta de desenvolvimento, não o binário. O binário não ganhou variável nem flag: `modules link` continua exigindo root e a confiança não muda.
+- **Sessão nos comandos de página.** `SessionOpts.session` chega ao `execute`; `renderPage` e `runSession` de `@pvx/testing` passam `sshClient` (e `isRoot`, que já chegava) à store. Um módulo não precisa mais definir `SSH_CLIENT` no processo.
+
+**Motivo:** Desenvolver contra uma pasta local (`../meu-modulo`) pedia `sudo -E` e um `PVX_HOME` à mão; e o teste de página lia a sessão real da máquina nos comandos.
+
+**Limite:** `dev:link` só mexe em `.dev/pvx`; para outro `PVX_HOME` use `modules link` com root.
