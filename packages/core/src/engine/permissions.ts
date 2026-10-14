@@ -7,7 +7,9 @@ import { phasesKey } from "./phases.ts";
 import { moduleStateDir, profiledDir, pvxHome } from "./paths.ts";
 import { runProgram } from "./exec.ts";
 import { createJobs } from "./jobs.ts";
+import { createReadShell } from "./shell.ts";
 import { createStore } from "./store.ts";
+import { strategyKit } from "./strategy.ts";
 
 type Perms = NonNullable<Manifest["permissions"]>;
 type Granted = Pick<CommandCtx, "exec" | "net" | "fs">;
@@ -118,15 +120,18 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
 export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: (name: string) => Logger, query: QueryFn, session: SessionInfo = hostSession): ReadCtx {
   const log = makeLogger(id);
   const g = createGranted(id, perms, log, makeLogger("core"));
+  const exec: ReadCtx["exec"] = (cmd, args, o) => {
+    log.info(`exec ${[cmd, ...(args ?? [])].join(" ")}`);
+    return g.exec(cmd, args, o);
+  };
   return {
     log,
     query,
     session,
     store: { get: createStore(id).get },
-    exec(cmd, args, o) {
-      log.info(`exec ${[cmd, ...(args ?? [])].join(" ")}`);
-      return g.exec(cmd, args, o);
-    },
+    exec,
+    shell: createReadShell(exec),
+    strategy: strategyKit,
     fs: { read: g.fs.read, exists: g.fs.exists, list: g.fs.list },
     jobs: (({ status, list, log }) => ({ status, list, log }))(createJobs(id)),
     phases: { state: (name) => createStore(id).get<PhasesState>(phasesKey(name)) },

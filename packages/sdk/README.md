@@ -139,7 +139,7 @@ Uma capacidade é uma condição que o módulo sabe provar e, se possível, cons
 | --- | --- |
 | `id` | `"<módulo>.<nome>"`, estável: é a chave dos perfis. |
 | `title`, `goal` | O que é e o que se quer. |
-| `prove(ctx)` | **Somente leitura.** Devolve `{ level: "ok" \| "warn" \| "error", text, evidence?, fix? }`. Recebe o contexto de só leitura (`ReadCtx`, veja Permissões): `log`, `store.get`, `query`, `exec` e `fs` de leitura. |
+| `prove(ctx)` | **Somente leitura.** Devolve `{ level: "ok" \| "warn" \| "error", text, evidence?, fix? }`. Recebe o contexto de só leitura (`ReadCtx`, veja Permissões): `log`, `store.get`, `query`, `exec`, `shell` (`run` e `ok`), `strategy` e `fs` de leitura. |
 | `fix` | Comando (linha completa, com o módulo) que conserta. Um `fix` devolvido por `prove` vale mais que o da definição. |
 | `affects` | Capacidades a provar de novo depois do conserto. |
 | `needs` | Capacidades que precisam estar `ok` antes; sem isso, o conserto espera. |
@@ -286,7 +286,7 @@ export default (sdk: Sdk) => {
 
 **`Panel shrink`.** Um `Panel` com `shrink` cede altura quando a página é baixa e corta o conteúdo, em vez de empurrar a barra de abas e o rodapé do host para fora da tela. Use-o no painel que carrega a lista, junto de `maxRows`.
 
-**Ação da linha (`onAction`).** `onAction(id)` é a ação padrão de uma linha: `enter` na linha selecionada (o rodapé mostra `enter <actionLabel>`, padrão "abrir") e o clique numa linha (depois do `onPress`). Ela abre o formulário da linha: um `Fields` com os campos editáveis e `onDelete` para o `remover`, que o framework confirma (UI.md, seção 4). Não mapeie também o `enter` da mesma lista na página: dispararia duas vezes.
+**Ação da linha (`onAction`).** `onAction(id)` é a ação padrão de uma linha: `enter` na linha selecionada (o rodapé mostra `enter <actionLabel>`, padrão "abrir") e o clique numa linha (depois do `onPress`). Ela abre o formulário da linha: um `Fields` com os campos editáveis e `onDelete` para o `remover`, que o framework confirma (UI.md, seção 4). Não mapeie também o `enter` da mesma lista na página: dispararia duas vezes. `actionOnClick` (padrão `true`) decide o clique: com `false`, um clique só seleciona (chama o `onPress`); `enter`, ou um clique na linha que já está selecionada, abre a ação. Use `false` quando abrir o formulário num clique solto seria agressivo (lista longa, ação destrutiva).
 
 <!-- test -->
 ```tsx
@@ -334,7 +334,7 @@ export default (sdk: Sdk) => {
 
 **`Notice`.** `Notice({ level, children })` é um bloco de resultado em linha, no formato do tema (`[✓]`, `[!]`, `[✗]`) e na cor do nível (`ok`, `warn`, `error`); o texto pode ter várias linhas. Só tokens do tema. Use-o para avisos que ficam na tela ("precisa aplicar", "a última aplicação foi revertida"); o `useNudge` é para o aviso que passa.
 
-**`useNudge(msg, "ok")`.** O segundo argumento `"ok"` mostra um sucesso no rodapé (`✓ msg`, cerca de 4 s); sem ele é o aviso curto de movimento inválido.
+**`useNudge(msg, tom)`.** O segundo argumento mostra um resultado no rodapé, com o glifo e a cor do tema, por cerca de 4 s: `"ok"` (`✓ msg`, cor de destaque), `"warn"` (`▲ msg`, cor de aviso) ou `"error"` (`✗ msg`, cor de erro). Sem ele é o aviso curto de movimento inválido.
 
 **`useQuery(...).refetch()`.** Lê a consulta de novo agora, mantendo os dados antigos até os novos chegarem; devolve uma promessa. Chame depois de uma ação que mudou o que a consulta lê (`await command.run(); await query.refetch()`). Se uma leitura já está em andamento, ela termina e uma nova roda em seguida (a primeira pode ser anterior à mudança).
 
@@ -538,6 +538,8 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | `fs` | Só `read`, `exists` e `list`: não existem `write`, `append` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
 | `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo. |
 | `jobs` | Só `status`, `list` e `log` (veja Jobs em segundo plano). |
+| `shell` | Só `run` e `ok`, sobre o `exec` acima (mesma lista, mesmo log): uma sonda relata, não lança, então não existe `must`. Veja `ctx.shell`. |
+| `strategy` | O mesmo `pick` de `sdk.strategy`. |
 | `phases` | Só `state` (veja Fases com retomada). |
 
 Capacidade, consulta e widget são **só leitura** por contrato. O `exec` não tem como ser só leitura por construção: neste contexto o módulo roda apenas sondas (`systemctl is-active`, `nft list ruleset`, `--version`) e nunca algo que mude o sistema. É o mesmo modelo de confiança dos comandos: a revisão humana do commit é a barreira.
@@ -629,11 +631,15 @@ export default factory;
 | `shell.must(cmd, args?, opts?)` | Como `run`, mas uma saída diferente de 0 lança um `StepError` (`name`, `command`, `code`, `output`): a causa e as linhas que importam da saída. |
 | `shell.ok(cmd, args?, opts?)` | `true` se a saída foi 0. |
 
+No `ReadCtx` (provas, consultas, widgets) `ctx.shell` só tem `run` e `ok`, sobre o `exec` de só leitura: a sonda não precisa de um `run` próprio.
+
 `opts` é o de `ctx.exec` mais `display` (o texto do comando no `StepError`, para quando o argv leva um segredo). O corredor de fases (`ctx.phases`) grava o `command`, o `code` e o `output` de um `StepError` na falha da fase.
 
 `store.update(chave, mudar)` lê o valor (`undefined` se faltar), aplica `mudar` e grava o resultado, que também devolve: `store.update<number>("contagem", (atual) => (atual ?? 0) + 1)`.
 
-`sdk.strategy.pick(estratégias, { setting, none })` escolhe o backend que o módulo dirige. Cada estratégia é `{ id, available() }`. Com `setting` ausente ou `"auto"` vale a primeira disponível, na ordem da lista (`auto: true`); se nenhuma está, devolve `{ error: none }`. Com um `setting` explícito vale esse `id` sem perguntar `available` (o módulo explica depois por que ele não roda); um `id` desconhecido é `{ error }`.
+`sdk.strategy.pick(estratégias, { setting, none })` escolhe o backend que o módulo dirige. Cada estratégia é `{ id, available() }`. Com `setting` ausente ou `"auto"` vale a primeira disponível, na ordem da lista (`auto: true`); se nenhuma está, devolve `{ error: none }`. Com um `setting` explícito vale esse `id` sem perguntar `available` (o módulo explica depois por que ele não roda); um `id` desconhecido é `{ error }`. O mesmo `pick` está em `ctx.strategy` (em `CommandCtx` e em `ReadCtx`): um comando ou uma prova que escolhe o backend o chama sem depender do `sdk` da fábrica.
+
+**Ler um `StepError`: `sdk.errors`.** Um módulo importa só tipos, então não tem o `isStepError` do host. `sdk.errors.isStepError(erro)` diz se o erro tem a forma de um `StepError` (o que `shell.must` lança) e estreita o tipo; `sdk.errors.describeFailure(erro)` devolve a mensagem e, para um `StepError`, as linhas úteis da saída, uma por linha, com recuo de dois espaços (qualquer outro erro dá só a mensagem). Use-o ao relatar uma falha: `ctx.out.error(sdk.errors.describeFailure(error))`. O host usa o mesmo texto quando um `StepError` escapa de um comando (`erro interno no comando: ...`).
 
 <!-- test -->
 ```ts
@@ -985,7 +991,7 @@ test("sequência e página no mesmo estado", async () => {
 });
 ```
 
-**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, sshClient? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; um `exec` que grava as chamadas e responde pelas regras `(chamada) => { code?, stdout?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args? })` (o `ctx` de um comando, com `shell` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages` e `strategy` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
+**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, sshClient? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; um `exec` que grava as chamadas, transmite `lines` (stdout) e as linhas de `stderr` ao `onLine`, como o `exec` real (então entram no `tail` do `shell`), e responde pelas regras `(chamada) => { code?, stdout?, stderr?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args? })` (o `ctx` de um comando, com `shell`, `strategy` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas, com `shell.run`/`shell.ok` e `strategy`) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages`, `strategy` e `errors` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
 
 ```ts
 import { expect, test } from "bun:test";

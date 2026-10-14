@@ -1,3 +1,4 @@
+import { errorsKit } from "./errors.ts";
 import { proofKit } from "./helpers.ts";
 import { packagesKit } from "./packages.ts";
 import { strategyKit } from "./strategy.ts";
@@ -35,7 +36,7 @@ export interface LoadOpts {
 /** What a factory gets: the module's own logger and a `fs` bound to its manifest permissions. */
 const sdkFor = (manifest: Manifest, opts: LoadOpts): Sdk => {
   const log = opts.makeLogger(manifest.id);
-  return { version: 1, log, proof: proofKit, packages: packagesKit, strategy: strategyKit, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
+  return { version: 1, log, proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
 };
 
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */

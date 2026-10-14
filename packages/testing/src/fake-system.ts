@@ -2,14 +2,14 @@
 // `fakeCommandCtx` builds the same `ctx` a command gets (shell and phases included) over a fake exec, fs and store, so a test
 // calls `command.run(ctx)` and reads what was printed, run and written. Nothing real runs and nothing real is written.
 import type { CommandCtx, ExecOpts, ExecResult, Logger, ModuleFs, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
-import { argGetters, createPhases, createShell, packagesKit, proofKit, strategyKit } from "@pvx/core";
+import { argGetters, createPhases, createReadShell, createShell, errorsKit, packagesKit, proofKit, strategyKit } from "@pvx/core";
 
 export interface Call {
   cmd: string;
   args: string[];
   stdin?: string;
 }
-/** What a fake program answers; `lines` are streamed to `onLine` and also become `stdout`. */
+/** What a fake program answers; `lines` are streamed to `onLine` and also become `stdout`; `stderr` is streamed line by line as well. */
 export interface Reply extends Partial<ExecResult> {
   lines?: string[];
 }
@@ -87,8 +87,14 @@ function replyTo(rules: Rule[], call: Call): Reply {
   return {};
 }
 
+const LINE_BREAK = /\r\n|\r|\n/;
+
+/** Like the real exec: stdout lines, then each non-empty line of `stderr`, reach `onLine` (and so the `shell` tail). */
 function streamLines(reply: Reply, opts: ExecOpts | undefined): void {
   for (const line of reply.lines ?? []) opts?.onLine?.(line, "stdout");
+  for (const line of (reply.stderr ?? "").split(LINE_BREAK)) {
+    if (line) opts?.onLine?.(line, "stderr");
+  }
 }
 
 export function fakeSystem(options: FakeSystemOptions = {}): FakeSystem {
@@ -156,6 +162,7 @@ export function fakeCommandCtx(system: FakeSystem, options: FakeCommandOptions =
     slots: { read: () => undefined },
     exec: system.exec,
     shell: createShell(system.exec),
+    strategy: strategyKit,
     phases: createPhases(system.store, out),
     net: unavailableNet,
     fs: system.fs,
@@ -174,6 +181,8 @@ export function fakeReadCtx(system: FakeSystem): ReadCtx {
     query: async () => undefined,
     session: system.session,
     exec: system.exec,
+    shell: createReadShell(system.exec),
+    strategy: strategyKit,
     fs: system.fs,
     jobs: noJobs,
     phases: createPhases(system.store),
@@ -182,5 +191,5 @@ export function fakeReadCtx(system: FakeSystem): ReadCtx {
 
 /** The `sdk` a factory receives when a test builds the module without the host. `ui` is empty: nothing here renders a page. */
 export function fakeSdk(fs: ModuleFs = fakeFs()): Sdk {
-  return { version: 1, log: quietLog, ui: {} as Sdk["ui"], proof: proofKit, packages: packagesKit, strategy: strategyKit, fs };
+  return { version: 1, log: quietLog, ui: {} as Sdk["ui"], proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, fs };
 }

@@ -51,6 +51,25 @@ test("clicking a row calls the row action", async () => {
   expect(h.frame()).toContain("aberta=b");
 });
 
+test("with actionOnClick false a click only selects; a second click on the selected row, or enter, opens it", async () => {
+  h = await renderPage(KIT, "rows-select", { cols: 80, rows: 24 });
+  const y = h.frame().split("\n").findIndex((line) => line.includes("linha b"));
+  await h.click(6, y);
+  expect(h.frame()).toContain("aberta=nenhuma");
+  expect(h.frame()).toMatch(/» linha b/);
+  await h.click(6, y);
+  expect(h.frame()).toContain("aberta=b");
+});
+
+test("useNudge tones: warn and error show their glyph and text in the footer, like ok", async () => {
+  h = await renderPage(KIT, "rows", { cols: 80, rows: 24 });
+  await h.press("w");
+  expect(h.frame()).toContain("▲ cuidado");
+  await h.press("x");
+  expect(h.frame()).toContain("✗ quebrou");
+  expect(h.frame()).not.toContain("cuidado");
+});
+
 test("Notice draws the level marker and the text; useNudge(msg, 'ok') shows a success notice", async () => {
   h = await renderPage(KIT, "rows", { cols: 80, rows: 24 });
   expect(h.frame()).toMatch(/\[!\] precisa aplicar/);

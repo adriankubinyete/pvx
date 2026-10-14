@@ -90,6 +90,8 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `List` com janela (`maxRows`) e `onAction`, `Panel shrink`, `Notice`, `LogTail focused`, `useNudge` com tom `ok`; "precisa aplicar" como convenção (UI.md, seção 13) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
 - Sistema falso para testes de módulo em `@pvx/testing` (`fakeSystem`, `fakeCommandCtx`, `fakeReadCtx`, `fakeSdk`) → [SDK: peças genéricas extraídas dos módulos firewall e issabel](#2026-10-14--sdk-peças-genéricas-extraídas-dos-módulos-firewall-e-issabel)
 - `ctx.session.sshClient`: o host acha o IP do cliente SSH (ambiente, ambiente dos processos pais, `who`) e o audit grava `from` → [Sessão SSH no host: `ctx.session.sshClient`](#2026-10-14--sessão-ssh-no-host-ctxsessionsshclient)
+- `ctx.strategy` e `ReadCtx.shell` (`run`, `ok`) nos contextos; `sdk.errors` (`isStepError`, `describeFailure`); o catch do host mostra a saída de um `StepError` → [SDK: lacunas achadas ao migrar o firewall](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-firewall)
+- `List actionOnClick` (clique só seleciona, `enter` ou segundo clique abre), `useNudge` com tons `warn` e `error`, `stderr` do falso transmitido ao `tail` → [SDK: lacunas achadas ao migrar o firewall](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-firewall)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1184,3 +1186,20 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** Em campo, `sudo pvx` numa Issabel novas (Rocky 8) falhou o failsafe do firewall: o `sudo` limpa o ambiente (`SSH_CLIENT` some) e o `who -m` lê o terminal pelo `stdin`, que o `exec` do pvx abre em pipe, então não imprime nada. O shell de login acima do `sudo` guarda a variável e o root lê o `environ` dele. Achar no host serve a todo módulo e ao audit.
 
 **Limite:** Só Linux para (b) e (c) (em outros sistemas só vale (a)). (c) usa os três descritores padrão, não o `tty_nr` de `/proc/self/stat`. Dentro de `tmux` ou `screen` sem a variável no ambiente, (b) pode achar o IP do primeiro cliente que iniciou o servidor, não o do cliente atual. Um terminal sem origem (console, serial) dá `undefined`. Um `ReadCtx` literal em teste de módulo precisa do campo `session` (o `fakeReadCtx` do `@pvx/testing` deve passá-lo).
+
+## 2026-10-14 — SDK: lacunas achadas ao migrar o firewall
+
+**Status:** vigente
+
+**Decisão:** Seis lacunas do SDK, achadas ao migrar o `pvx-firewall` para o padrão novo, foram fechadas.
+
+- **`ctx.strategy`.** `CommandCtx` e `ReadCtx` ganham `strategy`, o mesmo `strategyKit` de `sdk.strategy` (`ctx.strategy.pick(...)`). O módulo escolhe a estratégia dentro do comando e da sonda sem carregar o `sdk` da fábrica.
+- **`ReadCtx.shell`.** Só `run` e `ok`, construídos sobre o `exec` de só leitura (mesma lista, mesmo log). Sem `must`: uma sonda relata, não lança (o `StepError` serve a quem aborta uma tarefa). A sonda deixa de ter um `run` próprio.
+- **`sdk.errors`.** Como o módulo importa só tipos, `sdk.errors.isStepError` e `sdk.errors.describeFailure` vêm injetados. `describeFailure` devolve a mensagem e, para um `StepError`, as linhas de `output` uma por linha, com recuo de dois espaços; para outro erro, só a mensagem. O catch de `execute` usa o mesmo texto: um `StepError` que escapa de um comando mostra a cauda da saída, não só `saiu com código N`. A mensagem do corredor de fases fica como estava (o `output` vai para `state.failure`).
+- **`stderr` no falso.** `fakeSystem` transmite cada linha não vazia do `stderr` da resposta ao `onLine` (com `"stderr"`), como o `exec` real; o `tail` do `shell` passa a ter a causa.
+- **`List actionOnClick`.** Padrão `true` (o clique abre, como era). Com `false`, o clique só seleciona (a convenção do UI.md, seção 3) e abrem `enter` ou um segundo clique na linha já selecionada.
+- **`useNudge`.** Os tons `warn` (`▲`, cor de aviso) e `error` (`✗`, cor de erro) se juntam ao `ok`, por tabelas `Record` de cor e glifo; os três ficam cerca de 4 s e tomam a linha do rodapé (`OK_MS` virou `TONED_MS`, `useNoticeOk` virou `useToneNotice`).
+
+**Motivo:** A migração do firewall repetia, módulo a módulo, um `run` local para sondas, a escolha de estratégia fora do comando, a checagem de `StepError` por `name` e a descrição manual da falha.
+
+**Limite:** `useNudge` com tom não é para falha que pede ação do técnico: essa fica num `Notice`, que não some por tempo. Nada foi pulado: nenhum item se mostrou prejudicial.

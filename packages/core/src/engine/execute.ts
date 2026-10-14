@@ -4,12 +4,14 @@ import type { Logger, OutLine, SessionInfo } from "@pvx/sdk";
 import { hostSession } from "../host/ssh.ts";
 import { auditCommand, lineOf } from "../journal/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
+import { describeFailure } from "./errors.ts";
 import { createJobs } from "./jobs.ts";
 import { createGranted } from "./permissions.ts";
 import { createPhases } from "./phases.ts";
 import { createShell } from "./shell.ts";
 import { resolveCommand, type Registry } from "./registry.ts";
 import { createStore } from "./store.ts";
+import { strategyKit } from "./strategy.ts";
 import { tokenize } from "./tokenize.ts";
 
 export interface ExecOpts extends ParseOpts {
@@ -79,11 +81,12 @@ export async function execute(registry: Registry, input: string | string[], opts
       jobLog: opts.jobLog ?? (() => {}),
       ...granted,
       shell: createShell(granted.exec),
+      strategy: strategyKit,
       phases: createPhases(store, out),
     });
   } catch (e) {
     log.error(`exceção em ${key}: ${(e as Error).stack ?? e}`);
-    lines.push({ kind: "error", text: `erro interno no comando: ${(e as Error).message ?? e}` });
+    lines.push({ kind: "error", text: `erro interno no comando: ${describeFailure(e)}` });
   }
   const failed = lines.some((l) => l.kind === "error");
   // Masked by construction: `parseArgs` refuses a secret in argv (it comes from stdin, env or the prompt), so the line has none.

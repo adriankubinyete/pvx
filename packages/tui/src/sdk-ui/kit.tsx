@@ -113,7 +113,7 @@ function ActionKey({ label, selected, onAction }: { label: string; selected: str
   return null;
 }
 
-export function List({ items, selected, columns, onPress, onHover, maxRows, onAction, actionLabel = DEFAULT_ACTION_LABEL }: Props<"List">) {
+export function List({ items, selected, columns, onPress, onHover, maxRows, onAction, actionLabel = DEFAULT_ACTION_LABEL, actionOnClick = true }: Props<"List">) {
   const { c, g } = useTheme();
   const [over0, setOver] = useState<string | undefined>(undefined); // the row under the mouse
   const marks = items.some((it) => it.mark);
@@ -141,9 +141,11 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
     return () => clearInterval(timer);
   }, [selected, moving]);
   const n = tick.id === selected ? tick.n : 0;
+  /** A click always selects; it also opens the action when `actionOnClick`, or when the row was already selected (the second click). */
   const pressRow = (id: string) => {
+    const wasSelected = id === selected;
     onPress?.(id);
-    onAction?.(id);
+    if (actionOnClick || wasSelected) onAction?.(id);
   };
   const visible = maxRows === undefined ? items : visibleRows(items, selected, Math.max(0, maxRows), windowAt);
   const measure = cols ? { ref: box, onSizeChange: () => box.current && setWidth(box.current.width) } : {};

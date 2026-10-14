@@ -39,6 +39,12 @@ async function execOrNotFound(exec: CommandCtx["exec"], command: string, args: s
   }
 }
 
+/** The `ReadCtx` shell: `run` and `ok` over a read-only `exec` (no `must`: a probe reports, it does not throw). */
+export function createReadShell(exec: CommandCtx["exec"]): Pick<Shell, "run" | "ok"> {
+  const { run, ok } = createShell(exec);
+  return { run, ok };
+}
+
 /** `ctx.shell`, built over the granted `ctx.exec` (so the allowlist, the timeout and the process rules are the same). */
 export function createShell(exec: CommandCtx["exec"]): Shell {
   const run: Shell["run"] = async (command, args = [], opts = {}) => {

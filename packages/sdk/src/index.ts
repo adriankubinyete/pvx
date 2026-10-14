@@ -100,6 +100,8 @@ export interface CommandCtx {
   exec(cmd: string, args?: string[], opts?: ExecOpts): Promise<ExecResult>;
   /** Helpers over `exec` (same allowlist): `run` returns the result, `must` throws a `StepError`, `ok` answers a boolean. */
   shell: Shell;
+  /** The same `strategy.pick` as `sdk.strategy`, for a command that chooses its backend. */
+  strategy: StrategyKit;
   /** Named phases run in order with the progress kept in the store, so a failed run resumes where it stopped. */
   phases: Phases;
   /** Only hosts (`host[:port]`) listed in `permissions.net`; redirects are not followed. */
@@ -250,6 +252,10 @@ export interface ReadCtx {
   query: QueryFn;
   session: SessionInfo;
   exec: CommandCtx["exec"];
+  /** `shell.run` and `shell.ok` over the read-only `exec` (no `must`: a probe reports, it does not throw). */
+  shell: Pick<Shell, "run" | "ok">;
+  /** The same `strategy.pick` as `sdk.strategy`, for a probe or a query that asks which backend runs. */
+  strategy: StrategyKit;
   fs: Pick<ModuleFs, "read" | "exists" | "list">;
   jobs: Pick<Jobs, "status" | "list" | "log">;
   phases: Pick<Phases, "state">;
@@ -432,6 +438,14 @@ export interface StrategyKit {
   pick<Item extends Strategy>(strategies: Item[], opts: { setting?: string; none: string }): Promise<{ strategy: Item; auto: boolean } | { error: string }>;
 }
 
+/** `sdk.errors`: what a module needs to read a `StepError` (a module imports types only, so the runtime comes injected). */
+export interface ErrorsKit {
+  /** True for an error with the shape of a `StepError` (the one `shell.must` throws). */
+  isStepError(error: unknown): error is StepError;
+  /** The message of any error; for a `StepError`, also the useful lines of its output, one per line, indented. */
+  describeFailure(error: unknown): string;
+}
+
 /** What the host injects into the factory. */
 export interface Sdk {
   version: 1;
@@ -442,6 +456,8 @@ export interface Sdk {
   packages: PackagesKit;
   /** Picks which of several strategies (backends, engines) a module drives. */
   strategy: StrategyKit;
+  /** Reads a `StepError`: `isStepError` and `describeFailure`. */
+  errors: ErrorsKit;
   /** Same permission rules as `ctx.fs`, for code that has no command context (queries, widgets). */
   fs: ModuleFs;
 }
@@ -689,6 +705,8 @@ export interface SdkUi {
     onAction?: (id: string) => void;
     /** The footer label of the `enter` key (default "abrir"). */
     actionLabel?: string;
+    /** Default true: a click opens the action. With `false` a click only selects (`onPress`); `enter`, or a click on the row that is already selected, opens it. */
+    actionOnClick?: boolean;
   }>;
   /** Form of one of the module's commands (generated from its ArgSpec). enter runs it; esc cancels. */
   Form: Component<{ command: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
@@ -813,8 +831,11 @@ export interface SdkUi {
    * The page re-renders when it changes. Use it to draw the focused panel only while the page has focus (Início does).
    */
   usePageFocused(): boolean;
-  /** Shows the host's short notice ("nada aqui") for a key that has no effect. */
-  useNudge(): (msg?: string, tone?: "ok") => void;
+  /**
+   * Shows the host's short notice ("nada aqui") for a key that has no effect. With a `tone` it shows a result instead: `ok`
+   * (accent), `warn` or `error`, each with its glyph, in the theme color, for about 4 s.
+   */
+  useNudge(): (msg?: string, tone?: "ok" | "warn" | "error") => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
   /**

@@ -78,7 +78,7 @@ Exemplos no código:
 - Só a linha selecionada da lista ativa rola o texto cortado (letreiro, vai e volta).
 - Seleção por id, nunca por índice: a lista muda de ordem e de tamanho.
 - Uma lista longa se janela pelo tamanho do terminal: `List maxRows={...}` (calculado por `useViewport`) desenha só as linhas visíveis e mantém a seleção dentro da janela. O `Panel` que a carrega leva `shrink`, para o cabeçalho e o rodapé do host nunca saírem da tela. A página não rola.
-- Ação da linha: `List onAction`. `enter` na linha selecionada (o rodapé mostra `enter abrir`) e o clique abrem o formulário da linha (`Fields` com os campos e `onDelete`); o `remover` pede a confirmação do framework. Não ponha atalhos soltos (`x`, `c`) para remover ou copiar.
+- Ação da linha: `List onAction`. `enter` na linha selecionada (o rodapé mostra `enter abrir`) e o clique abrem o formulário da linha (`Fields` com os campos e `onDelete`); o `remover` pede a confirmação do framework. Não ponha atalhos soltos (`x`, `c`) para remover ou copiar. Com `actionOnClick={false}` o clique só seleciona (como na seção 3) e abrem `enter` ou um segundo clique na linha selecionada; use quando abrir a ação num clique solto seria agressivo.
 
 ```text
  REGRA        ORIGEM          AÇÃO
@@ -170,7 +170,7 @@ Exemplos no código:
 
 Exemplos no código:
 
-- `packages/tui/src/nudge.tsx` (aviso com tom `ok`, `OK_MS`).
+- `packages/tui/src/nudge.tsx` (aviso com tom `ok`, `warn` ou `error`, `TONED_MS`).
 - `packages/tui/src/menu/Result.tsx`.
 - `packages/tui/src/menu/Menu.tsx`.
 
@@ -247,6 +247,7 @@ Quando o estado salvo difere do que está aplicado (uma lista mudou, mas o firew
 - **No comando:** depois de gravar, uma linha `ctx.out.info` no formato "<o que mudou>, mas só vale depois de <comando de aplicar>" (o comando entre crases). O texto e o comando moram em `texts.ts` (`NEEDS_APPLY`, `FIX.apply`); o comando de correção é o mesmo da capacidade.
 - **Na prova:** a capacidade devolve `warn` com `fix` apontando para o mesmo comando (`sdk.proof.warn("listas mudaram desde a última aplicação", { fix })`), então o Início e o plano também mostram a pendência.
 - Um sucesso de gravação continua sendo `useNudge()(msg, "ok")`: o `✓` passa; o `precisa aplicar` fica.
+- O aviso que passa tem três tons além do movimento inválido: `"ok"` (`✓`, destaque), `"warn"` (`▲`, aviso) e `"error"` (`✗`, erro). Todos ficam cerca de 4 s e tomam a linha do rodapé. Falha que o técnico precisa agir fica num `Notice`, não no aviso que passa.
 
 ```text
  [!] precisa aplicar: 2 regras mudaram desde a última aplicação     [ aplicar ]

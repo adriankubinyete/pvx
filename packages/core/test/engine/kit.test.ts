@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CommandCtx, Manifest, PhaseDef, StepError } from "@pvx/sdk";
-import { createLogger, createPhases, createRegistry, createStore, execute, logsDir, packagesKit, strategyKit } from "../../src/index.ts";
+import { createLogger, createPhases, createReadCtx, createRegistry, createStore, describeFailure, errorsKit, execute, logsDir, packagesKit, strategyKit } from "../../src/index.ts";
 
 let dir = "";
 beforeAll(() => void (dir = realpathSync(mkdtempSync(join(tmpdir(), "pvx-kit-")))));
@@ -174,5 +174,53 @@ describe("strategy.pick", () => {
     expect(await strategyKit.pick(strategies, { setting: "firewalld", none: "nenhum" })).toMatchObject({ strategy: { id: "firewalld" }, auto: false });
     expect(await strategyKit.pick(strategies, { setting: "pf", none: "nenhum" })).toEqual({ error: "desconhecido: pf (use auto, firewalld, nftables, iptables)" });
     expect(await strategyKit.pick([{ id: "x", available: () => false }], { none: "nenhum" })).toEqual({ error: "nenhum" });
+  });
+});
+
+const noQuery = async () => undefined;
+
+describe("strategy and shell on the contexts", () => {
+  const strategies = [{ id: "nftables", available: () => true }];
+  const perms = { exec: ["sh"] };
+
+  test("ctx.strategy is the pick of sdk.strategy, in a command and in a probe", async () => {
+    let picked: unknown;
+    await run(async (ctx) => void (picked = await ctx.strategy.pick(strategies, { none: "nenhum" })), perms);
+    expect(picked).toMatchObject({ strategy: { id: "nftables" }, auto: true });
+    const read = createReadCtx("km", perms, (name) => createLogger(logsDir(), name), noQuery);
+    expect(await read.strategy.pick(strategies, { none: "nenhum" })).toMatchObject({ auto: true });
+  });
+
+  test("a probe has shell.run and shell.ok over the allowlist, and no must", async () => {
+    const read = createReadCtx("km", perms, (name) => createLogger(logsDir(), name), noQuery);
+    expect((await read.shell.run("sh", ["-c", "echo oi; exit 2"])).code).toBe(2);
+    expect(await read.shell.ok("sh", ["-c", "exit 0"])).toBe(true);
+    expect("must" in read.shell).toBe(false);
+    await expect(read.shell.run("ls")).rejects.toThrow("permissão negada");
+  });
+});
+
+describe("StepError helpers", () => {
+  const stepError = () => {
+    const error = new Error("dnf install saiu com código 1") as StepError;
+    return Object.assign(error, { name: "StepError" as const, command: "dnf install", code: 1, output: ["Error: no match", "Error: no space"] });
+  };
+
+  test("describeFailure gives the message plus the output tail, one indented line each; other errors give the message", () => {
+    expect(describeFailure(stepError())).toBe("dnf install saiu com código 1\n  Error: no match\n  Error: no space");
+    expect(describeFailure(new Error("falhou"))).toBe("falhou");
+    expect(describeFailure("texto")).toBe("texto");
+  });
+
+  test("sdk.errors.isStepError recognises the shape and nothing else", () => {
+    expect(errorsKit.isStepError(stepError())).toBe(true);
+    expect(errorsKit.isStepError(new Error("x"))).toBe(false);
+    expect(errorsKit.isStepError("StepError")).toBe(false);
+  });
+
+  test("a StepError that escapes a command shows its output tail, not just the message", async () => {
+    const result = await run((ctx) => ctx.shell.must("sh", ["-c", "echo 'error: sem espaço' >&2; exit 4"]), { exec: ["sh"] });
+    expect(result.lines[0]!.text).toContain("erro interno no comando: sh -c");
+    expect(result.lines[0]!.text).toContain("\n  error: sem espaço");
   });
 });

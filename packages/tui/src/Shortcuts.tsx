@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { footerFor, helpFor, rowsRev, subscribeRows, type Scope, type Shortcut } from "./keymap.ts";
 import { useKeys } from "./keys.tsx";
-import { NudgeText, useNoticeOk } from "./nudge.tsx";
+import { NudgeText, useToneNotice } from "./nudge.tsx";
 import { useTheme } from "./theme-context.tsx";
 
 function Keys({ list, gap }: { list: Shortcut[]; gap: string }) {
@@ -21,10 +21,10 @@ function Keys({ list, gap }: { list: Shortcut[]; gap: string }) {
 /** Footer shortcut line for the active scope, rendered from the shortcut table. */
 export function Footer({ scope }: { scope: Scope }) {
   useSyncExternalStore(subscribeRows, rowsRev); // a page's `useKey` rows come and go
-  const ok = useNoticeOk();
+  const toned = useToneNotice();
   return (
     <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between" overflow="hidden">
-      {ok ? null : <Keys list={footerFor(scope)} gap="   " />}
+      {toned ? null : <Keys list={footerFor(scope)} gap="   " />}
       <NudgeText />
     </box>
   );

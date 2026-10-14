@@ -42,3 +42,22 @@ test("fakeReadCtx and fakeSdk give proofs and queries the same fakes", async () 
   expect(await read.fs.read("/etc/os-release")).toBe("ID=rocky");
   expect(await fakeSdk().strategy.pick([{ id: "nft", available: () => true }], { none: "nenhum" })).toMatchObject({ auto: true });
 });
+
+test("the stderr of a fake reply reaches onLine and the shell tail, as real exec does", async () => {
+  const system = fakeSystem({ rules: [(call) => (call.cmd === "dnf" ? { code: 1, stderr: "Error: no match for httpd\n\nlast line" } : undefined)] });
+  const seen: string[] = [];
+  const result = await fakeCommandCtx(system).shell.run("dnf", ["install"], { onLine: (line, stream) => void seen.push(`${stream}:${line}`) });
+  expect(seen).toEqual(["stderr:Error: no match for httpd", "stderr:last line"]);
+  expect(result.tail).toEqual(["Error: no match for httpd", "last line"]);
+});
+
+test("the fake contexts carry strategy, the probe shell, the errors kit and sshClient", async () => {
+  const system = fakeSystem({ rules: [(call) => (call.cmd === "nft" ? { code: 1 } : undefined)], sshClient: "10.0.0.9" });
+  const read = fakeReadCtx(system);
+  expect(await read.shell.ok("nft", ["list", "ruleset"])).toBe(false);
+  expect((await read.shell.run("true")).code).toBe(0);
+  expect(await read.strategy.pick([{ id: "nft", available: () => true }], { none: "nenhum" })).toMatchObject({ auto: true });
+  expect(read.session.sshClient).toBe("10.0.0.9");
+  expect(fakeCommandCtx(system).session.sshClient).toBe("10.0.0.9");
+  expect(fakeSdk().errors.describeFailure(new Error("x"))).toBe("x");
+});

@@ -3,7 +3,7 @@
 /** @jsxFrag Fragment */
 import type { CommandCtx, Sdk } from "@pvx/sdk";
 
-// Pages that exercise the newer SDK pieces: List window and row action, Panel shrink, Notice, useNudge ok, refetch, useRun.
+// Pages that exercise the newer SDK pieces: List window and row action, Panel shrink, Notice, useNudge tones, refetch, useRun.
 export default (sdk: Sdk) => {
   const { h, Panel, Text, List, Notice, useState, useKey, useNudge, useQuery, useRun } = sdk.ui;
   const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -15,17 +15,20 @@ export default (sdk: Sdk) => {
     await ctx.shell.must("sh", ["-c", "echo erro >&2; exit 2"]);
   }
 
-  function Rows() {
+  /** `clickOpens` is the `actionOnClick` of the list. */
+  function Rows({ clickOpens = true }: { clickOpens?: boolean }) {
     const [selected, setSelected] = useState("a");
     const [opened, setOpened] = useState("nenhuma");
     const nudge = useNudge();
     const index = ids.indexOf(selected);
     useKey("j", "desce", () => setSelected(ids[Math.min(ids.length - 1, index + 1)]!));
     useKey("n", "avisa", () => nudge("salvo", "ok"));
+    useKey("w", "alerta", () => nudge("cuidado", "warn"));
+    useKey("x", "falha", () => nudge("quebrou", "error"));
     return (
       <Panel>
         <Panel title="regras" shrink>
-          <List items={ids.map((id) => ({ id, label: `linha ${id}` }))} selected={selected} maxRows={3} onAction={(id) => setOpened(id)} />
+          <List items={ids.map((id) => ({ id, label: `linha ${id}` }))} selected={selected} maxRows={3} onPress={setSelected} onAction={(id) => setOpened(id)} actionOnClick={clickOpens} />
         </Panel>
         <Text>{`aberta=${opened}`}</Text>
         <Notice level="warn">precisa aplicar</Notice>
@@ -68,6 +71,7 @@ export default (sdk: Sdk) => {
     queries: { "kit-demo.count": () => ++reads },
     pages: {
       rows: { title: "Linhas", render: () => <Rows /> },
+      "rows-select": { title: "Linhas (clique seleciona)", render: () => <Rows clickOpens={false} /> },
       refetch: { title: "Refetch", render: () => <Refetch /> },
       run: { title: "Run", render: () => <Run /> },
     },
