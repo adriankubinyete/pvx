@@ -1,5 +1,6 @@
 import { Children, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Component, SdkUi, Tone } from "@pvx/sdk";
+import { followProps } from "../follow.ts";
 import { clean } from "../palette/search.ts";
 import { columnWidths, fit, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
 import { levelOf, meter } from "../tabs/home.ts";
@@ -153,4 +154,54 @@ export function List({ items, selected, columns, onPress, onHover }: Props<"List
 
 export function Spacer({ size = 1 }: Props<"Spacer">) {
   return <box height={size} flexShrink={0} />;
+}
+
+const STEP_WORD = { pending: "pendente", running: "rodando", done: "concluído", failed: "falhou", skipped: "pulado" } as const;
+const STEP_TONE: Record<keyof typeof STEP_WORD, Tone> = { pending: "dim", running: "info", done: "ok", failed: "error", skipped: "dim" };
+
+/** `42s`, `3m05s`, `1h02m`. */
+export const clock = (ms: number) => {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const p = (n: number) => String(n).padStart(2, "0");
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${p(s % 60)}s` : `${Math.floor(s / 3600)}h${p(Math.floor((s % 3600) / 60))}m`;
+};
+
+export function Steps({ items }: Props<"Steps">) {
+  const { c, g } = useTheme();
+  const [tick, setTick] = useState(0);
+  const running = items.some((it) => it.state === "running");
+  useEffect(() => {
+    if (!running) return;
+    const t = setInterval(() => setTick((n) => n + 1), 100); // the spinner only moves while something runs
+    return () => clearInterval(t);
+  }, [running]);
+  const frames = [...g.spinner];
+  const glyph = { pending: g.inactive, running: frames[tick % frames.length]!, done: g.ok, failed: g.error, skipped: "-" };
+  const w = Math.max(0, ...items.map((it) => len(clean(it.label))));
+  const ww = Math.max(...Object.values(STEP_WORD).map(len));
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      {items.map((it) => {
+        const t = STEP_TONE[it.state];
+        return (
+          <text key={it.id} wrapMode="none" flexShrink={0}>
+            <span fg={tone(c, t)}>{`${glyph[it.state]} `}</span>
+            <span fg={it.state === "pending" || it.state === "skipped" ? c.dim : c.text}>{clean(it.label).padEnd(w)}</span>
+            <span fg={tone(c, t)}>{`  ${STEP_WORD[it.state].padEnd(ww)}`}</span>
+            <span fg={c.dim}>{`  ${it.elapsedMs === undefined ? "" : clock(it.elapsedMs)}`}</span>
+            <span fg={c.dim}>{it.detail ? `  ${clean(it.detail)}` : ""}</span>
+          </text>
+        );
+      })}
+    </box>
+  );
+}
+
+export function LogTail({ lines, follow = true }: Props<"LogTail">) {
+  const { c } = useTheme();
+  return (
+    <scrollbox flexGrow={1} minHeight={0} {...(follow ? followProps : {})} focused={false}>
+      {lines.length ? lines.map((l, i) => <text key={i} fg={c.text} wrapMode="none" flexShrink={0}>{clean(l)}</text>) : <text fg={c.dim}>—</text>}
+    </scrollbox>
+  );
 }

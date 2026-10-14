@@ -140,7 +140,8 @@ Use `ui.Fields` (`packages/sdk/src/index.ts`).
 - `salvar` e `cancelar` estão sempre presentes.
 - `remover` é opcional (`onDelete`) e pede confirmação antes de agir.
 - `↑↓` e `Tab` andam entre campos e botões; `enter` avança e, no último campo, salva.
-- `espaço` marca uma caixa (`toggle`).
+- `espaço` marca uma caixa (`toggle`) ou uma opção (`multi`) e escolhe uma opção (`choice`); `↑↓` andam pelas opções e, nas pontas, passam ao campo vizinho.
+- `secret` mostra `●` no lugar do texto; a tecla `generate` do campo vai para o rodapé e o `?`.
 - Erro inline sob o campo, via `validate` (o primeiro campo com erro recebe o foco e bloqueia o envio).
 - Na edição, o valor enviado é gravado como está: campo vazio limpa o valor.
 - `ctrl+s` salva e `esc` cancela.

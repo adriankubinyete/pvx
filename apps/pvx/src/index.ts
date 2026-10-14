@@ -30,7 +30,7 @@ async function main(): Promise<number> {
   const abort = new AbortController();
   // Only `logs -f` handles Ctrl+C; a global listener would swallow the first Ctrl+C of a hung command.
   const argv = process.argv.slice(2);
-  if (argv[0] === "logs" && argv.some((a) => a === "-f" || a === "--follow")) process.once("SIGINT", () => abort.abort());
+  if ((argv[0] === "logs" || (argv[0] === "jobs" && argv[1] === "log")) && argv.some((a) => a === "-f" || a === "--follow")) process.once("SIGINT", () => abort.abort());
   const base = {
     env: process.env,
     // Windows has no uid and no sudo: the gate mirrors root owning PVX_HOME on Unix, which has no equivalent there.

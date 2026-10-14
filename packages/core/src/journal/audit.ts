@@ -34,3 +34,6 @@ export const auditLogin = (user: string, from?: string): void => write({ kind: "
 
 /** Module lifecycle (add, update, trust, remove...): always recorded. */
 export const auditModule = (text: string): void => write({ kind: "module", user: currentUser(), text });
+
+/** Background job start and stop: always recorded. */
+export const auditJob = (text: string): void => write({ kind: "job", user: currentUser(), text });

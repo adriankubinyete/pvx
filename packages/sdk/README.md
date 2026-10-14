@@ -180,8 +180,8 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo) e `Spacer`.
-- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)`; `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
+- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano).
+- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` (veja Jobs em segundo plano); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
 
 **List em colunas.** Com `columns` a `List` alinha as células de cada item em colunas, mesmo com textos de tamanhos diferentes. Cada coluna é `{ id, title?, width?, grow?, align? }`: `width` é fixa e nunca encolhe; `grow` divide o que sobra (peso relativo); sem nenhuma das duas a coluna ocupa o tamanho do conteúdo e é a primeira a encolher se faltar espaço. `align` é `"left"` (padrão) ou `"right"`. Se alguma coluna tem `title`, aparece uma linha de cabeçalho (dim). O item traz `cells: { [idDaColuna]: texto | { text, tone? } }` (`label` e `detail` são ignorados nesse modo; `tone` e `mark` valem). Célula que não cabe é cortada com `…`. A largura vem da própria lista, então acompanha o redimensionamento.
@@ -402,7 +402,7 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 
 | API | Regra |
 | --- | --- |
-| `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão), e devolve `{ code, stdout, stderr }`. |
+| `ctx.exec(cmd, args?, { cwd, env, stdin, timeoutMs, onLine, signal, buffer })` | O nome base de `cmd` está em `permissions.exec`. Roda sem shell (`Bun.spawn`), com limite de tempo (30 s por padrão) e devolve `{ code, stdout, stderr }`. Veja Streaming e cancelamento. |
 | `ctx.net.fetch(url, init?)` | `host[:porta]` da URL está em `permissions.net`; só `http` e `https`. Redirecionamentos não são seguidos. |
 | `ctx.fs.read / write / exists / list` | O caminho (resolvido, com symlinks) fica sob um prefixo de `permissions.fs`. O prefixo `rw:` libera escrita; sem ele, só leitura. O diretório de estado do próprio módulo é sempre permitido. |
 | `ctx.fs.remove(path)` | Mesma regra de `rw:`. Apaga o arquivo; não erra se ele não existe. |
@@ -410,13 +410,14 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 
 `$PVX_HOME` (dados da central) e `$PVX_PROFILED_DIR` (`/etc/profile.d`, onde ficam ganchos de login) valem em `permissions.fs` e nos caminhos de `ctx.fs` (o host os expande). Fora de um comando, `sdk.fs` segue as mesmas regras (use-o só no que não tem `ReadCtx`).
 
-**Contexto de só leitura (`ReadCtx`).** `prove()`, as consultas (`this`) e o `data()` dos widgets recebem `{ log, store, query, exec, fs }` com estas diferenças:
+**Contexto de só leitura (`ReadCtx`).** `prove()`, as consultas (`this`) e o `data()` dos widgets recebem `{ log, store, query, exec, fs, jobs }` com estas diferenças:
 
 | Campo | Em `ReadCtx` |
 | --- | --- |
 | `store` | Só `get`: não existe `set` nem `delete`. |
 | `fs` | Só `read`, `exists` e `list`: não existem `write`, `append` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
 | `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo. |
+| `jobs` | Só `status`, `list` e `log` (veja Jobs em segundo plano). |
 
 Capacidade, consulta e widget são **só leitura** por contrato. O `exec` não tem como ser só leitura por construção: neste contexto o módulo roda apenas sondas (`systemctl is-active`, `nft list ruleset`, `--version`) e nunca algo que mude o sistema. É o mesmo modelo de confiança dos comandos: a revisão humana do commit é a barreira.
 
@@ -451,11 +452,14 @@ export default factory;
 
 Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário, veja abaixo), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
 
-`ui.Fields` desenha um formulário com campos `area`, `line` e `toggle` (caixa de marcar; `text` é o texto ao lado dela) e os botões `[ salvar ]` e `[ cancelar ]`, sempre presentes. Todo o teclado é do formulário:
+`ui.Fields` desenha um formulário com campos `area`, `line`, `toggle` (caixa de marcar; `text` é o texto ao lado dela), `secret`, `choice` e `multi` (veja abaixo) e os botões `[ salvar ]` e `[ cancelar ]`, sempre presentes. Todo o teclado é do formulário:
 
 - `↑`/`↓` e `tab`/`shift+tab` andam por campos e botões, dando a volta (dentro de uma `area` só o `tab` anda).
 - `←`/`→` movem o cursor no texto e, num botão, passam para o botão vizinho.
 - `enter` num texto vai ao próximo campo e, no último, envia; numa caixa marca; num botão ativa. `espaço` também marca.
+- `secret`: uma linha mascarada (`●`), editada como `line`; o valor chega em `onSubmit` e não vai para histórico nem log. Com `generate: "ctrl+g"` (a tecla que o campo documenta no rodapé e no `?`) a tecla preenche 24 letras e dígitos aleatórios, legíveis enquanto o foco fica no campo.
+- `choice`: escolha única com `options: { value, label, detail? }[]`, desenhada `(●)`/`( )`. `↑`/`↓` andam pelas opções (nas pontas passam ao campo vizinho), `espaço` escolhe, `enter` escolhe e avança. O valor é o `value` escolhido (a primeira opção, se `initial` não diz).
+- `multi`: lista de caixas `[x]`/`[ ]` com as mesmas `options`; `espaço` marca, `enter` avança. O valor é a lista dos `value` marcados, em ordem das opções, **separada por vírgula** (`initial` no mesmo formato).
 - `ctrl+s` sempre envia e `esc` cancela. O mouse foca o campo, marca a caixa e ativa o botão.
 - `validate(valores)` roda antes de `onSubmit`: devolva `{ idDoCampo: "mensagem" }` para mostrar o erro sob o campo e bloquear o envio.
 - `onDelete` (e `deleteLabel`, padrão "remover") acrescenta o botão `[ remover ]`; ele pergunta "remover? enter confirma · esc volta" antes de chamar a função.
@@ -491,6 +495,83 @@ const factory: ModuleFactory = () => ({
   },
 });
 export default factory;
+```
+
+## Streaming e cancelamento de `ctx.exec`
+
+- `onLine(linha, "stdout" | "stderr")` recebe cada linha assim que chega. O corte é em `\n`, `\r\n` e `\r` sozinho: a barra de progresso do `dnf`, que se redesenha com `\r`, chega como uma linha por redesenho.
+- `signal` (um `AbortSignal`, tipado como `AbortSignalLike` porque o SDK não traz tipos de DOM) cancela: o host mata o **grupo de processos** (SIGTERM e, 2 s depois, SIGKILL), então os filhos do programa também caem. A chamada ainda resolve, com o código de saída. Sem `signal` o filho continua na sessão do pvx (o Ctrl+C da CLI o alcança).
+- `buffer: false` deixa `stdout` e `stderr` do resultado vazios: use com `onLine` quando a saída é enorme.
+- `timeoutMs` vale 30 s se omitido. **Comando longo precisa de `timeoutMs` explícito** (um instalador leva minutos); passado o prazo o processo morre.
+
+## Jobs em segundo plano
+
+Um job é um comando **do próprio módulo** que continua rodando depois que o pvx sai e depois que a SSH cai. `ctx.jobs` existe em todo comando; o `ReadCtx` só tem `status`, `list` e `log`. Jobs são um recurso do host: `permissions` não pede nada extra.
+
+| API | O que faz |
+| --- | --- |
+| `jobs.start(nome, linha, { secrets? })` | Inicia `pvx <módulo> <linha>` num processo separado: `systemd-run --unit pvx-<módulo>-<nome> --collect` quando existe; senão, uma sessão própria (`setsid`) sem terminal e com todos os descritores em `/dev/null`. `nome` é `[a-z0-9-]+`. Falha com mensagem clara se o job já roda. A linha de comando e o log começam do zero a cada início. |
+| `jobs.status(nome)` | `{ state: "running" \| "done" \| "failed" \| "stopped" \| "none", startedAt, endedAt?, exit?, pid? }`. Um job cujo processo morreu sem avisar aparece como `failed`. |
+| `jobs.stop(nome)` | SIGTERM no grupo inteiro (o host também derruba os `ctx.exec` com `signal` do job), SIGKILL depois de 3 s; o estado vira `stopped`. |
+| `jobs.list()` | Todos os jobs do módulo, com o mesmo formato de `status` mais `name`. |
+| `jobs.log(nome, { tail?, since? })` | Linhas do log. `since` pula essa quantidade de linhas (pergunte só pelas novas); `tail` devolve só as últimas N. |
+
+Estado e log ficam em `$PVX_HOME/modules/<id>/jobs/<nome>.json` e `<nome>.log`. O log recebe as linhas de `ctx.out` do comando do job (com o prefixo do nível: `✓`, `!`, `✗`, `i`; `plain` sem prefixo) e o que ele escreve com `ctx.jobLog(linha)` (fora de um job, `jobLog` não faz nada).
+
+**Log do módulo.** Tudo que o job emite também vai para o log normal do módulo (`pvx logs <módulo>`, `pvx logs --all -f`, aba Logs), com o prefixo `[job <nome>]`: `ctx.out` (nível `error`/`warn`/`info` conforme o tipo), `ctx.jobLog` e a saída que o módulo repassa de `onLine`. Início, fim (`terminou`, `parado`, `falhou` com o exit) e o pedido de parada também entram, e início e parada entram no `core.log`. Para a barra de progresso do `dnf` não inundar o log, o log do módulo **pula uma linha info que só difere da anterior pelos dígitos** (`10%` depois de `55%`); o arquivo do job (`log`, `useJob().lines`) guarda tudo.\n\n**Segredos.** `secrets` (pelo nome do `ArgSpec`, como `{ senha: "..." }`) nunca vai por argv: o host grava um arquivo 0600 que o processo do job lê e **apaga antes de rodar o comando**; o comando os recebe pelo mecanismo normal de segredo (`ctx.args.senha`, via `PVX_SECRET_SENHA` só dentro do filho). O valor também é trocado por `***` se o comando o escrever no log. Nunca entra no estado, no log nem no `ps`.
+
+**Root e auditoria.** Iniciar e parar exigem root, como qualquer comando que grava; ambos entram no `audit.jsonl` (`kind: "job"`). Não há jobs no Windows.
+
+**CLI.** `pvx jobs [list]` lista todos; `pvx jobs log <módulo> <nome> [--tail N] [-f]` mostra (e com `-f` segue até o job acabar); `pvx jobs stop <módulo> <nome>` para. (`pvx jobs run` é interno: o host o usa para iniciar o job.)
+
+**Na UI.** `useJob(nome, { tail? })` devolve `{ status, lines, start(linha, { secrets? }), stop() }`, atualizado a cada 1 s; a página só renderiza de novo quando o estado ou as últimas `tail` linhas (padrão 200) mudam. `ui.Steps({ items })` desenha as fases (`{ id, label, state: "pending" | "running" | "done" | "failed" | "skipped", elapsedMs?, detail? }`): `✓` concluído, spinner rodando, `○` pendente, `✗` falhou, `-` pulado, sempre com a palavra do estado; o spinner só anda enquanto há um item rodando. `ui.LogTail({ lines, follow? })` é um log que rola: acompanha o fim até o usuário subir com a roda do mouse e volta a acompanhar ao chegar no fim; ele ocupa a altura que o pai der.
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { CommandCtx, Sdk, StepItem } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["dnf"] }
+export default (sdk: Sdk) => {
+  const { h, Panel, Steps, LogTail, useJob, useKey } = sdk.ui;
+  const fases = ["pacotes", "banco"];
+
+  function Instalador() {
+    const job = useJob("instala");
+    useKey("i", "instala", () => void job.start("instalar", { secrets: { senha: "gerada-no-form" } }).catch(() => {}));
+    useKey("x", "para", () => void job.stop());
+    const feitas = job.lines.filter((l) => l.startsWith("✓ ")).length;
+    const items: StepItem[] = fases.map((f, i) => ({
+      id: f, label: f, state: i < feitas ? "done" : i === feitas && job.status.state === "running" ? "running" : "pending",
+    }));
+    return (
+      <Panel>
+        <Steps items={items} />
+        <LogTail lines={job.lines} />
+      </Panel>
+    );
+  }
+
+  return {
+    commands: {
+      instalar: {
+        help: "Instala em segundo plano",
+        args: [{ name: "senha", help: "Senha do banco", kind: "option", secret: true }],
+        async run(ctx: CommandCtx) {
+          for (const f of fases) {
+            ctx.jobLog(`fase ${f}`);
+            const r = await ctx.exec("dnf", ["-y", "install", f], { timeoutMs: 40 * 60_000, buffer: false, onLine: (l) => ctx.jobLog(l) });
+            if (r.code !== 0) return ctx.out.error(`${f} falhou (${r.code})`);
+            ctx.out.success(`${f} instalado`);
+          }
+        },
+      },
+    },
+    pages: { instalador: { title: "Instalador", render: () => <Instalador /> } },
+  };
+};
 ```
 
 ## Segurança

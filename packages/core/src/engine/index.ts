@@ -9,3 +9,5 @@ export * from "./tokenize.ts";
 export * from "./slots.ts";
 export * from "./permissions.ts";
 export * from "./platform.ts";
+export * from "./jobs.ts";
+export { killExecGroups } from "./exec.ts";

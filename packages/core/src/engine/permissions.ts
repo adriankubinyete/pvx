@@ -2,10 +2,13 @@ import { closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, 
 import { basename, dirname, join, resolve, sep } from "node:path";
 import type { CommandCtx, Logger, Manifest, QueryFn, ReadCtx } from "@pvx/sdk";
 import { moduleStateDir, profiledDir, pvxHome } from "./paths.ts";
+import { runProgram } from "./exec.ts";
+import { createJobs } from "./jobs.ts";
 import { createStore } from "./store.ts";
 
 type Perms = NonNullable<Manifest["permissions"]>;
 type Granted = Pick<CommandCtx, "exec" | "net" | "fs">;
+
 
 /** `$PVX_HOME` (data dir) and `$PVX_PROFILED_DIR` (login hooks) in a manifest path; read when checked, so a test dir applies. */
 const expand = (e: string) => e.replaceAll("$PVX_HOME", pvxHome()).replaceAll("$PVX_PROFILED_DIR", profiledDir());
@@ -50,17 +53,7 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
   return {
     async exec(cmd, args = [], o = {}) {
       if (!perms?.exec?.includes(basename(cmd))) deny(`exec ${cmd} (manifest: exec ${perms?.exec?.join(", ") || "nada"})`);
-      const p = Bun.spawn([cmd, ...args], {
-        cwd: o.cwd,
-        env: { ...process.env, ...o.env },
-        stdin: o.stdin === undefined ? "ignore" : new Blob([o.stdin]),
-        stdout: "pipe",
-        stderr: "pipe",
-        timeout: o.timeoutMs ?? 30_000,
-        killSignal: "SIGKILL",
-      });
-      const [stdout, stderr, code] = await Promise.all([new Response(p.stdout as ReadableStream).text(), new Response(p.stderr as ReadableStream).text(), p.exited]);
-      return { code, stdout, stderr };
+      return runProgram(cmd, args, o);
     },
     net: {
       fetch(url, init) {
@@ -112,5 +105,6 @@ export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: 
       return g.exec(cmd, args, o);
     },
     fs: { read: g.fs.read, exists: g.fs.exists, list: g.fs.list },
+    jobs: (({ status, list, log }) => ({ status, list, log }))(createJobs(id)),
   };
 }

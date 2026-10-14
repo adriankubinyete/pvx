@@ -12,6 +12,7 @@ import { IGNORE_COMMANDS } from "./ignorar.ts";
 import { catalogSearchCommand } from "../catalog/search-command.ts";
 import { BANNER_COMMAND } from "./banner.ts";
 import { SELF_COMMANDS } from "./self.ts";
+import { JOBS_COMMANDS } from "./jobs.ts";
 import { listCommand, MODULES_COMMANDS } from "./modules.ts";
 import type { CliIO, Output } from "./run.ts";
 
@@ -167,6 +168,7 @@ export const CORE: CoreCommand[] = [
   ...IGNORE_COMMANDS,
   ...MODULES_COMMANDS,
   ...SELF_COMMANDS,
+  ...JOBS_COMMANDS,
   {
     key: "help",
     help: "Lista os comandos; `help <módulo> [comando]` detalha (atalho: h)",

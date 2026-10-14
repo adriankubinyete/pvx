@@ -2,6 +2,7 @@ import { EXIT } from "@pvx/sdk";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { auditCommand, lineOf } from "../journal/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
+import { createJobs } from "./jobs.ts";
 import { createGranted } from "./permissions.ts";
 import { resolveCommand, type Registry } from "./registry.ts";
 import { createStore } from "./store.ts";
@@ -11,6 +12,10 @@ export interface ExecOpts extends ParseOpts {
   makeLogger: (name: string) => Logger;
   /** --yes or an interactive confirmation already given. */
   confirmed?: boolean;
+  /** Every `ctx.out` line, as it is written (a job streams them to its log). */
+  onLine?: (l: OutLine) => void;
+  /** What `ctx.jobLog` writes to; without it `ctx.jobLog` does nothing. */
+  jobLog?: (line: string) => void;
 }
 export interface ExecResult {
   ok: boolean;
@@ -45,7 +50,11 @@ export async function execute(registry: Registry, input: string | string[], opts
   log.info(`run ${key} ${JSON.stringify(masked)}`);
   const lines: OutLine[] = [];
   const t0 = Date.now();
-  const add = (kind: OutLine["kind"]) => (text: string) => void lines.push({ kind, text });
+  const add = (kind: OutLine["kind"]) => (text: string) => {
+    const l = { kind, text };
+    lines.push(l);
+    opts.onLine?.(l);
+  };
   try {
     await cmd.run({
       args: parsed.args,
@@ -54,6 +63,8 @@ export async function execute(registry: Registry, input: string | string[], opts
       store: createStore(cmd.moduleId),
       query: registry.query,
       slots: registry.slots,
+      jobs: createJobs(cmd.moduleId),
+      jobLog: opts.jobLog ?? (() => {}),
       ...createGranted(cmd.moduleId, registry.modules.get(cmd.moduleId)?.permissions, log, opts.makeLogger("core")),
     });
   } catch (e) {

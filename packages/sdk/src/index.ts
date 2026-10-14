@@ -93,6 +93,36 @@ export interface CommandCtx {
   net: { fetch(url: string, init?: NetInit): Promise<NetResponse> };
   /** Only paths under `permissions.fs` (`rw:` prefix allows write) and the module's own state dir. */
   fs: ModuleFs;
+  /** Background jobs of this module: commands that outlive pvx and the SSH session. */
+  jobs: Jobs;
+  /** Writes a line to this run's job log (`log(name)`, `pvx jobs log`). Outside a job it does nothing. `out` lines go there too. */
+  jobLog(line: string): void;
+}
+
+export interface JobStatus {
+  /** `none`: no such job. `failed` also covers a job whose process died without reporting. */
+  state: "running" | "done" | "failed" | "stopped" | "none";
+  /** ms since epoch. */
+  startedAt?: number;
+  endedAt?: number;
+  exit?: number;
+  pid?: number;
+}
+
+/**
+ * A job is one command of the module (`line`, without the module id) run as `pvx <module> <line>` in a detached process:
+ * `systemd-run --unit pvx-<module>-<name> --collect` when available, else its own session with every fd redirected.
+ * State and log live in `$PVX_HOME/modules/<id>/jobs/<name>.json|.log`. A job name is `[a-z0-9-]+`.
+ */
+export interface Jobs {
+  /** Fails (throws) if the job is running. `secrets` (by ArgSpec name) go through a 0600 file the child deletes at start, never argv. */
+  start(name: string, line: string, opts?: { secrets?: Record<string, string> }): Promise<void>;
+  /** Asks the whole job to stop (SIGTERM, SIGKILL after 3 s); the state becomes `stopped`. */
+  stop(name: string): Promise<void>;
+  status(name: string): Promise<JobStatus>;
+  list(): Promise<(JobStatus & { name: string })[]>;
+  /** Log lines. `since`: skip that many lines first (poll with the count you already have); `tail`: only the last N. */
+  log(name: string, opts?: { tail?: number; since?: number }): Promise<string[]>;
 }
 
 /** The subset of `fetch` a module needs (the SDK carries no DOM types). */
@@ -108,12 +138,24 @@ export interface NetResponse {
   json(): Promise<unknown>;
 }
 
+/** The part of the standard `AbortSignal` that `exec` reads (the SDK carries no DOM types): pass a real `AbortSignal`. */
+export interface AbortSignalLike {
+  readonly aborted: boolean;
+  addEventListener(type: "abort", listener: () => void, opts?: { once?: boolean }): void;
+  removeEventListener(type: "abort", listener: () => void): void;
+}
 export interface ExecOpts {
   cwd?: string;
   env?: Record<string, string>;
   stdin?: string;
-  /** Default 30000; the process is killed after it. */
+  /** Default 30000; the process is killed after it. Set it explicitly for long commands (an installer needs minutes). */
   timeoutMs?: number;
+  /** Called per output line as it arrives. Lines split on `\n`, `\r\n` and a lone `\r`, so a progress bar redraw is a line. */
+  onLine?(line: string, stream: "stdout" | "stderr"): void;
+  /** Aborting kills the process group: SIGTERM, then SIGKILL after 2 s. The call still resolves, with the exit code. */
+  signal?: AbortSignalLike;
+  /** `false` keeps `stdout` and `stderr` of the result empty (use with `onLine` for huge outputs). Default true. */
+  buffer?: boolean;
 }
 export interface ExecResult {
   code: number;
@@ -178,6 +220,7 @@ export interface ReadCtx {
   query: QueryFn;
   exec: CommandCtx["exec"];
   fs: Pick<ModuleFs, "read" | "exists" | "list">;
+  jobs: Pick<Jobs, "status" | "list" | "log">;
 }
 
 /** A query function. The host calls it with `this` set to the module's `ReadCtx` (use `function` or method syntax to reach it; an arrow function just ignores it). */
@@ -244,11 +287,20 @@ export type Level = "ok" | "warn" | "error";
 export interface FieldSpec {
   id: string;
   label: string;
-  kind: "area" | "line" | "toggle";
+  kind: "area" | "line" | "toggle" | "secret" | "choice" | "multi";
   /** Rows of an `area` (default 5). */
   rows?: number;
   /** Text beside a `toggle`'s box (the label stays in the label column). */
   text?: string;
+  /** `choice` and `multi`. The value of a `choice` is the chosen option's `value` (the first option when `initial` has none); of a `multi`, the checked values joined by a comma (`initial` the same). */
+  options?: FieldOption[];
+  /** `secret` only: the key that fills the field with 24 random letters and digits (e.g. `ctrl+g`). It shows in the footer and in `?`. */
+  generate?: string;
+}
+export interface FieldOption {
+  value: string;
+  label: string;
+  detail?: string;
 }
 
 /**
@@ -348,6 +400,14 @@ export interface ListItem {
   cells?: Record<string, ListCell>;
 }
 
+export interface StepItem {
+  id: string;
+  label: string;
+  state: "pending" | "running" | "done" | "failed" | "skipped";
+  elapsedMs?: number;
+  detail?: string;
+}
+
 export interface SdkUi {
   /** JSX factory. A module file needs the classic-runtime pragmas (jsxRuntime classic, jsx h, jsxFrag Fragment), else Bun imports React. */
   h(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
@@ -379,8 +439,13 @@ export interface SdkUi {
   /** Form of one of the module's commands (generated from its ArgSpec). enter runs it; esc cancels. */
   Form: Component<{ command: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
   Spacer: Component<{ size?: number }>;
+  /** Phases of a long task, one row each: `✓` done, a spinner running, `○` pending, `✗` failed, `-` skipped. The spinner ticks only while an item is running. */
+  Steps: Component<{ items: StepItem[] }>;
+  /** Scrolling log: follows the end until the user scrolls up with the mouse wheel, and resumes at the end. Give it a parent with a height (it grows to fill it). */
+  LogTail: Component<{ lines: string[]; follow?: boolean }>;
   /**
-   * An editable form: `area` (multiline), `line` (one line) and `toggle` (checkbox) fields, then the buttons
+   * An editable form: `area` (multiline), `line` (one line), `toggle` (checkbox), `secret` (masked line), `choice` (radio) and
+   * `multi` (checkbox list) fields, then the buttons
    * [ salvar ] and [ cancelar ] (always there) and [ remover ] (only with `onDelete`). It owns the keyboard while mounted:
    * up/down and tab/shift+tab move across fields and buttons (wrapping; in an `area` only tab moves), left/right move the cursor
    * in a `line` and between buttons, enter goes to the next field (submits on the last), toggles a `toggle` or presses a button,
@@ -401,8 +466,12 @@ export interface SdkUi {
 
   /** Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. */
   useCommand(line: string): { run(opts?: { args?: string[]; stdin?: string }): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
+  /** Same, and re-runs every `refreshMs` (min 500) while the page is mounted. The old data stays until the new arrives (`loading` is only true for the first run). */
+  useQuery<T = unknown>(name: string, args: unknown[], opts: { refreshMs: number }): { data?: T; error?: string; loading: boolean };
   /** Calls `ctx.query`-style: `useQuery("module.name", ...args)`. Re-runs when name or args change. */
   useQuery<T = unknown>(name: string, ...args: unknown[]): { data?: T; error?: string; loading: boolean };
+  /** A job of this module, polled every second. It re-renders only when the status or the last `tail` lines (default 200) changed. `start` and `stop` need root like any command. */
+  useJob(name: string, opts?: { tail?: number }): { status: JobStatus; lines: string[]; start(line: string, opts?: { secrets?: Record<string, string> }): Promise<void>; stop(): Promise<void> };
   /** This module's own store (one state.json). */
   useStore(): Store;
   /** Pages of this module only: `push("name")`, `pop()`. */

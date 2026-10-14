@@ -152,3 +152,76 @@ test("the footer rows for the form are registered", async () => {
   const { calls } = await mount();
   expect(calls.keys).toEqual(expect.arrayContaining(["↑↓ tab campo", "space marca", "ctrl+s salva"]));
 });
+
+const rich = [
+  { id: "pw", label: "senha", kind: "secret" as const, generate: "ctrl+g" },
+  { id: "mode", label: "modo", kind: "choice" as const, options: [{ value: "a", label: "alfa", detail: "o primeiro" }, { value: "b", label: "beta" }] },
+  { id: "pk", label: "pacotes", kind: "multi" as const, options: [{ value: "x", label: "xis", detail: "extra" }, { value: "y", label: "ipsilon" }, { value: "z", label: "zeta" }] },
+];
+
+test("secret: the value is masked on screen, kept in the values, and ctrl+g fills 24 alphanumerics (readable until the focus leaves)", async () => {
+  const { t, calls } = await mount({ fields: rich });
+  await t.type("abc");
+  expect(t.frame()).toContain("●●●");
+  expect(t.frame()).not.toContain("abc");
+  await t.press("g", { ctrl: true });
+  const pw = t.frame().match(/([A-Za-z0-9]{24})/)?.[1];
+  expect(pw).toBeDefined(); // shown in plain right after generating
+  await t.press("ARROW_DOWN");
+  expect(t.frame()).not.toContain(pw!); // masked again
+  await t.press("s", { ctrl: true });
+  expect(calls.submit[0]!.pw).toBe(pw!);
+  expect(calls.keys.join("|")).toContain("ctrl+g gera");
+});
+
+test("choice: radio marks, arrows move the cursor, space picks, the edges leave the field", async () => {
+  const { t, calls } = await mount({ fields: rich, initial: { mode: "b" } });
+  await t.press("ARROW_DOWN"); // to choice; cursor on the initial `b`
+  expect(t.frame()).toContain("( ) alfa");
+  expect(t.frame()).toContain("(●) beta");
+  expect(t.frame()).toContain("o primeiro");
+  await t.press("ARROW_UP"); // alfa
+  await t.press(" ");
+  expect(t.frame()).toContain("(●) alfa");
+  expect(t.frame()).toContain("( ) beta");
+  await t.press("ARROW_DOWN"); // beta
+  await t.press("ARROW_DOWN"); // past the last option: next field (multi)
+  await t.press(" ");
+  await t.press("s", { ctrl: true });
+  expect(calls.submit[0]).toMatchObject({ mode: "a", pk: "x" });
+});
+
+test("multi: checkboxes toggle with space, values keep the option order, initial is read", async () => {
+  const { t, calls } = await mount({ fields: rich, initial: { pk: "z" } });
+  await t.press("TAB");
+  await t.press("TAB");
+  expect(t.frame()).toContain("[x] zeta");
+  await t.press(" "); // xis
+  await t.press("ARROW_DOWN");
+  await t.press("ARROW_DOWN");
+  await t.press(" "); // zeta off
+  await t.press("ARROW_UP");
+  await t.press(" "); // ipsilon
+  expect(t.frame()).toContain("[x] xis");
+  expect(t.frame()).toContain("[ ] zeta");
+  await t.press("s", { ctrl: true });
+  expect(calls.submit[0]!.pk).toBe("x,y");
+});
+
+test("choice and multi respond to the mouse", async () => {
+  const { t, calls } = await mount({ fields: rich });
+  const [bx, by] = at(t, "( ) beta");
+  await t.click(bx, by);
+  expect(t.frame()).toContain("(●) beta");
+  const [yx, yy] = at(t, "[ ] ipsilon");
+  await t.click(yx, yy);
+  expect(t.frame()).toContain("[x] ipsilon");
+  await t.press("s", { ctrl: true });
+  expect(calls.submit[0]).toMatchObject({ mode: "b", pk: "y" });
+});
+
+test("rich fields fit 80x24", async () => {
+  const { t } = await mount({ fields: rich });
+  expect(t.frame().trimEnd().split("\n").length).toBeLessThanOrEqual(24);
+  expect(t.frame()).toContain("[ salvar ]");
+});

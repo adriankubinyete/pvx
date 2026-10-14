@@ -64,7 +64,7 @@ const mount = async (registry: Registry, id: string, pageName: string, { cols = 
     core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: HOST_VERSION, theme }, argv),
   });
   return renderTui(
-    <App root={pageScreen(page)} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger }} />,
+    <App root={pageScreen(page)} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger, isRoot: true }} />,
     { cols, rows },
   );
 };

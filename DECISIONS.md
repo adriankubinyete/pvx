@@ -79,6 +79,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Abas contribuídas por módulo (`tab`) → [Abas contribuídas por módulo (Fase 3)](#2026-10-09--abas-contribuídas-por-módulo-fase-3)
 - Páginas de módulo navegam como o Início: `toBar` e `useBack` → [Páginas de módulo navegam como o Início: `toBar` e `useBack`](#2026-10-13--páginas-de-módulo-navegam-como-o-início-tobar-e-useback)
 - Módulo gerenciado pela TUI sobre um registry vivo → [Módulos na TUI: gerenciador, catálogo, revisão e registry vivo (Fase 4C)](#2026-10-09--módulos-na-tui-gerenciador-catálogo-revisão-e-registry-vivo-fase-4c) (em parte)
+- `ctx.exec` com streaming e cancelamento, jobs em segundo plano, `useJob`, campos `secret`/`choice`/`multi`, `Steps` e `LogTail` → [SDK: exec em streaming, jobs em segundo plano e kit de instalador](#2026-10-14--sdk-exec-em-streaming-jobs-em-segundo-plano-e-kit-de-instalador)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1050,3 +1051,23 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `.dev/` é ignorado pelo git.
 
 **Motivo:** Sem isso o `bun --watch` imprimia avisos de usermodules por cima da TUI.
+
+## 2026-10-14 — SDK: exec em streaming, jobs em segundo plano e kit de instalador
+
+**Status:** vigente
+
+**Decisão:** O SDK v1 ganha, de forma aditiva, o que um instalador longo (`issabel netinstall`, 15 a 40 min) precisa: saída em streaming, cancelamento, execução separada do pvx, polling na UI e campos de formulário novos.
+
+- `ctx.exec`: `onLine` (corta em `\n`, `\r\n` e `\r`), `signal` (mata o grupo de processos: SIGTERM, SIGKILL após 2 s) e `buffer: false`. O prazo padrão continua 30 s; comando longo pede `timeoutMs`. Só uma chamada com `signal` roda em sessão própria (para ser morta como grupo); sem ele o filho fica no grupo do pvx, como antes. O tipo é `AbortSignalLike`: o SDK não tem tipos de DOM.
+- `ctx.jobs` (`CommandCtx`; `status`, `list` e `log` no `ReadCtx`) inicia `pvx jobs run <módulo> <nome>` num processo separado: `systemd-run --unit pvx-<módulo>-<nome> --collect` se existir, senão `Bun.spawn({ detached })` (sessão própria, sem terminal, descritores em `/dev/null`: o que `setsid nohup` faz, sem depender do `setsid`, que não existe no macOS). O processo executa a linha pelo mesmo `execute`, então vale tudo que vale para um comando (args, segredos, auditoria do comando).
+- Estado em `$PVX_HOME/modules/<id>/jobs/<nome>.json`, log em `<nome>.log` (linhas de `ctx.out` e de `ctx.jobLog`). Um job que roda não inicia de novo. Um processo que morreu sem avisar conta como `failed`. Parar manda SIGTERM ao grupo (e o job derruba os `ctx.exec` com `signal`), SIGKILL após 3 s.
+- Segredos de job: arquivo 0600 que o filho lê e apaga antes de rodar; entram como `PVX_SECRET_*` só no ambiente do `execute` do filho. Nunca em argv, estado ou log (o valor vira `***` no log).
+- Iniciar e parar exigem root (`jobs stop` e `jobs run` são comandos do núcleo com `root`) e entram no audit como `kind: "job"`. Sem Windows.
+- CLI do núcleo: `pvx jobs [list]`, `pvx jobs log <módulo> <nome> [--tail N] [-f]`, `pvx jobs stop <módulo> <nome>`; `jobs run` é interno. `jobs` entra nas palavras reservadas.
+- Log: o arquivo do job guarda o rastro cru (alimenta `useJob().lines`) e o log normal do módulo recebe o mesmo fluxo com `[job <nome>]`, sem linhas info que só mudam nos dígitos (barras de progresso); início e parada também vão ao `core.log`.
+- UI: `useQuery(nome, args, { refreshMs })` (mínimo 500 ms, mantém os dados e só renderiza se o resultado mudou), `useJob(nome)` (polling de 1 s, só renderiza se algo mudou), `Steps` e `LogTail` (reusa `follow.ts`; só a roda do mouse sai do fim).
+- `Fields`: `secret` (mascarado com `●`, tecla `generate` que gera 24 caracteres alfanuméricos e mostra o valor até o foco sair), `choice` (`(●)`/`( )`) e `multi` (`[x]`/`[ ]`; valor separado por vírgula, como `repeat`). `↑↓` andam pelas opções e, nas pontas, passam ao campo vizinho.
+
+**Motivo:** O instalador precisa sobreviver à queda da SSH e mostrar fases e log ao vivo; o SDK não tinha streaming, cancelamento, execução separada nem polling.
+
+**Limite:** `ReadCtx.jobs` não inicia nem para. Não há fila nem reinício automático de job. O estado `running` sem `pid` vale por 30 s (o filho ainda não reportou). Jobs não rodam no Windows. Não há teste com um `systemd-run` real (só o caminho de fallback).
