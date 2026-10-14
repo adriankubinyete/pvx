@@ -80,6 +80,8 @@ interface MountOpts {
   rows?: number;
   catalog?: Catalog;
   pending?: Pending[];
+  /** A catalog that never answers. */
+  hang?: boolean;
 }
 async function mount(o: MountOpts = {}) {
   registry = createRegistry();
@@ -92,7 +94,7 @@ async function mount(o: MountOpts = {}) {
   });
   const modules = {
     load, allowFile: true,
-    catalog: async () => o.catalog ?? { modules: [], source: "embutido" as const },
+    catalog: () => (o.hang ? new Promise<Catalog>(() => {}) : Promise.resolve(o.catalog ?? { modules: [], source: "embutido" as const })),
     pending: async () => o.pending ?? [],
   };
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} modules={modules} /> };
@@ -318,8 +320,20 @@ test("removing a row keeps the cursor on the row that takes its place", async ()
   await t.press("x");
   await t.press("s");
   await see(t, (x) => x.includes("✓ rc removido"));
+  await see(t, (x) => x.includes("instalados 1"));
   expect(selectedName(t)).toBe("ra"); // last module gone: the previous one, not a dashed card
 }, 30_000); // several git clones: slow on Windows
+
+test("slow reads show a spinner and text, never a frozen screen: the catalog and the module list", async () => {
+  await install(origin("ld"), "ld");
+  const { t } = await mount({ hang: true });
+  await t.press("c");
+  expect(t.frame()).toMatch(/\S carregando o catálogo…/);
+  t.destroy();
+  const m = await mount();
+  await see(m.t, (x) => /ld\s+● carregado/.test(x));
+  expect(m.t.frame()).not.toContain("lendo os módulos…"); // gone once the rows are in
+});
 
 test("d disables and enables live", async () => {
   await install(origin("tg"), "tg");

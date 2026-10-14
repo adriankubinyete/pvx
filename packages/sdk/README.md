@@ -25,7 +25,7 @@ O `entry` exporta por padrão uma função `(sdk) => ModuleDef`. O host a chama 
 
 **A fábrica não faz trabalho.** Ela só monta e devolve o objeto: nada de ler arquivo, abrir rede, rodar programa ou gravar estado. Todo efeito acontece dentro de `run()`, `prove()`, `data()` ou de uma consulta. O motivo: carregar tem de ser barato e seguro, e um módulo com defeito não pode travar a partida.
 
-`sdk` traz `version` (1), `log` (`debug`, `info`, `warn`, `error`) e `ui` (veja adiante).
+`sdk` traz `version` (1), `log` (`debug`, `info`, `warn`, `error`), `ui` (veja adiante), `proof` (veja Capacidades) e `fs`.
 
 <!-- test -->
 ```ts
@@ -63,6 +63,33 @@ A chave em `commands` é o caminho do comando com espaços (`"ip trust"`); o usu
 | `required` | Falta do argumento sai com exit 2 e diz qual passar. |
 | `secret` | Nunca vem por argumento. Chega por `--<nome>-stdin`, por `PVX_SECRET_<NOME>` ou pelo campo mascarado da TUI. O valor nunca vai para log, histórico, estado nem scrollback. |
 | `values` | Candidatos de completar. |
+
+**Ler os argumentos.** Use os leitores tipados do `ctx`, não `ctx.args[...]` com cast (que continua existindo): `ctx.arg(nome)` (texto de um positional, ou `undefined`), `ctx.option(nome)` (texto de uma `option`, ou `undefined`), `ctx.flag(nome)` (`true` só se a flag veio) e `ctx.list(nome)` (uma `option` com `repeat`: os valores, separados por vírgula, viram uma lista sem espaços e sem itens vazios; `[]` se faltar).
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+const factory: ModuleFactory = () => ({
+  commands: {
+    "tag add": {
+      help: "Adiciona tags a um nome",
+      args: [
+        { name: "nome", help: "Nome", kind: "positional", required: true },
+        { name: "tag", help: "Tag (repetível)", kind: "option", repeat: true },
+        { name: "forte", help: "Marca como forte", kind: "flag" },
+      ],
+      run(ctx) {
+        const nome = ctx.arg("nome") ?? "";
+        const tags = ctx.list("tag");
+        const forca = ctx.flag("forte") ? "forte" : "normal";
+        ctx.out.success(`${nome}: ${tags.join(", ") || "sem tags"} (${forca}, ${ctx.option("tag") ?? "—"})`);
+      },
+    },
+  },
+});
+export default factory;
+```
 
 `destructive: true` exige `--yes` fora de TTY; a TUI usa a confirmação do host.
 
@@ -115,6 +142,30 @@ Uma capacidade é uma condição que o módulo sabe provar e, se possível, cons
 | `affects` | Capacidades a provar de novo depois do conserto. |
 | `needs` | Capacidades que precisam estar `ok` antes; sem isso, o conserto espera. |
 | `optIn` | O conserto nunca roda sozinho com `--yes`. |
+
+**Montar a prova com `sdk.proof`.** Um módulo importa só tipos, então o que monta um `Proof` vem injetado em `sdk.proof`: `ok(texto, { evidence? })`, `warn(texto, { fix?, evidence? })`, `error(texto, { fix?, evidence? })` e `firstProblem(...passos)`. `firstProblem` roda os passos em ordem (cada um é `() => Proof | undefined`, síncrono ou async) e devolve o primeiro que existe e não é `ok`, ou `undefined`. Assim uma capacidade se lê como passos com nome:
+
+<!-- test -->
+```ts
+import type { ModuleFactory, ReadCtx } from "@pvx/sdk";
+
+const factory: ModuleFactory = (sdk) => {
+  const semAplicacao = ({ store }: ReadCtx) => (store.get("aplicado") ? undefined : sdk.proof.warn("nunca aplicado", { fix: "exemplo aplicar" }));
+  const listasMudaram = ({ store }: ReadCtx) => (store.get("mudou") ? sdk.proof.error("as listas mudaram", { evidence: "veja `exemplo diff`" }) : undefined);
+
+  return {
+    capabilities: [
+      {
+        id: "exemplo.ativo",
+        title: "Regras ativas",
+        goal: "As regras aplicadas estão em dia",
+        prove: async (ctx) => (await sdk.proof.firstProblem(() => semAplicacao(ctx), () => listasMudaram(ctx))) ?? sdk.proof.ok("tudo certo"),
+      },
+    ],
+  };
+};
+export default factory;
+```
 
 <!-- test -->
 ```ts
@@ -180,8 +231,8 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano).
-- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` (veja Jobs em segundo plano); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
+- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), e `Conversation`, `Button`, `ProgressBar`, `CellGrid` e `Loading` (veja Componentes de fluxo).
+- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` (veja Jobs em segundo plano); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
 
 **List em colunas.** Com `columns` a `List` alinha as células de cada item em colunas, mesmo com textos de tamanhos diferentes. Cada coluna é `{ id, title?, width?, grow?, align? }`: `width` é fixa e nunca encolhe; `grow` divide o que sobra (peso relativo); sem nenhuma das duas a coluna ocupa o tamanho do conteúdo e é a primeira a encolher se faltar espaço. `align` é `"left"` (padrão) ou `"right"`. Se alguma coluna tem `title`, aparece uma linha de cabeçalho (dim). O item traz `cells: { [idDaColuna]: texto | { text, tone? } }` (`label` e `detail` são ignorados nesse modo; `tone` e `mark` valem). Célula que não cabe é cortada com `…`. A largura vem da própria lista, então acompanha o redimensionamento.
@@ -462,6 +513,7 @@ Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgS
 - `multi`: lista de caixas `[x]`/`[ ]` com as mesmas `options`; `espaço` marca, `enter` avança. O valor é a lista dos `value` marcados, em ordem das opções, **separada por vírgula** (`initial` no mesmo formato).
 - `ctrl+s` sempre envia e `esc` cancela. O mouse foca o campo, marca a caixa e ativa o botão.
 - `validate(valores)` roda antes de `onSubmit`: devolva `{ idDoCampo: "mensagem" }` para mostrar o erro sob o campo e bloquear o envio.
+- `buttons={false}` esconde `[ salvar ]`, `[ cancelar ]` e `[ remover ]` (enter no último campo e `ctrl+s` enviam); `onEdge(dir)` recebe a seta `↑`/`↓` que passaria da ponta, em vez de dar a volta; `active={false}` estaciona o formulário (sem cursor, sem teclas, sem linhas no rodapé). `Conversation` usa os três; use-os para um formulário que faz parte de um fluxo maior.
 - `onDelete` (e `deleteLabel`, padrão "remover") acrescenta o botão `[ remover ]`; ele pergunta "remover? enter confirma · esc volta" antes de chamar a função.
 
 ```tsx
@@ -571,6 +623,83 @@ export default (sdk: Sdk) => {
     },
     pages: { instalador: { title: "Instalador", render: () => <Instalador /> } },
   };
+};
+```
+
+## Componentes de fluxo: conversa, botão, progresso, grade, espera e cópia
+
+Um instalador guiado, uma operação longa ou qualquer tela de várias etapas usa estes componentes em vez de desenhar o seu (`UI.md`, "Componentes do framework"). Todos respondem a teclado e a mouse e usam só tokens do tema.
+
+- **`Conversation`**: perguntas uma de cada vez. `questions` é `{ id, title, field, summary?, skip? }[]`, e `field` é qualquer `FieldSpec` de `Fields` (`line`, `secret`, `choice`, `multi`, `toggle`, `area`; o `id` e o `label` do campo são ignorados: valem o `id` e o `title` da pergunta). `answers` é o estado do módulo (controlado): o fluxo chama `onAnswer(id, valor)` a cada resposta e lê os valores de volta, inclusive como valor inicial. A pergunta respondida vira `✓ título   resumo` (`summary(valor)`; sem ele: o rótulo da opção, `sim`/`não`, `●●●●●●●●` para `secret`); a próxima aparece como `○ título`. `↑` no topo da pergunta atual sobe para a lista de respondidas; `enter` (ou clique) numa linha a reabre no lugar, e depois de confirmar o fluxo volta para onde estava; `esc` cancela a reabertura. Depois da última pergunta vem a etapa de **confirmação**: todas as perguntas (as de `skip: true` entram aqui, marcadas "(padrão)" até serem editadas; o valor vem de `answers`), os seus `footerSummary` ("antes de instalar") e o botão principal (`confirmLabel`, padrão "confirmar"; `ctrl+enter` também confirma). `onConfirm(answers)` só roda daí: nada se aplica antes. `header` desenha algo acima das linhas; `onCancel` acrescenta `[ cancelar ]` e roda no `esc` do topo (sem ele, o `pop` da página). Precisa de uma página (acrescenta linhas ao rodapé).
+- **`Button`**: `[ rótulo ]` clicável. `primary` usa o acento em negrito; `keys` (`enter`, `ctrl+enter`, `a`) registra a tecla na página, então o rodapé e o `?` a mostram; `focused` o desenha selecionado (para quem o alcança por teclado).
+- **`ProgressBar`**: uma linha de `━` na largura toda, com `%` e tempos. `value` de 0 a 1; `startedAt` (ms) liga o tempo decorrido (atualiza a cada segundo) e, rodando, o `faltam ~` (de `etaMs`, a duração total esperada; sem ele, pelo ritmo até agora). `state="failed"` pinta de vermelho o trecho do ponto de parada, colado ao preenchido, e diz `falhou em`; `state="done"` enche a barra e diz `concluído em`.
+- **`CellGrid`**: uma célula por item (`▪` feito, rodando e falhou, cada um no seu tom; `▫` pendente), quebrada na largura, com legenda das contagens. O mouse passa por cima (realça), clica (seleciona e chama `onPress(id)`); o teclado (setas, `enter`) vale enquanto a página tem o foco, ou com `focused`; na borda a seta fica com a página. O rótulo da célula selecionada ou sob o mouse aparece embaixo.
+- **`Loading`** e **`useAsync(fn, deps)`**: toda leitura ou ação que passe de ~300 ms mostra `Loading` (spinner e texto). `useAsync` roda `fn` ao montar e quando `deps` mudam (ou em `run()`), e devolve `{ loading, data, error, run }`; o último `data` fica enquanto roda de novo, e só a chamada mais nova vale.
+- **`useCopy()`**: `copy(texto, { title? })` copia pelo clipboard do host e do terminal (OSC 52), mostra por alguns segundos um painel com exatamente o que foi copiado e o aviso `✓ copiado`. Sem clipboard, diz `não copiou: <causa>`, mantém o painel (dá para selecionar com o mouse) e resolve `false`.
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { Question, Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, Conversation, Text, Panel, useState, useCopy } = sdk.ui;
+  const perguntas: Question[] = [
+    { id: "versao", title: "Versão", field: { id: "versao", label: "", kind: "choice", options: [{ value: "18", label: "18", detail: "recomendado" }, { value: "16", label: "16" }] } },
+    { id: "senha", title: "Senha", field: { id: "senha", label: "", kind: "secret", generate: "ctrl+g" } },
+    // não é perguntada, mas aparece na confirmação como "(padrão)" e dá para editar lá
+    { id: "extras", title: "Pacotes extras", skip: true, field: { id: "extras", label: "", kind: "multi", options: [{ value: "lic", label: "licenciados" }, { value: "bl", label: "blocklist" }] } },
+  ];
+
+  function Instalar() {
+    const [respostas, setRespostas] = useState<Record<string, string | boolean>>({ extras: "lic,bl" });
+    const copiar = useCopy();
+    return (
+      <Panel>
+        <Conversation
+          questions={perguntas}
+          answers={respostas}
+          onAnswer={(id, valor) => setRespostas((r) => ({ ...r, [id]: valor }))}
+          confirmLabel="instalar"
+          footerSummary={<Text tone="warn">a central reinicia ao terminar</Text>}
+          onConfirm={(r) => void copiar(`pvx exemplo instalar --versao ${String(r.versao)}`, { title: "comando" })}
+        />
+      </Panel>
+    );
+  }
+
+  return { pages: { instalar: { title: "Instalar", render: () => <Instalar /> } } };
+};
+```
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { CellItem, Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, ProgressBar, CellGrid, Loading, Button, useAsync, useState, useNudge } = sdk.ui;
+
+  function Andamento() {
+    const nudge = useNudge();
+    const [inicio] = useState(() => Date.now());
+    const lista = useAsync(async () => ["a", "b", "c"], []); // leitura: mostra Loading enquanto não chega
+    if (lista.loading && !lista.data) return <Loading label="lendo a lista…" />;
+    const cells: CellItem[] = (lista.data ?? []).map((id, i) => ({ id, label: `pacote ${id}`, state: i === 0 ? "done" : i === 1 ? "running" : "pending" }));
+    return (
+      <>
+        <ProgressBar value={1 / 3} startedAt={inicio} etaMs={20 * 60_000} />
+        <CellGrid cells={cells} onPress={(id) => nudge(`pacote ${id}`)} focused />
+        <Button label="atualizar" keys="r" onPress={() => void lista.run()} />
+      </>
+    );
+  }
+
+  return { pages: { andamento: { title: "Andamento", render: () => <Andamento /> } } };
 };
 ```
 

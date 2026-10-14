@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
@@ -105,8 +105,8 @@ export interface CardGridProps {
   /** Up on the first row: focus goes to the tab bar. */
   onTop?: () => void;
   focused: boolean;
-  /** Shown instead of the cards when there are none. */
-  empty?: string;
+  /** Shown instead of the cards when there are none (text, or a node such as `Loading`). */
+  empty?: ReactNode;
 }
 
 /** Cards in a grid: arrows, enter, mouse, scroll to the selected one. 3 columns from 120 terminal columns, 2 from 80, else 1. */
@@ -157,7 +157,7 @@ export function CardGrid({ cards, sel, onSel, onActivate, onTop, focused, empty 
 
   return (
     <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
-      {!cards.length && empty ? <box paddingX={1} flexShrink={0}><text fg={c.dim}>{empty}</text></box> : null}
+      {!cards.length && empty ? <box paddingX={1} flexShrink={0}>{typeof empty === "string" ? <text fg={c.dim}>{empty}</text> : empty}</box> : null}
       {lines.map((line, i) => (
         <box key={i} id={`row:${i}`} flexDirection="row" flexShrink={0} height={CARD_H} gap={CARD_GAP}>
           {line.map((card) => <CardView key={card.id} card={card} selected={card.id === cur?.id} hot={focused && card.id === cur?.id} lit={!focused && card.id === over} w={w} onHover={hover} onLeave={leave} onPick={pick} />)}

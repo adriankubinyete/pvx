@@ -1,4 +1,5 @@
 import { useReducer, useEffect, useRef } from "react";
+import { Loading } from "../sdk-ui/flow.tsx";
 import type { CoreLine } from "@pvx/core";
 import { followProps } from "../follow.ts";
 import { hintText, matchKey } from "../keymap.ts";
@@ -62,7 +63,7 @@ export function CoreTab({ store, line, cache, refreshMs = LOGS_REFRESH_MS }: { s
   };
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={`${g.query} ${line}`}>
-      <text fg={c.dim} flexShrink={0}>{done ? `${line === "logs" ? `atualizado ${hhmmss(done.at)}` : `verificado às ${hhmm(done.at)}`} · ${hintText("tabs", "r")}` : "verificando…"}</text>
+      {done ? <text fg={c.dim} flexShrink={0}>{`${line === "logs" ? `atualizado ${hhmmss(done.at)}` : `verificado às ${hhmm(done.at)}`} · ${hintText("tabs", "r")}`}</text> : <Loading label="verificando…" />}
       <scrollbox flexGrow={1} minHeight={0} {...(line === "logs" ? followProps : {})} focused>
         <BlockView b={b} focused={false} tick={0} onPick={noop} />
       </scrollbox>

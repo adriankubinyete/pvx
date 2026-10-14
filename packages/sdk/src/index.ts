@@ -82,6 +82,14 @@ export interface ArgSpec {
 
 export interface CommandCtx {
   args: Record<string, string | boolean | undefined>;
+  /** A positional argument's text, or undefined when missing. */
+  arg(name: string): string | undefined;
+  /** Whether a `flag` was given. */
+  flag(name: string): boolean;
+  /** An `option`'s text, or undefined when missing. */
+  option(name: string): string | undefined;
+  /** A `repeat` option as a list: the comma-joined values split, trimmed, empty ones dropped (`[]` when missing). */
+  list(name: string): string[];
   out: Out;
   log: Logger;
   store: Store;
@@ -250,11 +258,21 @@ export interface Proof {
   fix?: string;
 }
 
+/** `sdk.proof`: builders for `Proof` (a module imports types only, so the runtime comes injected). */
+export interface ProofKit {
+  ok(text: string, extra?: { evidence?: string }): Proof;
+  warn(text: string, extra?: { fix?: string; evidence?: string }): Proof;
+  error(text: string, extra?: { fix?: string; evidence?: string }): Proof;
+  /** Runs the steps in order and returns the first `Proof` that is defined and not ok, or undefined when none is: a capability reads as named steps. */
+  firstProblem(...steps: (() => Proof | undefined | Promise<Proof | undefined>)[]): Promise<Proof | undefined>;
+}
+
 /** What the host injects into the factory. */
 export interface Sdk {
   version: 1;
   log: Logger;
   ui: SdkUi;
+  proof: ProofKit;
   /** Same permission rules as `ctx.fs`, for code that has no command context (queries, widgets). */
   fs: ModuleFs;
 }
@@ -408,6 +426,26 @@ export interface StepItem {
   detail?: string;
 }
 
+/** One question of a `Conversation`. */
+export interface Question {
+  id: string;
+  /** Shown as `? title` while asked and as `✓ title  summary` once answered. */
+  title: string;
+  /** Any `Fields` kind. Its `id` and `label` are ignored (the question's `id` and `title` rule). */
+  field: FieldSpec;
+  /** The answered line's text. Default: the option label (`choice`, `multi`), `sim`/`não` (`toggle`), `●●●●●●●●` (`secret`), the first line of the text. */
+  summary?(value: string | boolean): string;
+  /** Not asked in the flow, but listed (marked "(padrão)" until edited) and editable in the confirm step. Its value is `answers[id]`. */
+  skip?: boolean;
+}
+
+export interface CellItem {
+  id: string;
+  state: "pending" | "running" | "done" | "failed";
+  /** Shown under the grid for the selected or hovered cell. */
+  label?: string;
+}
+
 export interface SdkUi {
   /** JSX factory. A module file needs the classic-runtime pragmas (jsxRuntime classic, jsx h, jsxFrag Fragment), else Bun imports React. */
   h(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
@@ -462,8 +500,67 @@ export interface SdkUi {
     onDelete?: () => void | Promise<void>;
     /** Label of that button (default "remover"). */
     deleteLabel?: string;
+    /** `false` while the form is a parked part of a bigger flow (`Conversation` uses it): it draws no cursor, owns no key and adds nothing to the footer. Default true. */
+    active?: boolean;
+    /** `false` hides [ salvar ], [ cancelar ] and [ remover ]: enter on the last field or ctrl+s submits, esc cancels. Default true. */
+    buttons?: boolean;
+    /** With it, an up/down arrow past the first/last field calls it instead of wrapping (tab still wraps). */
+    onEdge?: (dir: "up" | "down") => void;
   }>;
 
+  /**
+   * A guided question flow. Questions (those without `skip`) appear one at a time as `? title` with the field under it; an answered one
+   * collapses to `✓ title   summary`, and the next pending one shows as `○ title`. `answers` is the module's state (controlled): the
+   * flow calls `onAnswer(id, value)` as each question is answered and reads the values (and initial values) back from `answers`.
+   * After the last question comes the CONFIRM step: every question (skipped ones too, with "(padrão)"), your `footerSummary`
+   * (the "before you install" notes) and the primary button; `onConfirm(answers)` runs only from it, so nothing is committed before.
+   * Keyboard: enter answers; up/down walk the answered lines (up from the first field of the question moves into them, down from the
+   * last one returns); enter on an answered line reopens it in place, and after re-confirming the flow returns to where it was; esc
+   * cancels a reopened question, leaves the list, and at the top calls `onCancel` (default: the page's `pop`). In the confirm step
+   * `ctrl+enter` confirms. Mouse: click an answered line to reopen it, a button to press it. It needs a page (it adds footer rows).
+   */
+  Conversation: Component<{
+    questions: Question[];
+    answers: Record<string, string | boolean>;
+    onAnswer: (id: string, value: string | boolean) => void;
+    onConfirm: (answers: Record<string, string | boolean>) => void;
+    /** Drawn above the lines (an already-answered check, a breadcrumb). */
+    header?: unknown;
+    /** Drawn in the confirm step, above the buttons: the module's notes (`Text` lines, a `Panel`). */
+    footerSummary?: unknown;
+    /** Label of the primary button (default "confirmar"). */
+    confirmLabel?: string;
+    /** Adds [ cancelar ] to the confirm step and runs on esc at the top. */
+    onCancel?: () => void;
+  }>;
+  /** `[ label ]`, clickable; hover tints it. `primary` is accent and bold. `keys` (`enter`, `ctrl+enter`, `a`) registers the key for the page, so the footer and `?` show it. `focused` draws it selected (for a button the page navigates to by keyboard). */
+  Button: Component<{ label: string; onPress: () => void; primary?: boolean; keys?: string; focused?: boolean }>;
+  /**
+   * One full-width line: a `━` bar, the percentage and the times. `value` is 0..1. With `startedAt` (ms since epoch) it shows the elapsed
+   * time and, while running, `faltam ~` the rest (from `etaMs`, the expected TOTAL duration; without it from the pace so far); it ticks each second.
+   * `failed` paints the cells at the stop point red right after the filled part and says `falhou em`; `done` fills it and says `concluído em`.
+   */
+  ProgressBar: Component<{ value: number; startedAt?: number; etaMs?: number; state?: "running" | "failed" | "done"; label?: string }>;
+  /**
+   * One cell per item (`▪` done, running and failed in their tones; `▫` pending), wrapped to the width, with a legend of the counts
+   * (only the states that exist). Hover tints a cell, and moves the selection while the grid has the keyboard; click selects it and calls
+   * `onPress(id)`. The keyboard (arrows move, enter presses) is on while the page has focus, or when `focused` says so; at an edge an
+   * arrow is left to the page. The label of the selected or hovered cell shows under the grid.
+   */
+  CellGrid: Component<{ cells: CellItem[]; onPress?: (id: string) => void; legend?: boolean; focused?: boolean }>;
+  /** A spinner and `label`, for any wait longer than ~300 ms. The spinner ticks only while it is mounted. */
+  Loading: Component<{ label: string }>;
+  /**
+   * Runs `fn` on mount and again when `deps` change (or on `run()`). `loading` is true while a call is out; `data` keeps the last result
+   * meanwhile; `error` is the message of a throw. Only the newest call lands (an older one that finishes late is dropped).
+   */
+  useAsync<T>(fn: () => T | Promise<T>, deps: readonly unknown[]): { loading: boolean; data?: T; error?: string; run(): Promise<void> };
+  /**
+   * `copy(text, { title? })` puts `text` on the clipboard (the host and the terminal's OSC 52, so it works over SSH when the terminal allows it),
+   * shows a panel with exactly the copied lines for a few seconds, and the notice `✓ copiado`. It resolves true when copied. When no clipboard
+   * answers it shows `não copiou` with the cause (the panel stays, so the text can be selected with the mouse) and resolves false.
+   */
+  useCopy(): (text: string, opts?: { title?: string }) => Promise<boolean>;
   /** Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. */
   useCommand(line: string): { run(opts?: { args?: string[]; stdin?: string }): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
   /** Same, and re-runs every `refreshMs` (min 500) while the page is mounted. The old data stays until the new arrives (`loading` is only true for the first run). */

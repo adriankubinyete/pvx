@@ -225,3 +225,26 @@ test("rich fields fit 80x24", async () => {
   expect(t.frame().trimEnd().split("\n").length).toBeLessThanOrEqual(24);
   expect(t.frame()).toContain("[ salvar ]");
 });
+
+test("enter on a choice field submits the option it just picked, not the previous one", async () => {
+  const opts = [{ value: "a", label: "A" }, { value: "b", label: "B" }];
+  const { t, calls } = await mount({ fields: [{ id: "k", label: "k", kind: "choice", options: opts }] });
+  await t.press("ARROW_DOWN");
+  await t.press("RETURN");
+  expect(calls.submit).toEqual([{ k: "b" }]);
+});
+
+test("buttons=false hides the button row; onEdge takes an arrow past the ends; active=false parks the form", async () => {
+  const edges: string[] = [];
+  const { t } = await mount({ buttons: false, onEdge: (d) => void edges.push(d) });
+  expect(t.frame()).not.toContain("[ salvar ]");
+  await t.press("ARROW_UP");
+  await t.press("ARROW_DOWN");
+  await t.press("ARROW_DOWN");
+  await t.press("ARROW_DOWN");
+  expect(edges).toEqual(["up", "down"]); // 3 fields: down, down, then past the last
+  const m = await mount({ active: false });
+  await m.t.type("zz");
+  expect(m.t.frame()).not.toContain("zz");
+  expect(m.calls.keys).toEqual([]); // a parked form adds no footer rows
+});

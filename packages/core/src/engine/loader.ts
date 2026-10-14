@@ -1,3 +1,4 @@
+import { proofKit } from "./helpers.ts";
 import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import type { BuiltinModule, Logger, Manifest, ModuleFactory, Sdk, SdkUi } from "@pvx/sdk";
@@ -30,7 +31,7 @@ export interface LoadOpts {
 /** What a factory gets: the module's own logger and a `fs` bound to its manifest permissions. */
 const sdkFor = (manifest: Manifest, opts: LoadOpts): Sdk => {
   const log = opts.makeLogger(manifest.id);
-  return { version: 1, log, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
+  return { version: 1, log, proof: proofKit, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
 };
 
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */

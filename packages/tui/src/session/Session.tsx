@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useRenderer } from "@opentui/react";
-import { createClipboard, createHostClipboard, createRendererClipboardAdapter } from "@opentui/core";
+import { writeClipboard } from "../sdk-ui/copy.tsx";
 import type { Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { editLine } from "../lineedit.ts";
@@ -130,9 +130,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     if (key === "c") {
       const errors = b.lines.filter((l) => l.kind === "error");
       const text = (errors.length ? errors : b.lines).map((l) => l.text).join("\n");
-      // Host + OSC52: the terminal path alone fails under tmux and SSH.
-      const clip = createClipboard({ host: createHostClipboard(), terminal: createRendererClipboardAdapter(renderer) });
-      void clip.writeText(text, { destination: "best-available" }).finally(() => clip.dispose());
+      void writeClipboard(renderer, text);
       return setNote("copiado"), true;
     }
     return false;

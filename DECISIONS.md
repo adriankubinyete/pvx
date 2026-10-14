@@ -80,6 +80,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Páginas de módulo navegam como o Início: `toBar` e `useBack` → [Páginas de módulo navegam como o Início: `toBar` e `useBack`](#2026-10-13--páginas-de-módulo-navegam-como-o-início-tobar-e-useback)
 - Módulo gerenciado pela TUI sobre um registry vivo → [Módulos na TUI: gerenciador, catálogo, revisão e registry vivo (Fase 4C)](#2026-10-09--módulos-na-tui-gerenciador-catálogo-revisão-e-registry-vivo-fase-4c) (em parte)
 - `ctx.exec` com streaming e cancelamento, jobs em segundo plano, `useJob`, campos `secret`/`choice`/`multi`, `Steps` e `LogTail` → [SDK: exec em streaming, jobs em segundo plano e kit de instalador](#2026-10-14--sdk-exec-em-streaming-jobs-em-segundo-plano-e-kit-de-instalador)
+- Componentes de fluxo no framework (`Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading`, `useAsync`, `useCopy`) e a regra de espera visível → [SDK: componentes de fluxo e espera visível](#2026-10-14--sdk-componentes-de-fluxo-e-espera-visível)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1071,3 +1072,25 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** O instalador precisa sobreviver à queda da SSH e mostrar fases e log ao vivo; o SDK não tinha streaming, cancelamento, execução separada nem polling.
 
 **Limite:** `ReadCtx.jobs` não inicia nem para. Não há fila nem reinício automático de job. O estado `running` sem `pid` vale por 30 s (o filho ainda não reportou). Jobs não rodam no Windows. Não há teste com um `systemd-run` real (só o caminho de fallback).
+
+## 2026-10-14 — SDK: componentes de fluxo e espera visível
+
+**Status:** vigente
+
+**Decisão:** O que um instalador guiado precisa, e que serviria a qualquer módulo, mora no framework (`sdk.ui`) e é documentado no `UI.md` (seção 12) e no README do SDK. O módulo `issabel` usa; não redesenha.
+
+- `Conversation` (perguntas guiadas sobre `Fields`), `Button`, `ProgressBar`, `CellGrid`, `Loading`, `useAsync(fn, deps)` e `useCopy()`. Todos com teclado e mouse e só tokens do tema.
+- `Conversation`: o estado das respostas é do módulo (`answers`, `onAnswer`); `onConfirm` só roda na etapa de confirmação, então nada se aplica antes. Pergunta com `skip` não entra no fluxo, mas é listada ("(padrão)") e editável na confirmação. Reabrir uma resposta é no lugar e volta ao ponto de onde saiu.
+- `Fields` ganha `active`, `buttons` e `onEdge` (aditivos), para ser uma parte estacionada de um fluxo maior. Um `enter` num campo `choice` agora envia a opção recém escolhida (antes enviava a anterior).
+- `ProgressBar.etaMs` é a duração total esperada (sem ele, o ritmo até agora). Falha pinta o ponto de parada de vermelho, colado ao preenchido.
+- `CellGrid`: o teclado vale com o foco da página (ou `focused`); na borda a seta fica com a página. Glifos `▪`/`▫`, com `#`/`.` no conjunto ASCII.
+- `useCopy`: usa o mesmo clipboard do OpenTUI (host e OSC 52) que o `c` do Comando; mostra um painel transitório com o texto copiado e `✓ copiado`; sem clipboard diz a causa e mantém o painel.
+- Regra de espera (UI.md): toda ação ou leitura que passe de ~300 ms mostra spinner e texto. Auditoria da TUI: carregamento do catálogo, lista de módulos, ação do host no menu Módulos (clone, fetch, remoção), caixa de adicionar, abertura e aprovação da revisão, verificação de conformidade (Início e abas do núcleo) passam a usar `Loading`.
+- Três testes falhavam no HEAD por uma corrida do teste, não por bug: a lista de módulos lê o disco de forma assíncrona (`listModules`), e o teste comparava quadros (ou lia a seleção) antes de a lista chegar. Os testes agora esperam a lista. O terceiro (`boundary`) pegou um comentário em `modules/actions.ts` que citava um módulo.
+
+- `sdk.proof` (`ok`, `warn`, `error`, `firstProblem`) monta `Proof` e roda os passos de uma capacidade em ordem; `ctx.arg`, `ctx.flag`, `ctx.option` e `ctx.list` leem os argumentos tipados (`ctx.args` continua). Um módulo importa só tipos, então o runtime vem injetado (`packages/core/src/engine/helpers.ts`).
+- `CODIGO.md` é a norma de código legível (funções curtas com nome de intenção, tabelas no lugar de ternários longos, retorno às claras, nomes inteiros, genérico no framework). O modelo de módulo já a segue.
+
+**Motivo:** o `issabel netinstall` precisa dessas peças, e o dono quer cada peça genérica no framework para o próximo módulo não reinventá-la.
+
+**Limite:** `Conversation` não rola (a conversa cabe em 80x24 com poucas perguntas). A primeira carga de um `useQuery` de um módulo continua sendo desenhada pelo módulo (o host só entrega `loading`): use `Loading`.

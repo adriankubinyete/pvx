@@ -1,3 +1,4 @@
+import { argGetters } from "./helpers.ts";
 import { EXIT } from "@pvx/sdk";
 import type { Logger, OutLine } from "@pvx/sdk";
 import { auditCommand, lineOf } from "../journal/audit.ts";
@@ -58,6 +59,7 @@ export async function execute(registry: Registry, input: string | string[], opts
   try {
     await cmd.run({
       args: parsed.args,
+      ...argGetters(parsed.args),
       out: { success: add("success"), warning: add("warning"), error: add("error"), info: add("info"), plain: add("plain") },
       log,
       store: createStore(cmd.moduleId),

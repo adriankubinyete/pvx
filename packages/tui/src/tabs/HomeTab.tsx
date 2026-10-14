@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
+import { Loading } from "../sdk-ui/flow.tsx";
 import { createMachineSampler, pageWithRole, type MachineSampler, type Registry } from "@pvx/core";
 import { hintText, matchKey } from "../keymap.ts";
 import { useOver } from "../hover.ts";
@@ -225,7 +226,7 @@ export function HomeTab({ store, nav, profile, registry, sampler }: { store: Ses
       <text wrapMode="none" flexShrink={0}>
         {profile ? <span fg={c.accent}>{`perfil ${profile}`}</span> : <span fg={c.dim}>sem perfil</span>}
       </text>
-      {snap.running ? <text fg={c.dim} flexShrink={0}>verificando…</text>
+      {snap.running ? <Loading label="verificando a conformidade…" />
         : !done ? <box flexDirection="row" flexShrink={0}><text fg={c.dim} wrapMode="none" flexShrink={0}>{"não verificado · "}</text>{act("r verifica")}</box>
         : done.message ? <text fg={c.dim} flexShrink={0}>{cut(clean(done.message), confW - 4)}</text>
         : (

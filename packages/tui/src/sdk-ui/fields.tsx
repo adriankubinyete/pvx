@@ -34,7 +34,7 @@ function Keys({ on }: { on: (k: Parameters<Parameters<typeof useKeys>[0]>[0]) =>
 }
 
 export const Fields: Component<Props> = (props) => {
-  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", validate } = props;
+  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", validate, active = true, buttons: showButtons = true, onEdge } = props;
   const { c, g } = useTheme();
   const { cols } = useLayout();
   const host = useHost();
@@ -51,7 +51,7 @@ export const Fields: Component<Props> = (props) => {
   const areas = useRef<Record<string, TextareaRenderable | null>>({});
   useEffect(() => setReady(true), []);
 
-  const buttons: Button[] = ["save", "cancel", ...(onDelete ? (["remove"] as const) : [])];
+  const buttons: Button[] = showButtons ? ["save", "cancel", ...(onDelete ? (["remove"] as const) : [])] : [];
   const total = fields.length + buttons.length;
   const here = fields[focus]; // undefined: a button has the focus
   const button = focus >= fields.length ? buttons[focus - fields.length] : undefined;
@@ -62,24 +62,27 @@ export const Fields: Component<Props> = (props) => {
   const marks_ = fields.some((f) => f.kind === "toggle" || f.kind === "multi" || f.kind === "choice");
   const hints = [here?.kind === "area" ? "tab|campo" : listy ? "↑↓|opção\ntab|campo" : "↑↓ tab|campo", marks_ ? `space|${here?.kind === "choice" ? "escolhe" : "marca"}` : "", here?.kind === "secret" && here.generate ? `${here.generate}|gera` : "", enterHint && `enter|${enterHint}`, "ctrl+s|salva"].filter(Boolean).join("\n");
   useEffect(() => {
+    if (!active) return;
     const offs = hints.split("\n").map((h) => host.addKey({ keys: h.split("|")[0]!, label: h.split("|")[1]!, run() {} }));
     return () => offs.forEach((off) => off());
-  }, [host, hints]);
+  }, [host, hints, active]);
 
-  const read = (): Record<string, Value> => ({
+  const read = (over: Record<string, Value> = {}): Record<string, Value> => ({
     ...Object.fromEntries(fields.filter((f) => f.kind === "area").map((f) => [f.id, areas.current[f.id]?.plainText ?? ""])),
     ...Object.fromEntries(Object.entries(lines).map(([id, l]) => [id, l.text])),
     ...picks,
     ...Object.fromEntries(fields.filter((f) => f.kind === "multi").map((f) => [f.id, (f.options ?? []).filter((o) => checks[f.id]!.includes(o.value)).map((o) => o.value).join(",")])),
     ...marks,
+    ...over,
   });
   const go = (n: number) => (setFocus(n), setConfirm(false), setShown(undefined));
-  const submit = () => {
-    const found = validate?.(read()) ?? {};
+  /** `over`: values the state has not caught up with yet (a choice picked by the same enter). */
+  const submit = (over?: Record<string, Value>) => {
+    const found = validate?.(read(over)) ?? {};
     setErrors(found);
     const bad = fields.findIndex((f) => found[f.id]);
     if (bad >= 0) return go(bad);
-    onSubmit(read());
+    onSubmit(read(over));
   };
   const flip = (id: string) => (setMarks({ ...marks, [id]: !marks[id] }), setErrors({ ...errors, [id]: "" }));
   const clear = (id: string) => errors[id] && setErrors({ ...errors, [id]: "" });
@@ -102,24 +105,30 @@ export const Fields: Component<Props> = (props) => {
     }
     if (k.name === "escape") return onCancel();
     if (matchKey(k, "ctrl+s")) return submit();
-    const step = (d: number) => go((focus + d + total) % total);
+    // An arrow past the first or last stop hands the key to `onEdge` (when given) instead of wrapping; tab always wraps.
+    const step = (d: number, arrow = false) => {
+      const n = focus + d;
+      if (arrow && onEdge && (n < 0 || n >= total)) return onEdge(d < 0 ? "up" : "down");
+      go((n + total) % total);
+    };
     if (matchKey(k, "tab")) return step(1);
     if (matchKey(k, "shift+tab")) return step(-1);
     if (here?.kind === "area") return; // the textarea owns arrows and enter
     if (here && (here.kind === "choice" || here.kind === "multi")) {
       const at = cursors[here.id] ?? 0;
       const n = here.options?.length ?? 0;
-      if (matchKey(k, "up")) return at > 0 ? setCursors({ ...cursors, [here.id]: at - 1 }) : step(-1); // the edges hand the arrow to the next field
-      if (matchKey(k, "down")) return at < n - 1 ? setCursors({ ...cursors, [here.id]: at + 1 }) : step(1);
+      if (matchKey(k, "up")) return at > 0 ? setCursors({ ...cursors, [here.id]: at - 1 }) : step(-1, true); // the edges hand the arrow to the next field
+      if (matchKey(k, "down")) return at < n - 1 ? setCursors({ ...cursors, [here.id]: at + 1 }) : step(1, true);
       if (k.sequence === " ") return pick(here, at);
       if (matchKey(k, "enter")) {
         if (here.kind === "choice") pick(here, at);
-        return focus === fields.length - 1 ? submit() : step(1);
+        const picked = here.kind === "choice" && here.options?.[at] ? { [here.id]: here.options[at]!.value } : undefined;
+        return focus === fields.length - 1 ? submit(picked) : step(1);
       }
       return;
     }
-    if (matchKey(k, "up")) return step(-1);
-    if (matchKey(k, "down")) return step(1);
+    if (matchKey(k, "up")) return step(-1, true);
+    if (matchKey(k, "down")) return step(1, true);
     if (button) {
       if (matchKey(k, "left")) return go(Math.max(fields.length, focus - 1));
       if (matchKey(k, "right")) return go(Math.min(total - 1, focus + 1));
@@ -166,14 +175,14 @@ export const Fields: Component<Props> = (props) => {
 
   return (
     <box flexDirection="column" flexShrink={0}>
-      {ready ? <Keys on={onKey} /> : null}
+      {ready && active ? <Keys on={onKey} /> : null}
       {fields.map((f, i) => {
-        const on = i === focus && !confirm;
+        const on = i === focus && !confirm && active;
         const label = clean(f.label);
         if (f.kind === "area")
           return (
             <box key={f.id} flexShrink={0} height={(f.rows ?? 5) + 2} border borderStyle="rounded" borderColor={on ? c.accent : c.border} title={label} onMouseDown={() => go(i)}>
-              <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
+              <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && active} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
             </box>
           );
         const head = <span fg={on ? c.accent : c.dim}>{stacked ? "" : label.padEnd(labelW + 2)}</span>;
@@ -192,7 +201,7 @@ export const Fields: Component<Props> = (props) => {
         if (f.kind === "choice" || f.kind === "multi")
           return (
             <box key={f.id} flexDirection="column" flexShrink={0}>
-              <text wrapMode="none" fg={on ? c.accent : c.dim}>{label}</text>
+              {label ? <text wrapMode="none" fg={on ? c.accent : c.dim}>{label}</text> : null}
               {(f.options ?? []).map((o, oi) => {
                 const here_ = on && cursors[f.id] === oi;
                 const set = f.kind === "choice" ? picks[f.id] === o.value : checks[f.id]!.includes(o.value);
@@ -223,14 +232,14 @@ export const Fields: Component<Props> = (props) => {
           </box>
         );
       })}
-      <text flexShrink={0}> </text>
-      <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+      {showButtons ? <text flexShrink={0}> </text> : null}
+      {showButtons ? <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <box flexDirection="row" flexShrink={0} gap={2}>
           {btn("save", "salvar")}
           {btn("cancel", "cancelar")}
         </box>
         {onDelete ? btn("remove", clean(deleteLabel)) : null}
-      </box>
+      </box> : null}
       {confirm ? (
         <box flexShrink={0} onMouseDown={remove}>
           <text wrapMode="none" fg={c.error}>{`${clean(deleteLabel)}? enter confirma · esc volta`}</text>

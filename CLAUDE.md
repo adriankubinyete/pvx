@@ -7,6 +7,7 @@ CLI e TUI de sysadmin em Bun/TypeScript com módulos (OpenTUI + React). Versão 
 - `README.md`: instalação e uso, para quem opera o pvx.
 - `CLAUDE.md`: regras para agentes (sempre carregado).
 - `UI.md`: padrão de interação e visual; leia antes de mexer em tela.
+- `CODIGO.md`: padrão de código; leia antes de escrever ou revisar código.
 - `DECISIONS.md`: decisões e histórico, com a seção Vigentes; leia antes de mudar comportamento.
 - `packages/sdk/README.md`: contrato e kit para autores de módulo; leia ao mexer no SDK.
 - `templates/pvx-module-template/README.md`: modelo de módulo; leia ao criar um módulo.
@@ -49,7 +50,9 @@ CLI e TUI de sysadmin em Bun/TypeScript com módulos (OpenTUI + React). Versão 
 
 - Escreva um teste de regressão.
 - Mudou o SDK: atualize `packages/sdk/README.md`.
+- Escreveu código: siga o CODIGO.md.
 - Mexeu em tela: siga o UI.md.
+- Algo genérico (serviria a outro módulo)? Coloque no framework e documente no UI.md.
 - Registre uma entrada em `DECISIONS.md`.
 
 ## Armadilhas do OpenTUI

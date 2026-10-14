@@ -397,6 +397,7 @@ const seeHelp = (t: TuiHarness, scope: Scope) => {
 test("? help fits 80x24 from every main context and esc returns to the same focus", async () => {
   const m = await mount({ cols: 80, rows: 24, modules: true });
   const t = m.t;
+  for (let i = 0; i < 100 && !t.frame().split("\n")[6]?.includes("1.0.0"); i++) (await Bun.sleep(50), await t.flush()); // the card rows load async (listModules): compare frames only after the first row shows its version
   const check = async (scope: Scope, footerKey: string) => {
     const before = t.frame();
     await t.press("?");

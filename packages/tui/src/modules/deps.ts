@@ -27,14 +27,14 @@ export const useModulesDeps = () => useContext(Ctx);
 export const useRegistryRev = (r: Registry) => useSyncExternalStore(r.subscribe, () => r.rev);
 
 /** Disk state of every module (git calls: async). Re-reads on a registry change or `reload()`. */
-export function useModuleRows(registry: Registry): { rows: ModuleRow[]; reload: () => void } {
+export function useModuleRows(registry: Registry): { rows: ModuleRow[]; reload: () => void; loaded: boolean } {
   const rev = useRegistryRev(registry);
   const [n, reload] = useReducer((x: number) => x + 1, 0);
-  const [rows, setRows] = useReducer((_: ModuleRow[], r: ModuleRow[]) => r, []);
+  const [rows, setRows] = useReducer((_: ModuleRow[] | undefined, r: ModuleRow[]) => r, undefined);
   useEffect(() => {
     let live = true;
     void listModules(registry).then((r) => live && setRows(r), () => {});
     return () => void (live = false);
   }, [registry, rev, n]);
-  return { rows, reload };
+  return { rows: rows ?? [], reload, loaded: rows !== undefined };
 }

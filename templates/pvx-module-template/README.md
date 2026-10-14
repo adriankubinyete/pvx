@@ -1,6 +1,6 @@
 # exemplo
 
-Módulo-modelo do pvx. Copie esta pasta, troque o `id` em `pvx-module.json` (ele deve ser igual ao nome do diretório em `usermodules/`) e edite `src/index.tsx`. Documentação do contrato: `packages/sdk/README.md`.
+Módulo-modelo do pvx. Copie esta pasta, troque o `id` em `pvx-module.json` (ele deve ser igual ao nome do diretório em `usermodules/`) e edite `src/index.tsx`. Documentação do contrato: `packages/sdk/README.md`. Padrão de código: `CODIGO.md` (na raiz do pvx); leia antes de escrever ou revisar código.
 
 ## Ficha de módulo
 

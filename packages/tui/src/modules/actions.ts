@@ -5,7 +5,7 @@ import type { ModulesDeps } from "./deps.ts";
 
 const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
 
-/** What a loaded module delivers, for a success notice: ` · 19 comandos · aba Firewall disponível` (the tab only when it has one). */
+/** What a loaded module delivers, for a success notice: ` · 19 comandos · aba <Nome> disponível` (the tab only when it has one). */
 export function deliveredTail(registry: Registry, id: string): string {
   const cmds = [...registry.commands.values()].filter((c) => c.moduleId === id).length;
   const tab = [...registry.pages.values()].find((p) => p.moduleId === id && p.tab);

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { Loading } from "../sdk-ui/flow.tsx";
 import type { OutLine } from "@pvx/sdk";
 import { addModule, catalogHas, isModuleUrl, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type Review, type UpdateCheck } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
@@ -70,7 +71,8 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   nav.catalog = catalog;
 
   const rev = useRegistryRev(registry);
-  const { rows } = useModuleRows(registry);
+  const { rows, loaded } = useModuleRows(registry);
+  const [working, setWorking] = useState<string | undefined>(undefined); // the host action in flight (clone, fetch, reload): never a frozen screen
   const root = useMemo(() => buildRoot(registry, rows, updates), [registry, rev, rows, updates]);
   useEffect(() => {
     if (!catalog && !deps) return; // read-only hosts fetch only when the user opens the catalog
@@ -96,7 +98,8 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   };
   /** A host action as a block (same root rule and scrollback as a command), then its output on screen. */
   const act = async (line: string, fn: (h: ActHelper) => Promise<{ exit: number; lines: OutLine[] }>, confirm = false) => {
-    const r = await store.act(line, fn, { confirm });
+    setWorking(line);
+    const r = await store.act(line, fn, { confirm }).finally(() => setWorking(undefined));
     registry.changed(); // rows, tabs, palette and Início re-read
     return r;
   };
@@ -261,7 +264,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
 
   const back = () => setView({ kind: "list" });
   const helpW = cols - 2 - 4 - LABEL_W - 2;
-  const empty = !catalog ? undefined : !cat ? "carregando catálogo…" : cat.modules.length ? `todos os módulos do catálogo já estão instalados · ${source(cat)}` : `catálogo vazio · ${source(cat)}`;
+  const empty = !catalog ? undefined : !cat ? <Loading label="carregando o catálogo…" /> : cat.modules.length ? `todos os módulos do catálogo já estão instalados · ${source(cat)}` : `catálogo vazio · ${source(cat)}`;
   const tone: Record<Tone, string> = { ok: c.accent, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
   const open = actions ? cards.find((x) => x.id === actions) : undefined;
   return (
@@ -286,7 +289,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
               </box>
               <text wrapMode="none"><span>{"   "}</span><span fg={c.accent}><b>c</b></span><span fg={c.dim}>{" alterna"}</span></text>
             </box>
-            {catalog && cat ? <text fg={c.dim} wrapMode="none">{source(cat)}</text> : null}
+            {working ? <Loading label={`${working}…`} /> : !catalog && !loaded ? <Loading label="lendo os módulos…" /> : catalog && cat ? <text fg={c.dim} wrapMode="none">{source(cat)}</text> : null}
           </box>
           <CardGrid cards={cards} sel={sel[level]} onSel={select} onActivate={activateCard} onTop={tabs?.focusBar} focused={(tabs?.focused ?? true) && !open} empty={empty} />
           <Detail card={curCard} tone={tone} />

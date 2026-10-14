@@ -210,6 +210,32 @@ Exemplos no código:
 - `apps/pvx/src/terminal.ts` (`resetKeyboard`, `resetKeyboardOnExit`).
 - `apps/pvx/src/tui.tsx`.
 
+## 12. Componentes do framework
+
+Regra: prefira um componente do framework a desenhar o seu. Um módulo que precisa de algo destes não redesenha: usa `sdk.ui`. Algo genérico que ainda não existe (serviria a outro módulo) entra no framework e aqui, não no módulo. Como usar cada um: `packages/sdk/README.md`, "Componentes de fluxo".
+
+| Componente | Quando usar | Comportamento |
+| --- | --- | --- |
+| `Panel`, `Row`, `Text`, `Chip`, `Meter`, `KeyHint`, `Table`, `Spacer` | tela comum | tons do tema; `Panel` na raiz da página é a moldura da página |
+| `List` | linhas navegáveis, com colunas | seção 4; seleção por id, hover, letreiro |
+| `Fields` | qualquer formulário | seção 7 |
+| `Conversation` | perguntas guiadas, uma por vez (instalador, assistente) | a respondida vira `✓ título   resumo`; a próxima aparece como `○ título`; `↑` no topo da pergunta sobe para as respondidas; `enter` ou clique reabre no lugar e volta ao ponto onde estava; depois da última vem a confirmação com todas as respostas (as puladas marcadas "(padrão)"), as notas "antes de instalar" e o botão principal; nada se aplica antes dele |
+| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável; `primary` em acento e negrito; `keys` põe a tecla no rodapé e no `?` |
+| `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo |
+| `ProgressBar` | progresso global de uma tarefa | `━` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
+| `CellGrid` | um quadrado por item (pacotes, hosts, arquivos) | `▪` feito/rodando/falhou em tons, `▫` pendente; quebra na largura, legenda com contagens; hover realça, clique ou `enter` age |
+| `LogTail` | saída ao vivo | acompanha o fim; a roda do mouse sobe e solta |
+| `Loading`, `useAsync` | toda espera visível | spinner e texto |
+| `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
+
+**Regra de espera.** Toda ação ou leitura que possa passar de ~300 ms mostra um estado de carregamento visível (spinner e texto, `Loading`); nunca uma tela congelada. Vale para catálogo, clone, revisão, verificação de conformidade, primeira carga de um `useQuery` e qualquer ação de um módulo. Texto estático como "carregando…" sem spinner não conta.
+
+Exemplos no código:
+
+- `packages/tui/src/sdk-ui/flow.tsx` (`Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading`, `useAsync`).
+- `packages/tui/src/sdk-ui/copy.tsx` (`useCopy`, painel de cópia).
+- `packages/tui/src/sdk-ui/kit.tsx` (`Steps`, `LogTail`) e `packages/tui/src/sdk-ui/fields.tsx`.
+
 ## Checklist antes de entregar uma tela
 
 - [ ] Setas, `enter`, `esc` e `↑` para a barra seguem os quatro níveis de foco.
@@ -220,5 +246,6 @@ Exemplos no código:
 - [ ] Estado tem cor e palavra; vazio é `—`; só tokens do tema; sem texto explicativo fixo.
 - [ ] Formulário tem `salvar` e `cancelar`, erro inline e confirmação em `remover`.
 - [ ] Sucesso volta para a lista com `✓`; erro mostra a tela de resultado.
+- [ ] Usei um componente do framework onde ele existe (seção 12); nenhuma espera passa de ~300 ms sem `Loading`.
 - [ ] Nada quebra em 80x24, 100 e 120 colunas (testes de frame).
 - [ ] Teste de regressão escrito e entrada em `DECISIONS.md`.

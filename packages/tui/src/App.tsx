@@ -6,6 +6,7 @@ import { MIN_COLS, MIN_ROWS, useLayout } from "./layout.ts";
 import { PageHost, PagesCtx, type PageDeps } from "./sdk-ui/index.tsx";
 import { RouterProvider, ScreenOutlet, useRouter, type Screen } from "./router.tsx";
 import { Footer, HelpOverlay } from "./Shortcuts.tsx";
+import { CopyPreview, CopyProvider, type ClipboardWrite } from "./sdk-ui/copy.tsx";
 import { NudgeProvider, useNudge } from "./nudge.tsx";
 import { ThemeProvider, useTheme } from "./theme-context.tsx";
 
@@ -21,6 +22,8 @@ export interface AppProps {
   pages?: PageDeps;
   /** Override of `$PVX_HOME/tui-state.json` (tests). */
   statePath?: string;
+  /** Replaces the real clipboard behind `useCopy` (tests). */
+  clipboard?: ClipboardWrite;
 }
 
 function Frame({ palette, pages }: Pick<AppProps, "palette" | "pages">) {
@@ -45,6 +48,7 @@ function Frame({ palette, pages }: Pick<AppProps, "palette" | "pages">) {
         {help ? <HelpOverlay scope={scope} onClose={() => setHelp(false)} /> : null}
         {palette ? <PaletteHost {...palette} /> : null}
         {pages ? <PageHost /> : null}
+        <CopyPreview />
       </box>
       <Footer scope={scope} />
     </box>
@@ -76,13 +80,15 @@ function Root({ onExit, palette, pages }: Pick<AppProps, "onExit" | "palette" | 
 }
 
 /** App frame: current screen, footer shortcut line. Esc pops, Ctrl+C exits. */
-export function App({ root, logger, onExit, palette, pages, statePath }: AppProps) {
+export function App({ root, logger, onExit, palette, pages, statePath, clipboard }: AppProps) {
   return (
     <ThemeProvider statePath={statePath}>
       <RouterProvider root={root} logger={logger}>
         <PagesCtx.Provider value={pages ?? null}>
           <NudgeProvider>
-            <Root onExit={onExit} palette={palette} pages={pages} />
+            <CopyProvider clipboard={clipboard}>
+              <Root onExit={onExit} palette={palette} pages={pages} />
+            </CopyProvider>
           </NudgeProvider>
         </PagesCtx.Provider>
       </RouterProvider>

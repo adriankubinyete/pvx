@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Loading } from "../sdk-ui/flow.tsx";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { OutLine } from "@pvx/sdk";
 import { codeDiff, listCode, readCode, reviewModule, trustModule, updateLines, updateModule, usermodulesDir, type PermDiff, type Registry, type Review, type UpdateCheck } from "@pvx/core";
@@ -396,6 +397,7 @@ export function ReviewScreen({ id, store, registry, deps, update, onDone }: Revi
       <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={title}>
         <Banner r={review} />
         <Strip r={review} />
+        {busy ? <box paddingX={1} flexShrink={0}><Loading label={update ? "atualizando…" : "aprovando e carregando o módulo…"} /></box> : null}
         <box flexDirection={wide ? "row" : "column"} flexGrow={1} minHeight={0}>
           <Files rows={rows} sel={cur?.path} total={total} grow={wide ? 11 : 3} />
           <Details f={cur} grow={wide ? 9 : 2} inner={wide ? Math.floor(((cols - 2) * 9) / 20) - 4 : cols - 6} />
@@ -406,7 +408,7 @@ export function ReviewScreen({ id, store, registry, deps, update, onDone }: Revi
 
   const root = <Row k="" tone="warn">{`${g.warn} este código roda como root neste host. leia o código antes de confiar; o git não prova que é seguro.`}</Row>;
   const body = !update && !review ? (
-    <text fg={err ? c.error : c.dim}>{err || "lendo o módulo…"}</text>
+    err ? <text fg={c.error}>{err}</text> : <Loading label="lendo o módulo…" />
   ) : view === "perms" ? (
     <>
       <Perms review={review} diff={update?.permissions} />
