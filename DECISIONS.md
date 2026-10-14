@@ -96,6 +96,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `phase.progress(fração)` e `sdk.phases` (`progress`, `finished`), `useRun` com `trailing`, `loading` e tempos vivos, `ctx.shell.echoing`, `sdk.errors.stepError`, `ctx.isRoot`, `ctx.signal`, `fakeSystem` com `clock` e `isRoot` e `onFakeMachine` no `@pvx/testing` → [SDK: lacunas achadas ao migrar o issabel](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-issabel)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 - `bun run dev:link <pasta>` (script do repo, não do binário) liga um módulo local em `.dev/pvx` pela mesma lógica do `modules link`, sem root; `renderPage` e `runSession` repassam `sshClient` e `isRoot` também aos comandos que uma página roda → [Dev link e sessão nos comandos de página](#2026-10-14--dev-link-e-sessão-nos-comandos-de-página)
+- Duas `List` com `onAction` na mesma tela: só a lista que tem uma linha com o id de `selected` registra o `enter` (o rodapé o mostra uma vez, sem chave duplicada no React) → [List: só a lista dona da seleção registra o enter](#2026-10-14--list-só-a-lista-dona-da-seleção-registra-o-enter)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1254,3 +1255,16 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** `state.json` saía 0644 pelo umask e qualquer usuário local lia o estado do módulo (tokens, por exemplo).
 
 **Limite:** arquivos que já existem só são apertados na próxima escrita; a pasta já criada com 0755 não muda.
+
+## 2026-10-14 — List: só a lista dona da seleção registra o enter
+
+**Status:** vigente.
+
+**Decisão:** `List` só monta o atalho `enter` da ação da linha quando `selected` é o id de uma das suas linhas.
+
+- Antes bastava `selected !== undefined`: dois `List` num painel (tabela e linhas de ação, como no firewall e no autobackup) recebiam o mesmo `selected`, e os dois registravam `enter`. O rodapé mostrava `enter abrir   enter abrir` e o React avisava de chave duplicada (`enterpage:<módulo>.<página>`).
+- Sem API nova: a regra "lista sem foco passa `selected` indefinido" continua valendo, e passar o `selected` da página inteira às duas listas também funciona.
+
+**Motivo:** o autobackup contornou com uma linha de ação dentro da tabela, só para não ter dois `List` com `onAction`.
+
+**Limite:** duas listas que têm uma linha com o mesmo id disputam o `enter`; ids de linha são únicos na tela por convenção.

@@ -62,6 +62,22 @@ test("with actionOnClick false a click only selects; a second click on the selec
   expect(h.frame()).toContain("aberta=b");
 });
 
+test("two lists with onAction register enter once: the footer shows it once and only the list that owns the selection acts", async () => {
+  const errors: string[] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => void errors.push(args.map(String).join(" "));
+  try {
+    h = await renderPage(KIT, "two-lists", { cols: 80, rows: 24 });
+    const footer = h.frame().split("\n").filter((line) => line.includes("enter abrir"));
+    expect(footer.join("\n").match(/enter abrir/g)).toHaveLength(1);
+    await h.press("RETURN");
+    expect(h.frame()).toContain("aberta=baixo:b");
+  } finally {
+    console.error = original;
+  }
+  expect(errors.filter((line) => line.includes("same key"))).toEqual([]);
+});
+
 test("useNudge tones: warn and error show their glyph and text in the footer, like ok", async () => {
   h = await renderPage(KIT, "rows", { cols: 80, rows: 24 });
   await h.press("w");

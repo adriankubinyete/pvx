@@ -78,7 +78,7 @@ Exemplos no código:
 - Só a linha selecionada da lista ativa rola o texto cortado (letreiro, vai e volta).
 - Seleção por id, nunca por índice: a lista muda de ordem e de tamanho.
 - Uma lista longa se janela pelo tamanho do terminal: `List maxRows={...}` (calculado por `useViewport`) desenha só as linhas visíveis e mantém a seleção dentro da janela. O `Panel` que a carrega leva `shrink`, para o cabeçalho e o rodapé do host nunca saírem da tela. A página não rola.
-- Ação da linha: `List onAction`. `enter` na linha selecionada (o rodapé mostra `enter abrir`) e o clique abrem o formulário da linha (`Fields` com os campos e `onDelete`); o `remover` pede a confirmação do framework. Não ponha atalhos soltos (`x`, `c`) para remover ou copiar. Com `actionOnClick={false}` o clique só seleciona (como na seção 3) e abrem `enter` ou um segundo clique na linha selecionada; use quando abrir a ação num clique solto seria agressivo.
+- Ação da linha: `List onAction`. `enter` na linha selecionada (o rodapé mostra `enter abrir`) e o clique abrem o formulário da linha (`Fields` com os campos e `onDelete`); o `remover` pede a confirmação do framework. Duas listas com `onAction` numa tela recebem o mesmo `selected`: só a que tem a linha com esse id registra o `enter` (o rodapé mostra `enter abrir` uma vez). Não ponha atalhos soltos (`x`, `c`) para remover ou copiar. Com `actionOnClick={false}` o clique só seleciona (como na seção 3) e abrem `enter` ou um segundo clique na linha selecionada; use quando abrir a ação num clique solto seria agressivo.
 
 ```text
  REGRA        ORIGEM          AÇÃO

@@ -107,6 +107,11 @@ function visibleRows(items: ListItem[], selected: string | undefined, size: numb
   return items.slice(windowAt.current, windowAt.current + size);
 }
 
+/** Whether `selected` is a row of this list. Two lists on a page may get the same `selected`: only the one that owns the row has the focus. */
+function ownsSelection(items: ListItem[], selected: string | undefined): selected is string {
+  return selected !== undefined && items.some((item) => item.id === selected);
+}
+
 /** Registers `enter` for the page while a row is selected, so the footer shows the row action. */
 function ActionKey({ label, selected, onAction }: { label: string; selected: string; onAction: (id: string) => void }) {
   useKey("enter", label, () => onAction(selected));
@@ -156,7 +161,7 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
           {" ".repeat(lead) + cols.map((col, i) => fit(clean(col.title ?? ""), widths[i]!, col.align)).join(" ".repeat(GAP)).trimEnd()}
         </text>
       ) : null}
-      {onAction && selected !== undefined && inPage ? <ActionKey label={actionLabel} selected={selected} onAction={onAction} /> : null}
+      {onAction && ownsSelection(items, selected) && inPage ? <ActionKey label={actionLabel} selected={selected} onAction={onAction} /> : null}
       {visible.map((it) => {
         const hot = it.id === over0 && it.id !== selected; // hover only tints (panel background and a dim ›): it never looks selected
         return (

@@ -36,6 +36,18 @@ export default (sdk: Sdk) => {
     );
   }
 
+  /** Two lists with `onAction` and the same `selected` (the id lives in one of them): `enter` must be registered once. */
+  function TwoLists() {
+    const [opened, setOpened] = useState("nenhuma");
+    return (
+      <Panel>
+        <List items={[{ id: "a", label: "linha a" }]} selected="b" onAction={(id) => setOpened(`cima:${id}`)} />
+        <List items={[{ id: "b", label: "linha b" }]} selected="b" onAction={(id) => setOpened(`baixo:${id}`)} />
+        <Text>{`aberta=${opened}`}</Text>
+      </Panel>
+    );
+  }
+
   function Refetch() {
     const count = useQuery<number>("kit-demo.count");
     useKey("r", "lê", () => void count.refetch());
@@ -75,6 +87,7 @@ export default (sdk: Sdk) => {
     pages: {
       rows: { title: "Linhas", render: () => <Rows /> },
       "rows-select": { title: "Linhas (clique seleciona)", render: () => <Rows clickOpens={false} /> },
+      "two-lists": { title: "Duas listas", render: () => <TwoLists /> },
       refetch: { title: "Refetch", render: () => <Refetch /> },
       run: { title: "Run", render: () => <Run /> },
       "run-trailing": { title: "Run (database trailing)", render: () => <Run trailing={["database"]} /> },
