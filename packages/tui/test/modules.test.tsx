@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { addModule, listTrust, createLogger, createRegistry, linkModule, loadModules, logsDir, pvxHome, runCapture, setEnabled, trustGate, type Catalog, type LoadOpts, type Pending, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
+import { detail, gotoCard, selectedName } from "./cards-helpers.ts";
 
 const quiet = () => ({ debug() {}, info() {}, warn() {}, error() {} });
 const makeLogger = (n: string) => createLogger(logsDir(), n);
@@ -103,11 +104,8 @@ async function mount(o: MountOpts = {}) {
   await h.press("ARROW_DOWN"); // Módulos, list focused
   return { t: h, store };
 }
-/** Arrows until the row of `id` has the cursor. */
-async function goto(t: TuiHarness, id: string) {
-  for (let i = 0; i < 30 && !new RegExp(`» (✗ )?${id}(\\s|$)`).test(t.frame()); i++) await t.press("ARROW_DOWN");
-  expect(t.frame()).toMatch(new RegExp(`» (✗ )?${id}(\\s|$)`));
-}
+/** Arrows until the card of `id` has the accent border. */
+const goto = (t: TuiHarness, id: string) => gotoCard(t, id);
 /** Waits in real time (git and disk work is async) until the frame satisfies `pred`. */
 async function see(t: TuiHarness, pred: (f: string) => boolean): Promise<string> {
   for (let i = 0; i < 100 && !pred(t.frame()); i++) {
@@ -119,7 +117,7 @@ async function see(t: TuiHarness, pred: (f: string) => boolean): Promise<string>
 }
 const footer = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
 
-test("Módulos rows show every state: carregado, aguardando confiança, desativado, modificado, atrás ↓n, dev, erro", async () => {
+test("Módulos cards show every state: carregado, aguardando, desativado, modificado, atrás ↓n, dev, erro", async () => {
   const ok = origin("okm");
   const wait = origin("waitm");
   const off = origin("offm");
@@ -138,23 +136,31 @@ test("Módulos rows show every state: carregado, aguardando confiança, desativa
   writeFileSync(join(devDir, "index.ts"), "export default () => ({});\n");
   expect(linkModule(devDir).ok).toBe(true);
 
-  const { t } = await mount();
-  const f = await see(t, (x) => /okm.*carregado/.test(x) && /behm.*↓1/.test(x));
-  expect(f).toMatch(/okm ◇\s+main@\w{7} 1\.0\.0 carregado · 1 comando/);
-  expect(f).toMatch(/waitm ◇\s+main@\w{7} 1\.0\.0 aguardando confiança/);
-  expect(f).toMatch(/offm ◇\s+1\.0\.0 desativado/);
-  expect(f).toMatch(/modm ◇\s+main@\w{7} ✎1 1\.0\.0 modificado/);
-  expect(f).toMatch(/behm ◇\s+main@\w{7} ↓1 1\.0\.0 atrás · 1 comando/);
-  expect(f).toMatch(/devm ↯\s+0\.0\.1 dev/);
-  expect(f).toMatch(/✗ badm ◇\s+erro: falha na fábrica/);
-});
+  const { t } = await mount({ cols: 130, rows: 40 });
+  const f = await see(t, (x) => /okm\s+● carregado/.test(x) && /behm\s+● atrás ↓1/.test(x));
+  expect(f).toMatch(/◇ okm\s+● carregado/);
+  expect(f).toMatch(/◇ waitm\s+● aguardando/);
+  expect(f).toMatch(/◇ offm\s+○ desativado/);
+  expect(f).toMatch(/◇ modm\s+● modificado/);
+  expect(f).toMatch(/dev devm\s+● carregado/);
+  expect(f).toMatch(/◇ badm\s+● erro/);
+  expect(f).toContain("falha na fábrica"); // an error card shows the short error where the delivery goes
+  expect(f).toMatch(/1 comando/);
+  await gotoCard(t, "behm");
+  expect(detail(t)).toMatch(/^behm · .*@ main · \w{7} · ↓1 atualização/);
+  await gotoCard(t, "waitm");
+  expect(detail(t)).toContain("aguardando confiança: enter → revisar");
+  await gotoCard(t, "badm", "ARROW_LEFT");
+  expect(detail(t)).toContain("✗ falha na fábrica");
+}, 30_000); // several git clones: slow on Windows
 
 test("catalog: lists what is not installed with the source; empty shows a friendly message", async () => {
   const { t } = await mount();
   await t.press("c");
   expect(t.frame()).toContain("catálogo vazio · fonte: embutido");
   await t.press("c");
-  expect(t.frame()).toContain("› módulos");
+  expect(t.frame()).toContain("instalados");
+  expect(t.frame()).not.toContain("catálogo vazio");
   h!.destroy();
   const o = origin("gm");
   await install(origin("have"), "have");
@@ -162,10 +168,12 @@ test("catalog: lists what is not installed with the source; empty shows a friend
   const m = await mount({ catalog: cat });
   await m.t.press("c");
   const f = m.t.frame();
-  expect(f).toMatch(/gm ◆\s+módulo de teste/);
+  expect(f).toMatch(/◇ gm\b/);
+  expect(f).toContain("módulo de teste");
   expect(f).not.toContain("já instalado");
   expect(f).toMatch(/fonte: rede · \d\d:\d\d/);
-  expect(footer(m.t)).toContain("enter instala");
+  expect(footer(m.t)).toContain("enter ações");
+  expect(footer(m.t)).toContain("c instalados");
 });
 
 test("manual add clones and opens the review; nothing is imported before t; t loads it live (palette sees it)", async () => {
@@ -174,9 +182,8 @@ test("manual add clones and opens the review; nothing is imported before t; t lo
   await t.press("a");
   await t.type(shortRef(o, "gm"));
   await t.press("RETURN");
-  const f = await see(t, (x) => x.includes("revisão de confiança"));
+  const f = await see(t, (x) => x.includes("revisão de confiança") && x.includes("srv:10051")); // the title shows before the review is read
   expect(f).toContain("gm 1.0.0");
-  expect(f).toContain("srv:10051");
   expect(f).toContain("roda como root");
   expect(f).toContain("sem conflitos");
   expect(existsSync(dirOf("gm"))).toBe(true);
@@ -198,31 +205,33 @@ test("manual add clones and opens the review; nothing is imported before t; t lo
   expect(t.frame()).toContain("revisão de confiança");
   expect(existsSync(marker)).toBe(false);
   await t.press("t");
-  await see(t, (x) => x.includes("gm 1.0.0 carregado · 1 comando"));
+  await see(t, (x) => x.includes("✓ gm aprovado · 1 comando"));
+  expect(t.frame()).not.toContain("resultado");
+  expect(selectedName(t)).toBe("gm");
   expect(existsSync(marker)).toBe(true);
   expect(registry.commands.has("gm hi")).toBe(true);
   expect(store.blocks.at(-1)).toMatchObject({ line: expect.stringMatching(/^modules trust gm --sha \w{7}$/), status: "ok" });
-  await t.press("RETURN"); // back to the tabs
   await t.press("k", { ctrl: true });
   await t.type("gm hi");
   expect(t.frame()).toContain("gm hi");
 });
 
-test("catalog enter installs trusted always: no review screen, the module loads and the row shows ∞ sempre", async () => {
+test("catalog enter installs trusted always: no review screen, the module loads and the new card is selected", async () => {
   const o = origin("gm");
   const cat: Catalog = { modules: [{ id: "gm", url: o.url, descricao: "módulo de teste" }], source: "rede", fetchedAt: Date.now() };
   const { t, store } = await mount({ catalog: cat });
   await t.press("c");
+  await t.press("RETURN"); // the action menu
+  expect(t.frame()).toContain("instalar");
   await t.press("RETURN");
-  const f = await see(t, (x) => x.includes("gm 1.0.0 carregado"));
+  const f = await see(t, (x) => x.includes("✓ gm instalado do catálogo (confiança sempre) · 1 comando"));
   expect(f).not.toContain("revisão de confiança");
-  expect(f).toContain("instalado do catálogo: confiança sempre");
+  expect(f).not.toContain("resultado");
   expect(listTrust().gm?.always).toBe(true);
   expect(registry.commands.has("gm hi")).toBe(true);
   expect(store.blocks.at(-1)).toMatchObject({ line: "modules add gm", status: "ok" });
-  await t.press("RETURN");
-  await t.press("c");
-  await see(t, (x) => /gm ◇.*∞ sempre.*carregado/.test(x));
+  await see(t, (x) => /◇ gm\s+● carregado/.test(x)); // back on the installed list, the new card selected
+  expect(selectedName(t)).toBe("gm");
 });
 
 test("a manual URL equal to a catalog entry installs the same way; one outside the catalog keeps the review", async () => {
@@ -232,7 +241,7 @@ test("a manual URL equal to a catalog entry installs the same way; one outside t
   await t.press("a");
   await t.type(shortRef(o, "cm"));
   await t.press("RETURN");
-  const f = await see(t, (x) => x.includes("cm 1.0.0 carregado"));
+  const f = await see(t, (x) => x.includes("✓ cm instalado do catálogo (confiança sempre)"));
   expect(f).not.toContain("revisão de confiança");
   expect(listTrust().cm?.always).toBe(true);
   h!.destroy();
@@ -257,15 +266,27 @@ test("update: u shows the new commits and the permission diff; t advances to the
   expect(f).toContain("ADICIONADAS exec: rm");
   expect(f).toContain("muda as permissões");
   await t.press("t");
-  await see(t, (x) => x.includes("um 1.1.0 carregado"));
+  await see(t, (x) => x.includes(`✓ um atualizado para ${sha.slice(0, 7)}`));
+  expect(selectedName(t)).toBe("um");
   expect(sh(dirOf("um"), "rev-parse", "HEAD")).toBe(sha);
   expect(registry.modules.get("um")?.version).toBe("1.1.0");
+});
+
+test("u on an up-to-date module returns to the list with a short notice", async () => {
+  await install(origin("uu"), "uu");
+  const { t, store } = await mount();
+  await goto(t, "uu");
+  await t.press("u");
+  await see(t, (x) => x.includes("uu já está atualizado"));
+  expect(t.frame()).not.toContain("resultado");
+  expect(selectedName(t)).toBe("uu");
+  expect(store.blocks.at(-1)).toMatchObject({ line: "modules update uu" });
 });
 
 test("x removes after the host confirms; the module leaves the list and the registry at once", async () => {
   await install(origin("rm1"), "rm1");
   const { t } = await mount();
-  await see(t, (x) => /rm1.*carregado/.test(x));
+  await see(t, (x) => /rm1\s+● carregado/.test(x));
   await goto(t, "rm1");
   expect(registry.commands.has("rm1 hi")).toBe(true);
   await t.press("x");
@@ -275,37 +296,62 @@ test("x removes after the host confirms; the module leaves the list and the regi
   await t.press("RETURN"); // the "cancelado" block
   await t.press("x");
   await t.press("s");
-  await see(t, (x) => x.includes("rm1 removido"));
+  await see(t, (x) => x.includes("✓ rm1 removido"));
+  expect(t.frame()).not.toContain("resultado");
   expect(existsSync(dirOf("rm1"))).toBe(false);
   expect(registry.commands.has("rm1 hi")).toBe(false);
   expect(registry.modules.has("rm1")).toBe(false);
-  await t.press("RETURN");
-  expect(t.frame()).not.toMatch(/» rm1/);
+  expect(t.frame()).not.toContain("◇ rm1");
 });
+
+test("removing a row keeps the cursor on the row that takes its place", async () => {
+  await install(origin("ra"), "ra");
+  await install(origin("rb"), "rb");
+  await install(origin("rc"), "rc");
+  const { t } = await mount();
+  await see(t, (x) => /rc\s+● carregado/.test(x));
+  await goto(t, "rb");
+  await t.press("x");
+  await t.press("s");
+  await see(t, (x) => x.includes("✓ rb removido"));
+  expect(selectedName(t)).toBe("rc");
+  await t.press("x");
+  await t.press("s");
+  await see(t, (x) => x.includes("✓ rc removido"));
+  expect(selectedName(t)).toBe("ra"); // last module gone: the previous one, not a dashed card
+}, 30_000); // several git clones: slow on Windows
 
 test("d disables and enables live", async () => {
   await install(origin("tg"), "tg");
   const { t } = await mount();
-  await see(t, (x) => /tg.*carregado/.test(x));
+  await see(t, (x) => /tg\s+● carregado/.test(x));
   await goto(t, "tg");
   await t.press("d");
-  await see(t, (x) => x.includes("tg desativado"));
+  await see(t, (x) => x.includes("✓ tg desativado"));
+  expect(t.frame()).not.toContain("resultado");
   expect(registry.commands.has("tg hi")).toBe(false);
-  await t.press("RETURN");
-  await see(t, (x) => /tg.*desativado/.test(x));
+  await see(t, (x) => /◇ tg\s+○ desativado/.test(x));
+  expect(selectedName(t)).toBe("tg");
   await t.press("d");
-  await see(t, (x) => x.includes("tg 1.0.0 carregado"));
+  await see(t, (x) => x.includes("✓ tg ativado"));
   expect(registry.commands.has("tg hi")).toBe(true);
 });
 
-test("t on a module awaiting trust reviews it; enter does the same", async () => {
+test("r on a module awaiting trust reviews it; enter opens the menu with revisar first", async () => {
   const o = origin("aw");
   await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
   const { t } = await mount();
-  await see(t, (x) => /aw.*aguardando confiança/.test(x));
+  await see(t, (x) => /aw\s+● aguardando/.test(x));
   await goto(t, "aw");
-  expect(footer(t)).toContain("t confia");
-  await t.press("t");
+  expect(footer(t)).toContain("enter ações");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("revisar");
+  expect(t.frame()).not.toContain("atualizar"); // nothing to update before the first approval
+  await t.press("RETURN");
+  await see(t, (x) => x.includes("revisão de confiança · aw"));
+  await t.press("ESCAPE");
+  await see(t, (x) => !x.includes("revisão de confiança"));
+  await t.press("r");
   await see(t, (x) => x.includes("revisão de confiança · aw"));
   expect(existsSync(marker)).toBe(false);
 });
@@ -417,7 +463,7 @@ test("a without root shows the sudo block", async () => {
 test("without root an action is blocked with the sudo block; viewing works", async () => {
   await install(origin("nr"), "nr");
   const { t, store } = await mount({ isRoot: false });
-  await see(t, (x) => /nr.*carregado/.test(x));
+  await see(t, (x) => /nr\s+● carregado/.test(x));
   await goto(t, "nr");
   await t.press("d");
   expect(t.frame()).toContain("rode com sudo");
@@ -429,7 +475,7 @@ test("the background check puts ↓n on the Módulos tab and in the row", async 
   await install(origin("pm"), "pm");
   const { t } = await mount({ pending: [{ id: "pm", behind: 2 }] });
   await see(t, (x) => /Módulos ↓1/.test(x));
-  expect(t.frame()).toMatch(/pm ◇\s+main@\w{7} ↓2 1\.0\.0 atrás/);
+  expect(t.frame()).toMatch(/◇ pm\s+● atrás ↓2/);
 });
 
 for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
@@ -438,7 +484,7 @@ for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
     await install(origin("lst"), "lst");
     await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
     const { t } = await mount({ cols, rows });
-    await see(t, (x) => /lay.*aguardando confiança/.test(x));
+    await see(t, (x) => /lay\s+● aguardando/.test(x));
     const fit = () => {
       const lines = t.frame().split("\n");
       for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
@@ -448,9 +494,9 @@ for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
     fit();
     expect(footer(t)).toContain("? ajuda");
     await goto(t, "lay");
-    expect(footer(t)).toContain("t confia");
+    expect(footer(t)).toContain("enter ações");
     expect(footer(t)).toContain("? ajuda");
-    await t.press("RETURN");
+    await t.press("r");
     await see(t, (x) => x.includes("revisão de confiança"));
     fit();
     expect(t.frame()).toContain("roda como root");
@@ -475,9 +521,9 @@ function rich(id: string, extra: Record<string, unknown> = {}): Origin {
 }
 async function openReview(id: string, o: MountOpts = {}) {
   const m = await mount(o);
-  await see(m.t, (x) => new RegExp(`${id}.*aguardando confiança`).test(x));
+  await see(m.t, (x) => new RegExp(`${id}\\s+● aguardando`).test(x));
   await goto(m.t, id);
-  await m.t.press("t");
+  await m.t.press("r");
   await see(m.t, (x) => x.includes(`revisão de confiança · ${id}`) && x.includes("arquivos"));
   return m;
 }
@@ -570,18 +616,43 @@ test("enter opens the editor at the first hit line with the hits marked; esc ret
   expect(t.frame()).toContain("revisão de confiança · ed");
 });
 
-test("T trusts always: the trust entry says so, the module loads and the list shows ∞ sempre", async () => {
+test("T trusts always: the trust entry says so, the module loads and the new card is selected", async () => {
   const o = rich("al", { contributes: { commands: ["hi"] } });
   await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
   const { t, store } = await openReview("al");
   expect(footer(t)).toContain("T confiar sempre");
   await t.type("T");
-  await see(t, (x) => x.includes("al 1.0.0 carregado"));
+  await see(t, (x) => x.includes("✓ al aprovado (confiança sempre) · 1 comando"));
+  expect(t.frame()).not.toContain("resultado");
+  expect(t.frame()).not.toContain("revisão de confiança");
   expect(listTrust().al?.always).toBe(true);
   expect(registry.commands.has("al hi")).toBe(true);
   expect(store.blocks.at(-1)).toMatchObject({ line: expect.stringMatching(/^modules trust al --sha \w{7} --always$/), status: "ok" });
-  await t.press("RETURN");
-  await see(t, (x) => /al ◇.*∞ sempre.*carregado/.test(x));
+  await see(t, (x) => /◇ al\s+● carregado/.test(x));
+  expect(selectedName(t)).toBe("al"); // the card is selected
+});
+
+test("approving a module with a tab page names the tab in the notice, cut to 80 columns", async () => {
+  const page = `({ commands: { hi: { help: "hi", run: (ctx: any) => ctx.out.success("oi") } }, pages: { main: { title: "Painel de teste", tab: true, render: () => null } } })`;
+  const o = origin("tp", { contributes: { commands: ["hi"], pages: ["main"] } }, page);
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const { t } = await openReview("tp", { cols: 80, rows: 24 });
+  await t.press("t");
+  const f = await see(t, (x) => x.includes("✓ tp aprovado · 1 comando · aba Painel de teste"));
+  expect(f).toContain("disponível");
+  for (const l of f.split("\n")) expect(l.length).toBeLessThanOrEqual(80);
+  expect(selectedName(t)).toBe("tp");
+});
+
+test("a failing approval (the module does not load) keeps the result screen with the details", async () => {
+  const o = origin("bd", {}, `(() => { throw new Error("falha na fábrica") })()`);
+  await addModule(o.url, { hostVersion: "0.1.0", allowFile: true });
+  const { t, store } = await openReview("bd");
+  await t.press("t");
+  const f = await see(t, (x) => x.includes("resultado"));
+  expect(f).toContain("bd aprovado, mas não carregou");
+  expect(f).not.toContain("✓ bd aprovado");
+  expect(store.blocks.at(-1)).toMatchObject({ line: expect.stringMatching(/^modules trust bd --sha \w{7}$/), status: "error" });
 });
 
 test("an always module updates by itself on u and the result says so", async () => {
@@ -592,7 +663,9 @@ test("an always module updates by itself on u and the result says so", async () 
   const { t } = await mount();
   await goto(t, "au");
   await t.press("u");
-  await see(t, (x) => x.includes("atualizado automaticamente") && x.includes("(confiança sempre)"));
+  await see(t, (x) => x.includes(`✓ au atualizado para ${sha.slice(0, 7)} automaticamente`));
+  expect(t.frame()).not.toContain("resultado");
+  expect(selectedName(t)).toBe("au");
   expect(sh(dirOf("au"), "rev-parse", "HEAD")).toBe(sha);
   expect(registry.modules.get("au")?.version).toBe("1.1.0");
   expect(listTrust().au?.always).toBe(true);

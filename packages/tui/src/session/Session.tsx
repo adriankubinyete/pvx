@@ -7,6 +7,7 @@ import { editLine } from "../lineedit.ts";
 import { LineText } from "../LineText.tsx";
 import { useLayout } from "../layout.ts";
 import { followProps, useFollow } from "../follow.ts";
+import { useOver } from "../hover.ts";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
@@ -20,14 +21,19 @@ import type { Block, SessionApi } from "./store.ts";
 
 const printable = (s: string) => [...s].length === 1 && s >= " " && s !== "\x7f";
 
-function Popup({ items, sel }: { items: Candidate[]; sel: number }) {
+/** The suggestion list. `active`: the input owns the keyboard, so hover moves the selection; otherwise hover only tints. A click accepts the row. */
+function Popup({ items, sel, active, onHover, onPick }: { items: Candidate[]; sel: number; active: boolean; onHover: (i: number) => void; onPick: (i: number) => void }) {
   const { c, box, g } = useTheme();
+  const { over, enter, leave } = useOver<string>();
   return (
     <box flexDirection="column" flexShrink={0} {...box()}>
-      {items.map((it, i) => (
-        <box key={it.label} flexDirection="row" justifyContent="space-between" paddingX={1} flexShrink={0} backgroundColor={i === sel ? c.selected : undefined}>
+      {items.map((it, i) => {
+        const hot = !active && over === it.label && i !== sel;
+        return (
+        <box key={it.label} flexDirection="row" justifyContent="space-between" paddingX={1} flexShrink={0} backgroundColor={i === sel ? c.selected : hot ? c.panel : undefined}
+          onMouseOver={() => (enter(it.label), active && onHover(i))} onMouseOut={() => leave(it.label)} onMouseDown={(e) => (e.stopPropagation(), onPick(i))}>
           <text>
-            <span fg={c.accent}>{i === sel ? `${g.cursor} ` : "  "}</span>
+            {i === sel ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{hot ? `${g.query} ` : "  "}</span>}
             <span fg={c.text}>{it.label.slice(0, it.range[0])}</span>
             <span fg={c.accent}><b><u>{it.label.slice(...it.range)}</u></b></span>
             <span fg={c.text}>{it.label.slice(it.range[1])}</span>
@@ -36,7 +42,8 @@ function Popup({ items, sel }: { items: Candidate[]; sel: number }) {
           </text>
           <text fg={c.dim}>{it.help ?? ""}</text>
         </box>
-      ))}
+        );
+      })}
     </box>
   );
 }
@@ -62,6 +69,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const [tick, setTick] = useState(0);
   const [fb, setFb] = useState<number | null>(null); // focused block, by id
   const follow = useFollow();
+  const inHover = useOver<"input">();
 
   const searching = search !== null;
   let start = 0;
@@ -94,7 +102,8 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   }, [running]);
   const recall = useCallback((line: string) => (setInput(line), setHi(null), setSel(0)), []);
 
-  const pick = useCallback((b: Block) => setFb(b.id), []);
+  const pick = useCallback((b: Block) => (setFb(b.id), tabs?.focusContent()), [tabs]);
+  const pickInput = () => (setFb(null), tabs?.focusContent());
 
   const buffer = searching ? search : input;
   const cursor = Math.min(cur, [...buffer].length);
@@ -105,6 +114,28 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       setSel(0);
     }
     setCur(at);
+  };
+  /** The completion of the keyboard `tab`, also run by a click on a suggestion. */
+  const accept = (i: number) => {
+    if (!items[i]) return;
+    if (searching) setInput(items[i].text), setSearch(null);
+    else setInput(input.slice(0, start) + items[i].text);
+    setSel(0);
+  };
+  /** The footer actions of a block, by key: one body for the keyboard and for a click on the hint. */
+  const blockAct = (b: Block, key: string) => {
+    if (key === "r") return follow.toBottom(), void store.repeat(b.id), true;
+    if (key === "x") return b.status === "running" && b.cancellable ? (store.cancel(b.id), true) : false;
+    if (key === "l") return router.push({ id: "log", element: <LogScreen moduleId={b.moduleId} /> }), true;
+    if (key === "c") {
+      const errors = b.lines.filter((l) => l.kind === "error");
+      const text = (errors.length ? errors : b.lines).map((l) => l.text).join("\n");
+      // Host + OSC52: the terminal path alone fails under tmux and SSH.
+      const clip = createClipboard({ host: createHostClipboard(), terminal: createRendererClipboardAdapter(renderer) });
+      void clip.writeText(text, { destination: "best-available" }).finally(() => clip.dispose());
+      return setNote("copiado"), true;
+    }
+    return false;
   };
   const submit = () => {
     const line = input;
@@ -130,17 +161,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       if (k.name === "down") return setFb(blocks[i + 1]?.id ?? null), true;
       if (k.name === "escape") return tabs?.focusBar(), true; // one level up: input -> blocks -> tab bar
       if (matchKey(k, "enter")) return recall(store.lineOf(focus.id)), setFb(null), true;
-      if (matchKey(k, "r")) return follow.toBottom(), void store.repeat(focus.id), true;
-      if (matchKey(k, "x") && focus.status === "running" && focus.cancellable) return store.cancel(focus.id), true;
-      if (matchKey(k, "l")) return router.push({ id: "log", element: <LogScreen moduleId={focus.moduleId} /> }), true;
-      if (matchKey(k, "c")) {
-        const errors = focus.lines.filter((l) => l.kind === "error");
-        const text = (errors.length ? errors : focus.lines).map((l) => l.text).join("\n");
-        // Host + OSC52: the terminal path alone fails under tmux and SSH.
-        const clip = createClipboard({ host: createHostClipboard(), terminal: createRendererClipboardAdapter(renderer) });
-        void clip.writeText(text, { destination: "best-available" }).finally(() => clip.dispose());
-        return setNote("copiado"), true;
-      }
+      for (const key of ["r", "x", "l", "c"]) if (matchKey(k, key) && blockAct(focus, key)) return true;
       if (k.sequence === "?" || k.ctrl) return;
       if (printable(k.sequence)) setFb(null); // any other letter goes back to the input and types
       else return;
@@ -152,10 +173,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       return setSearch(null), setHi(null), true;
     }
     if (matchKey(k, "tab")) {
-      if (!items[at]) return true;
-      if (searching) setInput(items[at].text), setSearch(null);
-      else setInput(input.slice(0, start) + items[at].text);
-      return setSel(0), true;
+      return accept(at), true;
     }
     if (k.name === "up") {
       if (items.length && at > 0) return setSel(at - 1), true;
@@ -177,17 +195,18 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const inputFocused = !barFocused && !focus;
   const shell = !searching && input.startsWith("!") && !input.startsWith("!!"); // host shell mode: the `!` stays visible, deleting it leaves the mode
   const mode = shell ? c.warn : c.accent;
+  const lit = inHover.over !== undefined && !inputFocused; // hover on a resting input: subtle frame and prompt, never the focus accent
   const { cols } = useLayout();
   const room = Math.max(10, cols - 12 - [...hint].length - (searching ? 8 : 0));
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
       <scrollbox ref={follow.ref} flexGrow={1} minHeight={0} {...followProps} focused={false} contentOptions={{ gap: 1 }}>
-        {blocks.map((b) => <BlockView key={b.id} b={b} focused={b === focus} tick={b.status === "running" ? tick : 0} onPick={pick} />)}
+        {blocks.map((b) => <BlockView key={b.id} b={b} focused={b === focus} tick={b.status === "running" ? tick : 0} onPick={pick} onAct={(blk, key) => blockAct(blk, key)} />)}
       </scrollbox>
-      {items.length ? <Popup items={items} sel={at} /> : null}
-      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} {...box(inputFocused ? mode : undefined)}>
+      {items.length ? <Popup items={items} sel={at} active={inputFocused} onHover={setSel} onPick={(i) => (pickInput(), accept(i))} /> : null}
+      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} onMouseOver={() => inHover.enter("input")} onMouseOut={() => inHover.leave("input")} onMouseDown={pickInput} {...box(inputFocused ? mode : lit ? c.text : undefined)}>
         <text>
-          <span fg={inputFocused ? mode : c.dim}><b>{`${shell ? g.shell : g.prompt} `}</b></span>
+          <span fg={inputFocused ? mode : lit ? c.text : c.dim}><b>{`${shell ? g.shell : g.prompt} `}</b></span>
           {searching ? <span fg={c.text}>(busca) </span> : null}
           {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} fg={shell ? c.warn : undefined} /> : <span fg={c.dim}>digite um comando · !ls para o shell · sem segredos</span>}
         </text>

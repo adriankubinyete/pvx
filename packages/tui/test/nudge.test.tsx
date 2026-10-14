@@ -8,6 +8,7 @@ const fixtures = join(import.meta.dir, "../../core/test/fixtures");
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
 let registry: Registry;
+let session: ReturnType<typeof createSessionStore>;
 beforeEach(async () => {
   process.env.PVX_USERMODULES = join(fixtures, "usermodules");
   registry = createRegistry();
@@ -21,6 +22,7 @@ async function mount(reg = registry) {
     core: (argv) => runCapture({ env: {}, isRoot: true, registry: reg, makeLogger, profilesDir: join(fixtures, "profiles"), version: "0.1.0", theme }, argv),
   });
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={reg} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
+  session = store;
   h = await renderTui(<App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry: reg }} />);
   return h;
 }
@@ -71,20 +73,25 @@ test("Início: arrows are spatial; nothing on a side nudges; the numbers jump an
   expect(t.frame()).toContain("› [2] atividade ●");
 });
 
-test("Início: inside a panel the list edges only nudge; esc leaves", async () => {
+test("Início: inside a panel the list edges wrap without a nudge; esc leaves", async () => {
   const t = await mount();
-  await t.press("2"); // atividade, empty: nothing to enter
-  await t.press("RETURN");
-  await gone(t, "nada para selecionar");
+  await session.run("demo greet");
+  await session.run("demo remember");
+  await t.flush();
   await t.press("1");
   await t.press("RETURN"); // the list of conformidade (module items)
   expect(footer(t)).toContain("esc sai");
-  await t.press("ARROW_UP");
-  expect(footer(t)).toContain("início da lista");
-  expect(t.frame()).toContain("› [1] conformidade ●");
-  for (let i = 0; i < 12; i++) await t.press("ARROW_DOWN");
-  expect(footer(t)).toContain("fim da lista");
-  expect(t.frame()).toContain("› [1] conformidade ●"); // never jumped to another panel
+  await t.press("ESCAPE");
+  await t.press("2");
+  await t.press("RETURN"); // the list of atividade: most recent first
+  expect(t.frame()).toMatch(/» . demo remember/);
+  await t.press("ARROW_UP"); // first row: wraps to the last
+  expect(t.frame()).toMatch(/» . demo greet/);
+  await t.press("ARROW_DOWN"); // last row: wraps to the first
+  expect(t.frame()).toMatch(/» . demo remember/);
+  expect(footer(t)).not.toContain("início da lista");
+  expect(footer(t)).not.toContain("fim da lista");
+  expect(t.frame()).toContain("› [2] atividade ●"); // never jumped to another panel
   await t.press("ESCAPE");
   await Bun.sleep(150);
   await t.flush();

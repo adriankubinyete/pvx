@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
-import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
+import { createLogger, createRegistry, loadModules, loadTuiState, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, buildRoot, createSessionStore, createTabsNav, footerFor, helpFor, itemsAt, KeyRouter, Tabs, theme, ThemeProvider, type Scope } from "../src/index.ts";
 import { HelpOverlay } from "../src/Shortcuts.tsx";
+import { detail, footerLine, gotoCard, selectedCorners, selectedName, subtleCorners } from "./cards-helpers.ts";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -39,7 +40,12 @@ async function mount(opts: { isRoot?: boolean; cols?: number; rows?: number; mod
   if (opts.modules) await h.press("TAB"), await h.press("ARROW_DOWN"); // Módulos, content focused
   return { t: h, store };
 }
-/** Arrows until `label` has the cursor. */
+/** Opens the drill-down (commands and pages) of a module card, with its direct shortcut. */
+async function drill(t: TuiHarness, id: string, dir: "ARROW_RIGHT" | "ARROW_LEFT" = "ARROW_RIGHT") {
+  await gotoCard(t, id, dir);
+  await t.press("l");
+}
+/** Arrows until a drill-down row `label` has the cursor. */
 async function goto(t: TuiHarness, label: string, key: "ARROW_DOWN" | "ARROW_UP" = "ARROW_DOWN") {
   for (let i = 0; i < 40 && !new RegExp(`» ${label}(\\s|$)`).test(t.frame()); i++) await t.press(key);
   expect(t.frame()).toMatch(new RegExp(`» ${label}(\\s|$)`));
@@ -61,8 +67,10 @@ test("tree: submenus by path prefix, destructive mark, failed modules open their
 
 test("menu lists the modules; enter into a module and a submenu, run a command, esc goes up", async () => {
   const { t } = await mount({ modules: true });
-  for (const s of ["demo", "net", "3 comandos", "✗ throws-on-load"]) expect(t.frame()).toContain(s);
-  await goto(t, "net");
+  for (const s of ["demo", "net", "3 comandos", "throws-on-load"]) expect(t.frame()).toContain(s);
+  await gotoCard(t, "net");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("comandos e páginas"); // the action menu
   await t.press("RETURN");
   expect(t.frame()).toMatch(/ip\s+2 comandos/);
   await t.press("RETURN"); // ip
@@ -81,8 +89,7 @@ test("menu lists the modules; enter into a module and a submenu, run a command, 
 
 test("a command with args opens the form and shows the result; a secret field stays masked", async () => {
   const { t } = await mount({ modules: true });
-  await goto(t, "net");
-  await t.press("RETURN");
+  await drill(t, "net");
   await t.press("RETURN");
   await t.press("RETURN"); // accept (first in ip)
   expect(t.frame()).toContain("addr*");
@@ -94,8 +101,7 @@ test("a command with args opens the form and shows the result; a secret field st
   await t.press("RETURN");
   await t.press("ESCAPE");
   await t.press("ESCAPE");
-  await goto(t, "demo", "ARROW_UP");
-  await t.press("RETURN");
+  await drill(t, "demo", "ARROW_LEFT");
   await goto(t, "login");
   await t.press("RETURN");
   await t.type("hunter2zz");
@@ -189,7 +195,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   const { t } = await mount();
   expect(t.frame()).toContain("› [1] conformidade");
   await t.press("TAB");
-  expect(t.frame()).toContain("› módulos");
+  expect(t.frame()).toContain("instalados");
     await t.press("TAB"); // Logs
   await t.press("TAB");
   expect(t.frame()).toContain("tab completa"); // Comando
@@ -207,11 +213,12 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
   await t.press("ARROW_UP");
   expect(t.frame()).toContain("tab próxima aba");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toContain("› módulos");
-  expect(t.frame()).toContain("1.0.0 carregado");
-  await t.press("ARROW_DOWN"); // first row (bad-range: sorted)
-  expect(t.frame()).toMatch(/» /);
-  expect(t.frame()).toContain("↑↓ move");
+  expect(t.frame()).toContain("instalados");
+  expect(t.frame()).toContain("● carregado");
+  expect(selectedName(t)).toBeUndefined(); // the bar has the focus
+  await t.press("ARROW_DOWN"); // first card (bad-range: sorted)
+  expect(selectedName(t)).toBe("bad-range");
+  expect(t.frame()).toContain("↑↓←→ cartão");
   await t.press("ARROW_UP");
     await t.press("ARROW_RIGHT"); // Logs has nothing to select
   await t.press("ARROW_DOWN");
@@ -220,33 +227,34 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
 
 test("tabs: each tab keeps its state; a failed module in Módulos opens its log", async () => {
   const { t } = await mount({ modules: true });
-  await goto(t, "net");
-  await t.press("RETURN");
+  await drill(t, "net");
   expect(t.frame()).toContain("módulos › net");
   await t.press("TAB");
   await t.press("TAB", { shift: true });
   expect(t.frame()).toContain("módulos › net");
   await t.press("ARROW_DOWN"); // the bar was focused after the switch
   await t.press("ESCAPE");
-  await goto(t, "✗ throws-on-load");
+  await gotoCard(t, "throws-on-load");
   await t.press("RETURN");
+  await t.press("RETURN"); // "ver o log" is the first action of a failed module
   expect(t.frame()).toContain("log throws-on-load");
   await t.press("ESCAPE");
-  expect(t.frame()).toContain("» ✗ throws-on-load");
+  expect(selectedName(t)).toBe("throws-on-load");
 });
 
 test("Módulos: the bar hides the selection and the first row sits fully below the bar", async () => {
   const { t } = await mount({ cols: 80, rows: 24 });
   await t.press("TAB");
   await t.press("ARROW_DOWN");
-  expect(t.frame()).toMatch(/» /);
+  expect(selectedName(t)).toBeDefined();
   await t.press("ARROW_UP");
-  expect(t.frame()).not.toMatch(/» /); // bar focused: no highlight
+  expect(selectedName(t)).toBeUndefined(); // bar focused: no accent border
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Módulos");
-  expect(lines[1]).toContain("› módulos"); // the box title right under the bar, not clipped
+  expect(lines[1]).toContain("instalados"); // the switch right under the bar, not clipped
+  expect(lines[2]).toContain("╭"); // and the first row of cards under it
   await t.press("ARROW_DOWN");
-  expect(t.frame()).toMatch(/» /);
+  expect(selectedName(t)).toBeDefined();
 });
 
 test("tabs: Módulos shows the load error count and the bar fits 80 columns", async () => {
@@ -262,8 +270,7 @@ test("tabs: Módulos shows the load error count and the bar fits 80 columns", as
 
 test("non-root: a module command gives an error block and does not run", async () => {
   const { t, store } = await mount({ isRoot: false, modules: true });
-  await goto(t, "net");
-  await t.press("RETURN");
+  await drill(t, "net");
   await t.press("RETURN");
   await goto(t, "list");
   await t.press("RETURN");
@@ -275,8 +282,7 @@ test("non-root: a module command gives an error block and does not run", async (
 /** Opens the form of `net ip accept` (addr*), 120x30. */
 async function openForm() {
   const m = await mount({ cols: 120, rows: 30, modules: true });
-  await goto(m.t, "net");
-  await m.t.press("RETURN");
+  await drill(m.t, "net");
   await m.t.press("RETURN");
   await m.t.press("RETURN");
   return m.t;
@@ -307,8 +313,7 @@ test("form footer comes from the form scope: no tab bar hint, and every key show
 
 test("form: tab moves to the next field, space marks a flag, enter runs; result footer: enter goes back", async () => {
   const { t } = await mount({ cols: 120, rows: 30, modules: true });
-  await goto(t, "demo");
-  await t.press("RETURN");
+  await drill(t, "demo");
   await goto(t, "greet");
   await t.press("RETURN"); // who* (option) + shout (flag)
   expect(t.frame()).toMatch(/» who/);
@@ -330,7 +335,8 @@ test("form: tab moves to the next field, space marks a flag, enter runs; result 
 
 test("log screen footer comes from the log scope and its keys work", async () => {
   const { t } = await mount({ cols: 120, rows: 30, modules: true });
-  await goto(t, "✗ throws-on-load");
+  await gotoCard(t, "throws-on-load");
+  await t.press("RETURN");
   await t.press("RETURN");
   expect(t.frame()).toContain("› log throws-on-load");
   const foot = t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
@@ -339,7 +345,7 @@ test("log screen footer comes from the log scope and its keys work", async () =>
   expect(t.frame()).toContain("fila vazia");
   await t.press("ESCAPE");
   await t.press("ESCAPE");
-  expect(t.frame()).toContain("» ✗ throws-on-load");
+  expect(selectedName(t)).toBe("throws-on-load");
 });
 
 test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab; enter on the bar acts like down", async () => {
@@ -347,7 +353,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   const foot = () => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
   const expectScope = (scope: "tabs" | "modules" | "home") => {
     for (const s of footerFor(scope)) expect(foot()).toContain(`${s.keys} ${s.label}`);
-    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : scope === "home" ? "↑↓←→ painel" : "↑↓ move");
+    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : scope === "home" ? "↑↓←→ painel" : "↑↓←→ cartão");
     expect(foot()).not.toContain(scope === "tabs" ? "↑↓ move" : "troca aba");
   };
   expectScope("home");
@@ -357,11 +363,11 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expectScope("home");
   await t.press("ARROW_UP");
   await t.press("TAB"); // Módulos, bar still focused
-  expect(t.frame()).toContain("› módulos");
+  expect(t.frame()).toContain("instalados");
   expectScope("tabs");
   await t.press("RETURN");
-  expectScope("modules"); // the Módulos list: a module row has its own footer
-  expect(t.frame()).toMatch(/» /);
+  expectScope("modules"); // the Módulos cards
+  expect(selectedName(t)).toBeDefined();
   await t.press("ARROW_UP");
     await t.press("TAB"); // Logs: nothing to select, enter does nothing
   await t.press("RETURN");
@@ -374,7 +380,7 @@ test("every tab content and pushed screen uses the same title convention", async
   expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› \[1\] conformidade ●─/); // row 0 is the bar
   await t.press("ARROW_UP");
   await t.press("TAB");
-  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› módulos( · c catálogo)?─/);
+  expect(t.frame().split("\n")[1]).toMatch(/^\s+instalados \d+\s+catálogo\s+c alterna/); // the switch: Módulos has cards, not a panel
 });
 
 /** The help is fully visible at 80x24: title, first row, last row (the hint), and no row cut by the frame. */
@@ -401,7 +407,7 @@ test("? help fits 80x24 from every main context and esc returns to the same focu
     expect(t.frame(), scope).toBe(before);
     expect(t.frame().split("\n").filter((l) => l.trim()).at(-1)).toContain(footerKey);
   };
-  await check("modules", "u atualiza"); // Módulos list: a module row has its own scope
+  await check("modules", "? ajuda"); // Módulos cards
   await t.press("ARROW_UP"); // first row -> bar
   await check("tabs", "↓/enter entra na aba");
   await t.press("TAB", { shift: true });
@@ -420,9 +426,161 @@ test("? help fits 80x24 from every main context and esc returns to the same focu
  * so those scopes are checked by rendering the overlay itself.
  */
 test("help overlay of the text-input scopes fits 80x24", async () => {
-  for (const scope of ["home", "menu", "form", "session", "palette", "block", "tabs", "modules", "modwait", "catalog", "review", "files"] as const) {
+  for (const scope of ["home", "menu", "form", "session", "palette", "block", "tabs", "modules", "catalog", "actions", "review", "files"] as const) {
     h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><HelpOverlay scope={scope} onClose={() => {}} /></KeyRouter></ThemeProvider>, { cols: 80, rows: 24 });
     seeHelp(h, scope);
     h.destroy();
   }
+});
+
+test("footer of the cards view has only the five rows; ? shows the legend and the direct shortcuts", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  expect(footerLine(t).trim()).toBe("↑↓←→ cartão   enter ações   c catálogo   a adicionar   ? ajuda");
+  expect(footerFor("modules").map((s) => s.keys)).toEqual(["↑↓←→", "enter", "c", "a", "?"]);
+  await t.press("?");
+  const f = t.frame();
+  for (const s of ["◆ ", "oficial (vem com o pvx)", "◇ ", "externo", "∞ ", "confia sempre", "⚠ ", "pede atenção", "comandos e páginas", "mostra ou oculta a aba", "widgets no Início"]) expect(f).toContain(s);
+  expect(f.split("\n").filter((l) => l.includes("│") && /\? +ajuda/.test(l))).toHaveLength(1); // the global `?` row is replaced, not repeated
+});
+
+test("enter opens the action menu with only what applies; esc closes it", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  await gotoCard(t, "net");
+  await t.press("RETURN");
+  let f = t.frame();
+  for (const s of ["comandos e páginas", "atualizar", "desativar", "remover"]) expect(f).toContain(s);
+  for (const s of ["revisar", "mostrar a aba", "widgets no Início", "abrir a aba"]) expect(f).not.toContain(s);
+  expect(f).toMatch(/comandos e páginas\s+l/);
+  expect(f).toMatch(/remover\s+x/);
+  expect(footerLine(t)).toContain("esc fecha");
+  await t.press("ARROW_DOWN");
+  expect(f.split("\n").find((l) => l.includes("» comandos e páginas"))).toBeDefined();
+  expect(t.frame().split("\n").find((l) => l.includes("» atualizar"))).toBeDefined();
+  await t.press("ESCAPE");
+  expect(t.frame()).not.toContain("comandos e páginas");
+  expect(selectedName(t)).toBe("net"); // the same card stays selected
+  await gotoCard(t, "ui-demo");
+  await t.press("RETURN");
+  f = t.frame();
+  expect(f).toContain("abrir a aba Demo");
+  expect(f).toMatch(/mostrar a aba\s+✓ t/);
+  await t.press("ESCAPE");
+  await gotoCard(t, "widget-demo");
+  await t.press("RETURN");
+  expect(t.frame()).toMatch(/widgets no Início\s+✓ w/);
+});
+
+test("direct shortcuts work on the selected card without the menu; the ones that do not apply say why", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  await gotoCard(t, "net");
+  await t.press("t");
+  expect(t.frame()).toContain("este módulo não tem aba");
+  await t.press("w");
+  expect(t.frame()).toContain("não tem widgets no Início");
+  await t.press("r");
+  expect(t.frame()).toContain("nada a aprovar");
+  await t.press("u"); // no host deps in this mount: read-only
+  expect(t.frame()).toContain("somente leitura");
+  expect(t.frame()).not.toContain("comandos e páginas"); // none of them opened the menu
+  await t.press("l");
+  expect(t.frame()).toContain("módulos › net");
+});
+
+test("ctrl+k opens the palette from the cards view, with the bar focused or not, and closes an open action menu first", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  await t.press("k", { ctrl: true });
+  expect(t.frame()).toContain("fila vazia");
+  await t.press("ESCAPE");
+  await t.press("ARROW_UP"); // bar focused
+  await t.press("k", { ctrl: true });
+  expect(t.frame()).toContain("fila vazia");
+  await t.press("ESCAPE");
+  await t.press("ARROW_DOWN");
+  await t.press("RETURN"); // action menu of the first card (a failed module)
+  expect(t.frame()).toContain("ver o log");
+  await t.press("k", { ctrl: true });
+  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).not.toContain("ver o log");
+  await t.press("ESCAPE");
+  expect(t.frame()).toContain("instalados");
+});
+
+test("mouse: hover moves the selection, click opens the menu; hover selects an item, click runs it, a click outside closes", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  const { x, y } = selectedCorners(t)[0]!;
+  const w = 38; // card width at 120 columns
+  await t.hover(x + w + 1 + 4, y + 1); // the second card
+  expect(selectedName(t)).toBe("broken-entry");
+  await t.click(x + w + 1 + 4, y + 1); // click opens its menu
+  const rowOf = (s: string) => t.frame().split("\n").findIndex((l) => l.includes(s));
+  expect(rowOf("ver o log")).toBeGreaterThan(0);
+  const at = (s: string) => t.frame().split("\n")[rowOf(s)]!.indexOf(s) + 1;
+  await t.hover(at("remover"), rowOf("remover"));
+  expect(t.frame().split("\n").find((l) => l.includes("» remover"))).toBeDefined();
+  expect(t.frame().split("\n").filter((l) => l.includes("»")).length).toBe(1);
+  await t.click(2, 25); // outside the menu: closes it
+  expect(t.frame()).not.toContain("ver o log");
+  await t.click(x + w + 1 + 4, y + 1);
+  await t.click(at("ver o log"), rowOf("ver o log")); // click runs: the module's log
+  expect(t.frame()).toContain("log broken-entry");
+});
+
+test("mouse: the segments switch the view; the dashed cards are clickable", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  const row1 = () => t.frame().split("\n")[1]!;
+  await t.click(row1().indexOf("catálogo") + 2, 1);
+  expect(footerLine(t)).toContain("c instalados");
+  await t.click(row1().indexOf("instalados") + 2, 1);
+  expect(footerLine(t)).toContain("c catálogo");
+  for (let i = 0; i < 12; i++) await t.press("ARROW_RIGHT"); // the dashed cards, last row
+  const lines = t.frame().split("\n");
+  const y = lines.findIndex((l) => l.includes("abrir o catálogo"));
+  await t.click(lines[y]!.indexOf("abrir o catálogo") + 2, y);
+  expect(footerLine(t)).toContain("c instalados"); // the catalog view
+  await t.click(row1().indexOf("instalados") + 2, 1);
+  const ys = t.frame().split("\n").findIndex((l) => l.includes("adicionar por URL"));
+  await t.click(t.frame().split("\n")[ys]!.indexOf("adicionar por URL") + 2, ys);
+  expect(t.frame()).toContain("somente leitura"); // this mount has no host deps; with them the box opens
+});
+
+test("w toggles the module's Início widgets: notice, chip on the card, saved in the state", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  await gotoCard(t, "widget-demo");
+  await t.press("w");
+  expect(t.frame()).toContain("✓ widgets do widget-demo ocultos no Início");
+  expect(t.frame()).toContain("widget oculto");
+  await Bun.sleep(400); // the state writer is debounced
+  expect(loadTuiState(join(pvxHome(), "s.json")).hiddenWidgets).toEqual(["widget-demo"]);
+  await t.press("w");
+  expect(t.frame()).toContain("✓ widgets do widget-demo visíveis no Início");
+  expect(t.frame()).not.toContain("widget oculto");
+});
+
+test("the selected card stays visible when the tab bar has the focus: muted border, detail strip kept", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  const name = selectedName(t)!;
+  expect(selectedCorners(t)).toHaveLength(1);
+  const at = selectedCorners(t)[0]!;
+  await t.press("ARROW_UP"); // bar focused
+  expect(selectedCorners(t)).toHaveLength(0); // no accent
+  expect(subtleCorners(t)).toEqual([at]); // same card, muted border
+  expect(detail(t)).toContain(name);
+  await t.press("ARROW_DOWN");
+  expect(selectedCorners(t)).toEqual([at]);
+  expect(subtleCorners(t)).toHaveLength(0);
+});
+
+test("with the tab bar focused hovering a card does not move the selection; a click selects it and moves the focus into the grid", async () => {
+  const { t } = await mount({ cols: 120, rows: 30, modules: true });
+  const w = 38;
+  const first = selectedName(t)!;
+  const at = selectedCorners(t)[0]!;
+  await t.press("ARROW_UP"); // bar focused
+  await t.hover(at.x + w + 1 + 4, at.y + 1); // the second card
+  expect(subtleCorners(t)).toEqual([at]);
+  expect(detail(t)).toContain(first);
+  await t.click(at.x + w + 1 + 4, at.y + 1);
+  expect(t.frame()).toContain("ver o log"); // its menu opened, as before
+  await t.press("ESCAPE");
+  expect(selectedName(t)).toBe("broken-entry"); // accent border: the focus moved into the grid
 });

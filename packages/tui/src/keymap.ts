@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "ajustes" | "ajustesedit" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "modwait" | "catalog" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "ajustes" | "ajustesedit" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -12,6 +12,8 @@ export interface Shortcut {
   footer?: boolean;
   /** Shown in the action row under the focused block. */
   hint?: boolean;
+  /** Replaces the global row with the same keys in this scope's footer and help (an empty label hides it). */
+  over?: boolean;
 }
 
 /** The ONE shortcut table: the footer line and the `?` help both render from it. Add rows here. */
@@ -26,27 +28,33 @@ const base: readonly Shortcut[] = [
   { keys: "tab", label: "abas", scope: "menu", footer: true },
   { keys: "a", label: "adiciona módulo", scope: "menu" },
   { keys: "esc", label: "sobe um nível", scope: "menu" },
-  { keys: "↑↓", label: "move", scope: "modules", footer: true },
-  { keys: "enter", label: "abre", scope: "modules", footer: true },
-  { keys: "u", label: "atualiza", scope: "modules", footer: true },
-  { keys: "d", label: "ativa", scope: "modules", footer: true }, // toggles: disable, or enable a disabled one
-  { keys: "x", label: "remove", scope: "modules", footer: true },
-  { keys: "l", label: "log", scope: "modules" },
-  { keys: "a", label: "adiciona", scope: "modules", footer: true },
-  { keys: "c", label: "catálogo", scope: "modules" },
-  { keys: "esc", label: "sobe um nível", scope: "modules" },
-  { keys: "↑↓", label: "move", scope: "modwait", footer: true },
-  { keys: "enter", label: "revisa", scope: "modwait", footer: true },
-  { keys: "t", label: "confia", scope: "modwait", footer: true },
-  { keys: "x", label: "remove", scope: "modwait", footer: true },
-  { keys: "l", label: "log", scope: "modwait" },
-  { keys: "a", label: "adiciona", scope: "modwait" },
-  { keys: "c", label: "catálogo", scope: "modwait" },
-  { keys: "↑↓", label: "move", scope: "catalog", footer: true },
-  { keys: "enter", label: "instala", scope: "catalog", footer: true },
+  { keys: "↑↓←→", label: "cartão", scope: "modules", footer: true },
+  { keys: "enter", label: "ações", scope: "modules", footer: true },
+  { keys: "c", label: "catálogo", scope: "modules", footer: true },
+  { keys: "a", label: "adicionar", scope: "modules", footer: true },
+  { keys: "?", label: "ajuda", scope: "modules", footer: true, over: true },
+  { keys: "esc", label: "", scope: "modules", over: true }, // nothing to go back to: keeps the footer to five rows
+  { keys: "l", label: "comandos e páginas", scope: "modules" },
+  { keys: "t", label: "mostra ou oculta a aba", scope: "modules" },
+  { keys: "w", label: "widgets no Início", scope: "modules" },
+  { keys: "u", label: "atualiza", scope: "modules" },
+  { keys: "r", label: "revisa", scope: "modules" },
+  { keys: "d", label: "ativa ou desativa", scope: "modules" },
+  { keys: "x", label: "remove", scope: "modules" },
+  { keys: "◆", label: "oficial (vem com o pvx)", scope: "modules" },
+  { keys: "◇", label: "externo", scope: "modules" },
+  { keys: "∞", label: "confia sempre", scope: "modules" },
+  { keys: "⚠", label: "pede atenção", scope: "modules" },
+  { keys: "↑↓←→", label: "cartão", scope: "catalog", footer: true },
+  { keys: "enter", label: "ações", scope: "catalog", footer: true },
   { keys: "c", label: "instalados", scope: "catalog", footer: true },
   { keys: "a", label: "adiciona por repositório", scope: "catalog" },
-  { keys: "tab", label: "abas", scope: "catalog", footer: true },
+  { keys: "?", label: "ajuda", scope: "catalog", footer: true, over: true },
+  { keys: "esc", label: "", scope: "catalog", over: true },
+  { keys: "↑↓", label: "escolhe", scope: "actions", footer: true },
+  { keys: "enter", label: "confirma", scope: "actions", footer: true },
+  { keys: "esc", label: "fecha", scope: "actions", footer: true },
+  { keys: "?", label: "", scope: "actions", over: true },
   { keys: "enter", label: "clona e revisa", scope: "add", footer: true },
   { keys: "←→", label: "cursor", scope: "add" },
   { keys: "esc", label: "cancela", scope: "add" },
@@ -145,13 +153,16 @@ export function reviewRows(update: boolean, short?: string): Shortcut[] {
 
 /** Footer entries for the active scope, global ones last. */
 export const footerFor = (scope: Scope): Shortcut[] => {
-  const own = rowsOf(scope).filter((s) => s.footer && s.scope === scope && scope !== "global");
-  return [...own, ...shortcuts.filter((s) => s.footer && s.scope === "global" && !own.some((o) => o.keys === s.keys))]; // a scope's own `esc` replaces the global one
+  const rows = rowsOf(scope).filter((s) => s.scope === scope && scope !== "global");
+  const own = rows.filter((s) => s.footer);
+  return [...own, ...shortcuts.filter((s) => s.footer && s.scope === "global" && !rows.some((o) => o.keys === s.keys && (o.footer || o.over)))]; // a scope's own `esc` replaces the global one
 };
 
 /** Help rows: all rows of the scope (footer or not), then the global ones. */
-export const helpFor = (scope: Scope): Shortcut[] =>
-  [...rowsOf(scope).filter((s) => s.scope === scope && scope !== "global"), ...shortcuts.filter((s) => s.scope === "global")];
+export const helpFor = (scope: Scope): Shortcut[] => {
+  const own = rowsOf(scope).filter((s) => s.scope === scope && scope !== "global");
+  return [...own.filter((s) => s.label), ...shortcuts.filter((s) => s.scope === "global" && !own.some((o) => o.over && o.keys === s.keys))];
+};
 
 /** Inline hint text from table rows: `hintText("session", "tab", "enter")` -> `tab completa · enter roda`. */
 export const hintText = (scope: Scope, ...keys: string[]) =>

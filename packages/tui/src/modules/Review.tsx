@@ -12,7 +12,7 @@ import { clean } from "../palette/search.ts";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { sanitize, type SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
-import { reloadAndReport } from "./actions.ts";
+import { deliveredTail, reloadAndReport } from "./actions.ts";
 import type { ModulesDeps } from "./deps.ts";
 import { deliverySegs, fileRows, fmtWhen, hitGroups, linesText, repoOf, rulerMarks, type FileRow, type Seg } from "./review-view.ts";
 
@@ -284,10 +284,12 @@ export interface ReviewProps {
   deps: ModulesDeps;
   /** Update mode: the fetched check (commits, permission diff). Absent: first-time trust. */
   update?: UpdateCheck;
+  /** Called before the screen pops after a successful approval, so the opener can select the module's row. Absent: the result screen shows instead. */
+  onDone?: (id: string) => void;
 }
 
 /** The trust review (spec "Tela de revisão"), pushed on the router; the same screen shows an update. Approving runs as a block. */
-export function ReviewScreen({ id, store, registry, deps, update }: ReviewProps) {
+export function ReviewScreen({ id, store, registry, deps, update, onDone }: ReviewProps) {
   const { c, box, g } = useTheme();
   const router = useRouter();
   const nudge = useNudge();
@@ -337,7 +339,10 @@ export function ReviewScreen({ id, store, registry, deps, update }: ReviewProps)
       return { exit: l.exit, lines: [...lines.filter((x) => x.kind === "error"), ...l.lines] };
     });
     setBusy(false);
-    setDone(r.id);
+    if (r.exit !== 0 || !onDone) return setDone(r.id); // a failure keeps its details on screen
+    onDone(id);
+    nudge(update ? `${id} atualizado para ${sha7(sha)}` : `${id} aprovado${always ? " (confiança sempre)" : ""}${deliveredTail(registry, id)}`, "ok");
+    router.pop();
   };
   const showCode = async () => {
     try {

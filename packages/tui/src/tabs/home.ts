@@ -85,5 +85,6 @@ export function syncHost(hub: SlotHub, done?: Conformity) {
   hub.setHost("home.summary", has ? `${done.ok} de ${done.total}` : undefined);
 }
 
-export const slotItems = <T,>(hub: SlotHub, slot: SlotId): T[] => (hub.read(slot) as T[] | undefined) ?? [];
+/** `hidden`: modules whose widgets the user turned off. */
+export const slotItems = <T,>(hub: SlotHub, slot: SlotId, hidden?: ReadonlySet<string>): T[] => (hub.read(slot, hidden) as T[] | undefined) ?? [];
 export type { Att, Chip };

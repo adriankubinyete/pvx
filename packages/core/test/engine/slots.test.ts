@@ -77,3 +77,23 @@ describe("widgets in modules", () => {
     expect(registry.slots.broken("home.attention")).toEqual(["widget-demo.hang"]);
   });
 });
+
+describe("SlotHub hidden modules", () => {
+  test("read and broken skip the widgets of a hidden module; hasWidgets says who contributed", async () => {
+    const hub = createSlotHub({ timeoutMs: 30 });
+    hub.add("a", "x", chip("a", 1));
+    hub.add("b", "x", chip("b", 2));
+    hub.add("b", "boom", chip("x", 3, { data: () => { throw new Error("bum"); } }));
+    hub.setHost("home.chips", [{ label: "host", level: "ok" }]);
+    const stop = hub.start(log);
+    await Bun.sleep(60);
+    stop();
+    const labels = (hidden?: Set<string>) => (hub.read("home.chips", hidden) as { label: string }[]).map((c) => c.label);
+    expect(labels()).toEqual(["host", "a", "b"]);
+    expect(labels(new Set(["b"]))).toEqual(["host", "a"]); // the host's own data stays
+    expect(hub.broken("home.chips")).toEqual(["b.boom"]);
+    expect(hub.broken("home.chips", new Set(["b"]))).toEqual([]);
+    expect(hub.hasWidgets("a")).toBe(true);
+    expect(hub.hasWidgets("none")).toBe(false);
+  });
+});

@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { OutLine } from "@pvx/sdk";
 import { shortcuts } from "../keymap.ts";
+import { useOver } from "../hover.ts";
 import { useTheme } from "../theme-context.tsx";
 import type { Block } from "./store.ts";
 
@@ -21,23 +22,40 @@ function Line({ l }: { l: OutLine }) {
   );
 }
 
+/** One clickable action of the focused block's footer: hover underlines it, a click runs the same action as its key. */
+function Hint({ keys, label, onPick }: { keys: string; label: string; onPick: () => void }) {
+  const { c } = useTheme();
+  const { over: o, enter, leave } = useOver<"x">();
+  const over = o !== undefined;
+  return (
+    <box flexShrink={0} onMouseOver={() => enter("x")} onMouseOut={() => leave("x")} onMouseDown={(e) => (e.stopPropagation(), onPick())}>
+      <text wrapMode="none">
+        <span fg={c.accent}><b>{over ? <u>{keys}</u> : keys}</b></span>
+        <span fg={over ? c.text : c.dim}>{over ? <u>{` ${label}`}</u> : ` ${label}`}</span>
+      </text>
+    </box>
+  );
+}
+
 /**
  * One scrollback block: command line, status and duration, output indented 3 cells. `focused`: selected background, `»` and the action row.
- * `tick` only matters while running (the spinner frame). Memoized. Only focus tints the background: no hover, so a resting mouse never looks like focus.
+ * `tick` only matters while running (the spinner frame). Memoized. Hover tints only the header (`selected` background, dim `›`, underlined command): the focused block tints the whole block and shows the accent `»`, so the two never look alike. `onAct` runs a footer action by its key.
  */
-export const BlockView = memo(function BlockView({ b, focused, tick, onPick }: { b: Block; focused: boolean; tick: number; onPick: (b: Block) => void }) {
+export const BlockView = memo(function BlockView({ b, focused, tick, onPick, onAct }: { b: Block; focused: boolean; tick: number; onPick: (b: Block) => void; onAct?: (b: Block, keys: string) => void }) {
   const { c, g } = useTheme();
+  const { over: o, enter, leave } = useOver<"x">();
+  const over = o !== undefined && onAct !== undefined; // read-only lists (no `onAct`) never look clickable
   const blockActions = allActions.filter((s) => s.keys !== "x" || (b.status === "running" && b.cancellable));
   const host = b.line.startsWith("!"); // ran on the host shell
   const frames = [...g.spinner];
   const st = { running: [frames[tick % frames.length]!, c.info], ok: [g.ok, c.accent], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
   return (
     <box id={`b${b.id}`} flexDirection="column" flexShrink={0} backgroundColor={focused ? c.selected : c.panel} paddingX={1}
-      onMouseDown={() => onPick(b)}>
-      <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+      onMouseOver={() => enter("x")} onMouseOut={() => leave("x")} onMouseDown={() => onPick(b)}>
+      <box flexDirection="row" justifyContent="space-between" flexShrink={0} backgroundColor={over && !focused ? c.selected : undefined}>
         <text>
-          <span fg={host ? c.warn : c.accent}>{`${focused ? g.cursor : host ? g.shell : g.prompt} `}</span>
-          <span fg={c.text}><b>{b.line}</b></span>
+          <span fg={focused || !over ? (host ? c.warn : c.accent) : c.dim}>{`${focused ? g.cursor : over ? g.query : host ? g.shell : g.prompt} `}</span>
+          <span fg={c.text}><b>{over && !focused ? <u>{b.line}</u> : b.line}</b></span>
         </text>
         <text>
           <span fg={st[1]}>{`${st[0]} `}</span>
@@ -47,11 +65,9 @@ export const BlockView = memo(function BlockView({ b, focused, tick, onPick }: {
       <box flexDirection="column" paddingLeft={3} flexShrink={0}>
         {b.lines.map((l, i) => <Line key={i} l={l} />)}
         {focused ? (
-          <text fg={c.dim}>
-            {blockActions.map((s, i) => (
-              <span key={s.keys}><span fg={c.accent}><b>{s.keys}</b></span>{` ${s.label}${i < blockActions.length - 1 ? "   " : ""}`}</span>
-            ))}
-          </text>
+          <box flexDirection="row" gap={3} flexShrink={0}>
+            {blockActions.map((s) => <Hint key={s.keys} keys={s.keys} label={s.label} onPick={() => onAct?.(b, s.keys)} />)}
+          </box>
         ) : null}
       </box>
     </box>

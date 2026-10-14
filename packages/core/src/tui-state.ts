@@ -12,10 +12,14 @@ export interface TuiState {
   result: "bracket" | "glyph" | "text";
   /** Token hex values of the custom theme. Validated by the TUI. */
   custom: Record<string, string>;
+  /** Ids of modules whose tab the user hid (a UI preference, not trust: their commands still run). */
+  hiddenTabs: string[];
+  /** Ids of modules whose Início widgets the user hid. */
+  hiddenWidgets: string[];
 }
 
 export function defaultTuiState(): TuiState {
-  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {} };
+  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {}, hiddenTabs: [], hiddenWidgets: [] };
 }
 
 export function tuiStatePath(): string {
@@ -29,7 +33,10 @@ export function loadTuiState(path = tuiStatePath()): TuiState {
     if (!existsSync(path)) return d;
     const raw = JSON.parse(readFileSync(path, "utf8"));
     const pick = <K extends keyof TuiState>(k: K, ok: readonly unknown[]): TuiState[K] => (ok.includes(raw?.[k]) ? raw[k] : d[k]);
+    const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
     return {
+      hiddenTabs: strings(raw?.hiddenTabs),
+      hiddenWidgets: strings(raw?.hiddenWidgets),
       theme: pick("theme", ["dark", "light", "contrast", "terminal", "custom"]),
       accent: typeof raw?.accent === "string" ? raw.accent : d.accent,
       symbols: pick("symbols", ["unicode", "ascii"]),

@@ -1,8 +1,17 @@
 import type { OutLine } from "@pvx/sdk";
 import { reconcileModule, type Registry } from "@pvx/core";
+import { clean } from "../palette/search.ts";
 import type { ModulesDeps } from "./deps.ts";
 
 const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+
+/** What a loaded module delivers, for a success notice: ` · 19 comandos · aba Firewall disponível` (the tab only when it has one). */
+export function deliveredTail(registry: Registry, id: string): string {
+  const cmds = [...registry.commands.values()].filter((c) => c.moduleId === id).length;
+  const tab = [...registry.pages.values()].find((p) => p.moduleId === id && p.tab);
+  const label = tab && clean(tab.tab === true ? tab.title : tab.tab ? tab.tab.label : "");
+  return ` · ${n(cmds, "comando", "comandos")}${label ? ` · aba ${label} disponível` : ""}`;
+}
 
 /** Re-reads one module from disk into the registry (no restart), then says what became of it. `what` is the verb for the success line. */
 export async function reloadAndReport(registry: Registry, deps: ModulesDeps, id: string, what: string): Promise<{ exit: number; lines: OutLine[] }> {

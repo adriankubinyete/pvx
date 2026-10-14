@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
@@ -87,4 +87,17 @@ test.each([[80, 24], [230, 24]] as const)("chips line sits alone under the bar a
   expect(lines.filter((l) => l.includes("› [1] conformidade"))).toHaveLength(1);
   expect(lines.filter((l) => l.includes("› [2] atividade"))).toHaveLength(1);
   expect(lines[rows - 1]).toContain("↑↓←→ painel");
+});
+
+test("Início drops the widget items of a module whose widgets the user hid; the others stay", async () => {
+  writeFileSync(join(pvxHome(), "s.json"), JSON.stringify({ hiddenWidgets: ["widget-demo"] }));
+  registry.register({ id: "other", version: "1.0.0", entry: "x" }, {
+    widgets: { c: { slot: "home.chips", priority: 99, data: () => [{ label: "outro-chip", level: "ok" as const }] } },
+  });
+  const { t } = await mount({ cols: 120, rows: 40 });
+  const f = t.frame();
+  expect(f).toContain("outro-chip");
+  expect(f).not.toContain("demo tudo certo");
+  expect(f).not.toContain("demo: revisar o painel");
+  expect(f).not.toContain("widget quebrou: widget-demo"); // the broken ones of a hidden module are not reported either
 });

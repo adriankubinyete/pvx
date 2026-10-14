@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
+import { RGBA } from "@opentui/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
+import { tokens } from "../src/theme.ts";
 import { saveFavorites } from "../src/palette/favorites.ts";
 import { snap } from "./machine-fixture.ts";
 
@@ -105,6 +107,20 @@ test("focus: the focused panel has the dot, left/right move between panels, up g
   expect(t.frame()).toContain("› [1] conformidade ●");
 });
 
+test("inside a list ↓ on the last row wraps to the first and ↑ on the first wraps to the last", async () => {
+  saveFavorites(["demo greet"]);
+  const { t, store } = await mount({ cols: 120, rows: 40 });
+  await store.run("demo remember");
+  await t.flush();
+  await t.press("ARROW_DOWN"); // atividade
+  await t.press("RETURN");
+  expect(t.frame()).toMatch(/» ★ demo greet/);
+  await t.press("ARROW_UP"); // first row: wraps to the last
+  expect(t.frame()).toMatch(/» . demo remember/);
+  await t.press("ARROW_DOWN"); // last row: wraps to the first
+  expect(t.frame()).toMatch(/» ★ demo greet/);
+});
+
 // Each fixed row (bar, panel titles, footer) must sit alone on its own line, whole.
 test.each([[230, 24], [120, 40], [100, 30], [80, 24]] as const)("rows never overlap at %ix%i", async (cols, rows) => {
   const { t } = await mount({ cols, rows, profile: "Principal" });
@@ -191,4 +207,108 @@ test("16+ cores: four columns without the % label", async () => {
   const cores = t.frame().split("\n").filter((l) => /^ │ +\d+ ▰|^ │ +\d+ ▱/.test(l));
   expect(cores).toHaveLength(8);
   expect(cores[0]!.slice(0, 58)).not.toContain("%");
+});
+
+// Mouse: hover always reacts; the selection only moves inside the active list; a click on a row focuses the panel and selects it.
+const spanAt = (t: TuiHarness, x: number, y: number) => {
+  let at = 0;
+  for (const sp of t.spans().lines[y]!.spans) {
+    if (x < at + sp.width) return sp;
+    at += sp.width;
+  }
+  throw new Error(`no cell at ${x},${y}`);
+};
+const tinted = (t: TuiHarness, x: number, y: number) => spanAt(t, x, y).bg.equals(RGBA.fromHex(tokens.panel));
+const rowY = (t: TuiHarness, text: string) => {
+  const y = t.frame().split("\n").findIndex((l) => l.includes(text));
+  expect(y, text).toBeGreaterThan(-1);
+  return y;
+};
+const rowX = (t: TuiHarness, text: string) => t.frame().split("\n")[rowY(t, text)]!.indexOf(text);
+const BAR = "tab próxima aba";
+
+test("mouse, bar focused: hovering a row of a list tints it (dim ›) and changes nothing else; the frame of the panel lights up", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await t.press("r");
+  await t.flush();
+  await t.press("ARROW_UP"); // panel level: nothing above, the bar
+  expect(t.frame()).toContain(BAR);
+  const y = rowY(t, "cap-fixture.b: pendente");
+  const x = rowX(t, "cap-fixture.b: pendente");
+  expect(tinted(t, x, y)).toBe(false);
+  await t.hover(x + 2, y);
+  expect(tinted(t, x, y)).toBe(true);
+  expect(t.frame().split("\n")[y]).toMatch(/› ✗ cap-fixture.b/);
+  expect(t.frame()).not.toMatch(/» /); // never looks selected
+  expect(t.frame()).toContain(BAR); // the focus did not move
+  const border = rowY(t, "[1] conformidade");
+  const bx = rowX(t, "╭─› [1] conformidade") ;
+  expect(spanAt(t, bx, border).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true); // panel frame, one step brighter than the border
+  await t.hover(x + 2, rowY(t, "cap-fixture.c: pendente")); // the next row takes the tint
+  expect(tinted(t, x, y)).toBe(false);
+  expect(tinted(t, x, rowY(t, "cap-fixture.c: pendente"))).toBe(true);
+  await t.hover(2, 38); // off the panels
+  expect(tinted(t, x, rowY(t, "cap-fixture.c: pendente"))).toBe(false);
+  expect(spanAt(t, bx, border).fg.equals(RGBA.fromHex(tokens.border))).toBe(true);
+});
+
+test("mouse: the frame lights up with the mouse anywhere in a panel, even on an empty area, and never takes the accent", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await t.press("ARROW_UP");
+  const top = rowY(t, "[2] atividade");
+  const bx = rowX(t, "╭─› [2] atividade");
+  expect(spanAt(t, bx, top).fg.equals(RGBA.fromHex(tokens.border))).toBe(true);
+  await t.hover(60, top + 6); // empty area of atividade
+  expect(spanAt(t, bx, top).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+  expect(t.frame()).toContain(BAR);
+  await t.hover(10, rowY(t, "central-sp-01")); // máquina has no rows: the panel itself
+  expect(spanAt(t, bx, top).fg.equals(RGBA.fromHex(tokens.border))).toBe(true);
+  expect(spanAt(t, 1, rowY(t, "› máquina")).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+});
+
+test("mouse, inside the active list: hover moves the selection (one » marker)", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await t.press("r");
+  await t.flush();
+  await t.press("RETURN"); // inside conformidade
+  const a = rowY(t, "cap-fixture.a: pendente");
+  expect(t.frame().split("\n")[a]).toMatch(/» ✗ cap-fixture.a/);
+  await t.hover(rowX(t, "cap-fixture.c: pendente") + 2, rowY(t, "cap-fixture.c: pendente"));
+  expect(t.frame().split("\n")[rowY(t, "cap-fixture.c: pendente")]).toMatch(/» ✗ cap-fixture.c/);
+  expect(t.frame().match(/» /g)).toHaveLength(1);
+  await t.press("ARROW_DOWN"); // continues from the hovered row
+  expect(t.frame().split("\n")[rowY(t, "demo: revisar o painel")]).toMatch(/» ▲ demo/);
+});
+
+test("mouse, bar focused: a click on a row focuses the panel, goes inside and selects that row", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await t.press("r");
+  await t.flush();
+  await t.press("ARROW_UP");
+  expect(t.frame()).toContain(BAR);
+  const y = rowY(t, "fine: em ordem"); // a row without a fix: nothing leaves the tab
+  await t.click(rowX(t, "fine: em ordem") + 2, y);
+  expect(t.frame()).not.toContain(BAR);
+  expect(t.frame()).toContain("› [1] conformidade ●");
+  expect(t.frame().split("\n")[rowY(t, "fine: em ordem")]).toMatch(/» ✓ fine/);
+  expect(t.frame()).toContain("esc sai"); // inside
+});
+
+test("mouse: clicking `r verifica` runs the check; `r atualiza` is underlined on hover", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await t.hover(5, 15); // the first re-render adds the chips line (the slots tick): measure the rows after it
+  await t.flush();
+  const y = rowY(t, "não verificado · r verifica");
+  const x = rowX(t, "r verifica");
+  expect(spanAt(t, x, y).attributes & 8).toBe(0);
+  await t.hover(x + 2, y);
+  expect(spanAt(t, x, y).attributes & 8).not.toBe(0);
+  expect(spanAt(t, x - 4, y).attributes & 8).toBe(0); // only the action
+  await t.click(x + 2, y);
+  await t.flush();
+  expect(t.frame()).toMatch(/1 de 5/);
+  expect(t.frame()).toMatch(/verificado às \d\d:\d\d · r atualiza/);
+  const y2 = rowY(t, "r atualiza");
+  await t.hover(rowX(t, "r atualiza") + 2, y2);
+  expect(spanAt(t, rowX(t, "r atualiza"), y2).attributes & 8).not.toBe(0);
 });

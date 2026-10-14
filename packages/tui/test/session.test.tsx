@@ -298,3 +298,81 @@ test("parity: the same line gives the same output lines through the CLI and the 
   expect(files.length).toBeGreaterThan(1);
   for (const text of [...files.map((f) => readFileSync(f, "utf8")), ...frames, t.frame()]) expect(text).not.toContain(secret);
 });
+
+const rowY = (t: TuiHarness, text: string) => t.frame().split("\n").findIndex((l) => l.includes(text));
+const colOf = (t: TuiHarness, text: string) => t.frame().split("\n").find((l) => l.includes(text))!.indexOf(text);
+
+test("mouse: hovering a block tints its header with a dim ›, a click focuses it, and its action hints click like the keys", async () => {
+  const t = await mount();
+  await run(t, "demo greet ana");
+  await run(t, "demo greet bad");
+  const y = rowY(t, "demo greet ana");
+  expect(t.frame().split("\n")[y]).toMatch(/❯ demo greet ana/);
+  await t.hover(8, y);
+  expect(t.frame().split("\n")[y]).toMatch(/› demo greet ana/); // hover cue, distinct from the focus »
+  const bg = (yy: number) => t.spans().lines[yy]!.spans.find((s) => s.text.includes("demo greet"))!.bg;
+  expect(bg(y).equals(bg(rowY(t, "demo greet bad")))).toBe(false); // the hovered header is tinted
+  await t.hover(8, rowY(t, "demo greet bad")); // moving to another block leaves this one
+  expect(t.frame()).toContain("› demo greet bad");
+  expect(t.frame().split("\n")[y]).toMatch(/❯ demo greet ana/);
+  await t.click(8, y);
+  expect(t.frame()).toContain("» demo greet ana");
+  expect(t.frame()).toContain("r repetir");
+  const hy = rowY(t, "r repetir");
+  await t.hover(colOf(t, "r repetir") + 2, hy);
+  await t.click(colOf(t, "r repetir") + 2, hy);
+  expect(t.frame().match(/\[✓\] oi ana/g)).toHaveLength(2); // repeated
+  expect(t.frame()).toContain("» demo greet ana");
+  const ly = rowY(t, "l log");
+  await t.click(colOf(t, "l log") + 2, ly);
+  expect(t.frame()).toContain("log demo");
+});
+
+test("mouse: hover moves the popup selection without leaving the input, a click accepts the row", async () => {
+  const t = await mount();
+  await t.type("demo ");
+  const lines = () => t.frame().split("\n");
+  const first = lines().findIndex((l) => l.includes("» demo "));
+  expect(first).toBeGreaterThan(0);
+  const second = first + 1;
+  expect(lines()[second]).toMatch(/\bdemo \S/);
+  const word = lines()[second]!.match(/demo (\S+)/)![1]!;
+  await t.hover(10, second);
+  expect(lines()[second]).toContain("» demo");
+  expect(lines()[first]).not.toContain("» demo");
+  expect(t.frame()).toContain("❯ demo "); // the input kept the keyboard (cursor block, no bar footer)
+  await t.type("x");
+  expect(t.frame()).toContain("demo x");
+  await t.press("BACKSPACE");
+  await t.click(10, second);
+  expect(t.frame()).toContain(`❯ demo ${word}`);
+});
+
+test("mouse: a choice modal answers by clicking an option, hover moves its highlight", async () => {
+  const t = await mount();
+  let picked = -1;
+  void store.act("modules add x", async (hp) => {
+    picked = await hp.choose("escolha", ["qual?"], ["alfa", "beta", "gama"]);
+    return { exit: 0, lines: [{ kind: "info", text: `picked ${picked}` }] };
+  });
+  await t.flush();
+  expect(t.frame()).toContain("[ alfa ]");
+  const y = rowY(t, "[ alfa ]");
+  await t.hover(colOf(t, "beta") + 1, y);
+  expect(t.frame()).toContain("[ beta ]");
+  await t.click(colOf(t, "[ beta ]") + 3, y);
+  await t.flush();
+  expect(picked).toBe(1);
+  expect(t.frame()).toContain("picked 1");
+});
+
+test("mouse: the confirm modal answers by clicking s or N", async () => {
+  const t = await mount();
+  await run(t, "demo wipe");
+  const y = rowY(t, "s/N");
+  await t.click(colOf(t, "s/N"), y);
+  expect(t.frame()).toContain("[✓] apagado");
+  await run(t, "demo wipe");
+  await t.click(colOf(t, "s/N") + 2, rowY(t, "s/N"));
+  expect(t.frame()).toContain("cancelado");
+});

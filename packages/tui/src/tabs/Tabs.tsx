@@ -105,7 +105,9 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
   const nudge = useNudge();
   const hasPages = usePages() !== null; // module tabs need the page host
   const rev = useRegistryRev(registry); // add, trust, update, remove, disable and dev reloads change the tabs live
-  const modTabs = useMemo(() => (hasPages ? pageTabs(registry) : []), [hasPages, registry, rev]);
+  const { axes } = useTheme();
+  const hiddenTabs = useMemo(() => new Set(axes.hiddenTabs), [axes.hiddenTabs]);
+  const modTabs = useMemo(() => (hasPages ? pageTabs(registry, hiddenTabs) : []), [hasPages, registry, rev, hiddenTabs]);
   // Update notice: in the background, never in the way of the first frame; interactive hosts only (they pass `modules`).
   useEffect(() => {
     if (!modules) return;
@@ -114,6 +116,8 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
     return () => void (live = false);
   }, [modules, registry, rev]);
   const ids: TabId[] = [...LEAD_TABS, ...modTabs.map((t) => t.id), ...TRAIL_TABS];
+  const hiddenNow = !ids.includes(nav.active) && hasPages && pageTabs(registry).some((t) => t.id === nav.active); // hidden by the user, not gone
+  if (hiddenNow) nav.active = "modulos";
   const active = ids.includes(nav.active) ? nav.active : "inicio"; // the module went away
   const pageTab = modTabs.find((t) => t.id === active);
   // A visited module tab stays mounted (hidden) so its state survives a switch; it lives while this screen does.
@@ -135,7 +139,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
     if (k.sequence === "/") return update({ active: "comando", bar: false }), true;
   }, { base: true });
 
-  const api = { focused: !nav.bar, focusBar: () => update({ bar: true }), goto: (id: TabId) => update({ active: id, bar: false }) };
+  const api = { focused: !nav.bar, focusBar: () => update({ bar: true }), focusContent: () => nav.bar && hasSel(active) && update({ bar: false }), goto: (id: TabId) => update({ active: id, bar: false }) };
   useEffect(() => onTabRequest((id) => ids.includes(id) && api.goto(id)));
   const core = (id: CoreTabId) => ({ id, label: LABELS[id], errors: id === "modulos" ? registry.errors.length : 0, behind: id === "modulos" ? nav.updates.length : 0 });
   const bar: BarTab[] = [
@@ -148,7 +152,8 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
     <TabsProvider value={api}>
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} tabs={bar} active={active} version={version} now={now} onPick={(id) => update({ active: id, bar: true })} />
-        <box flexGrow={1} minHeight={0} flexDirection="column">
+        {/* A mouse down anywhere in the content moves the keyboard in; it bubbles up after the clicked element has handled it. */}
+        <box flexGrow={1} minHeight={0} flexDirection="column" onMouseDown={api.focusContent}>
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} refreshMs={logsMs} /> : null}

@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
+import { RGBA, TextAttributes } from "@opentui/core";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadTuiState, logsDir, pvxHome, runCapture, tuiStatePath } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
 import { TAB_IDS } from "../src/tabs/context.ts";
-import { hexTokensFor } from "../src/theme.ts";
+import { hexTokensFor, tokens } from "../src/theme.ts";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -125,4 +126,111 @@ test("hovering a row moves the selection: one marker, and ArrowDown continues fr
   await t.press("ARROW_DOWN");
   const marked = rows().findIndex((l) => l.includes("»"));
   expect(marked).toBe(rows().findIndex((l) => l.includes("moldura")));
+});
+
+const spotOf = (t: TuiHarness, text: string, from = 0) => {
+  const lines = t.frame().split("\n");
+  const y = lines.findIndex((l, i) => i >= from && l.includes(text));
+  return { x: lines[y]!.indexOf(text), y };
+};
+
+test("mouse: the ‹ and › arrows step the value like ←/→, persist, and a click on the row selects it", async () => {
+  const t = await mount();
+  await t.press("ARROW_UP"); // bar focused
+  const tema = spotOf(t, "tema ");
+  const arrows = (y: number) => {
+    const line = t.frame().split("\n")[y]!;
+    const l = line.indexOf("‹");
+    return { l, r: line.indexOf("›", l) }; // the row marker is also a ›
+  };
+  await t.click(arrows(tema.y).r, tema.y); // › = next
+  expect(t.frame()).not.toContain("↓/enter entra na aba"); // the click also moved the keyboard into the tab
+  expect(t.frame().split("\n")[tema.y]).toContain("Claro");
+  await t.click(arrows(tema.y).l, tema.y); // ‹ = previous
+  expect(t.frame().split("\n")[tema.y]).toContain("Escuro");
+  await t.click(arrows(tema.y).r, tema.y);
+  const sym = spotOf(t, "símbolos");
+  await t.click(sym.x + 2, sym.y); // the row: selects it, so → changes it
+  await t.press("ARROW_RIGHT");
+  expect(t.frame().split("\n")[sym.y]).toContain("ascii");
+  const border = spotOf(t, "moldura");
+  await t.hover(border.x + 2, border.y); // hover moves the selection
+  await t.press("ARROW_RIGHT");
+  expect(t.frame().split("\n")[border.y]).toContain("simples");
+  t.destroy();
+  await new Promise((r) => setTimeout(r, 20));
+  expect(loadTuiState(tuiStatePath()).theme).toBe("light");
+});
+
+const panelBg = RGBA.fromHex(tokens.panel);
+/** Background and text attributes of the cell at (x, y). */
+function cellAt(t: TuiHarness, x: number, y: number) {
+  let at = 0;
+  for (const s of t.spans().lines[y]!.spans) {
+    if (x < at + s.width) return s;
+    at += s.width;
+  }
+  throw new Error("cell out of the frame");
+}
+
+test("bar focused: the selection stays muted with a › (never the » or the accent)", async () => {
+  const t = await mount();
+  await t.press("ARROW_UP");
+  const tema = spotOf(t, "tema ");
+  const line = t.frame().split("\n")[tema.y]!;
+  expect(line).toContain("› tema");
+  expect(t.frame()).not.toContain("»");
+  expect(cellAt(t, tema.x - 2, tema.y).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+});
+
+test("bar focused: hovering a row tints it (panel background, dim ›) and keeps the selection; leaving clears it", async () => {
+  const t = await mount();
+  await t.press("ARROW_UP");
+  const sym = spotOf(t, "símbolos");
+  await t.hover(sym.x + 2, sym.y);
+  expect(t.frame().split("\n")[sym.y]).toContain("› símbolos");
+  expect(cellAt(t, sym.x + 2, sym.y).bg.equals(panelBg)).toBe(true);
+  expect(t.frame()).not.toContain("»");
+  const tema = spotOf(t, "tema ");
+  await t.hover(tema.x + 2, tema.y);
+  expect(t.frame().split("\n")[sym.y]).not.toContain("› símbolos"); // the tint moved with the mouse
+  expect(cellAt(t, sym.x + 2, sym.y).bg.equals(panelBg)).toBe(false);
+  await t.press("ARROW_DOWN"); // enters the tab: the selection is still the first row
+  const rows = t.frame().split("\n");
+  expect(rows.findIndex((l) => l.includes("»"))).toBe(tema.y);
+});
+
+test("list active: hovering moves the selection (accent »), no tint left on the row", async () => {
+  const t = await mount();
+  const sym = spotOf(t, "símbolos");
+  await t.hover(sym.x + 2, sym.y);
+  expect(t.frame().split("\n")[sym.y]).toContain("» símbolos");
+  expect(cellAt(t, sym.x + 2, sym.y).bg.equals(panelBg)).toBe(false);
+});
+
+test("the ‹ and › arrows light up (bold, underlined) under the mouse, even with the bar focused", async () => {
+  const t = await mount();
+  await t.press("ARROW_UP");
+  const tema = spotOf(t, "tema ");
+  const line = t.frame().split("\n")[tema.y]!;
+  const [l, r] = [line.indexOf("‹"), line.indexOf("›", tema.x + 4)];
+  expect(cellAt(t, r, tema.y).attributes & TextAttributes.UNDERLINE).toBe(0);
+  await t.hover(r, tema.y);
+  expect(cellAt(t, r, tema.y).attributes & TextAttributes.UNDERLINE).toBeGreaterThan(0);
+  expect(cellAt(t, l, tema.y).attributes & TextAttributes.UNDERLINE).toBe(0);
+  await t.hover(l, tema.y);
+  expect(cellAt(t, l, tema.y).attributes & TextAttributes.UNDERLINE).toBeGreaterThan(0);
+  expect(cellAt(t, r, tema.y).attributes & TextAttributes.UNDERLINE).toBe(0);
+});
+
+test("Personalizado: hovering a token row tints it with the bar focused; a click on the hex value edits it", async () => {
+  const t = await mount();
+  for (let i = 0; i < 4; i++) await t.press("ARROW_RIGHT"); // custom
+  await t.press("ARROW_UP"); // bar
+  const bg = spotOf(t, "#0e1013");
+  await t.hover(bg.x, bg.y);
+  expect(cellAt(t, 6, bg.y).bg.equals(panelBg)).toBe(true);
+  expect(cellAt(t, bg.x, bg.y).attributes & TextAttributes.UNDERLINE).toBeGreaterThan(0);
+  await t.click(bg.x, bg.y);
+  expect(t.frame()).toContain("aplica"); // editing
 });

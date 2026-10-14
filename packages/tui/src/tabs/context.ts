@@ -12,6 +12,8 @@ export interface TabsApi {
   /** True when the tab content owns the keyboard; false while the tab bar is focused. */
   focused: boolean;
   focusBar(): void;
+  /** Moves the keyboard from the bar into the active tab (what down/enter do on the bar). */
+  focusContent(): void;
   /** Switches tab and focuses its content. */
   goto(id: TabId): void;
 }

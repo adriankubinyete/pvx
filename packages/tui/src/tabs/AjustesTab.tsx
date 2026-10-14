@@ -8,6 +8,7 @@ import { useScreenScope } from "../router.tsx";
 import { useTheme } from "../theme-context.tsx";
 import { contrast, hexTokensFor, normalizeHex, TEXT_TOKENS, TOKEN_KEYS, type HexTokens, type TokenKey } from "../theme.ts";
 import { useLayout } from "../layout.ts";
+import { useOver } from "../hover.ts";
 import { useTabs } from "./context.ts";
 import { meter } from "./home.ts";
 
@@ -71,6 +72,8 @@ export function AjustesTab() {
   const [sel, setSel] = useState<string>(ids[0]!);
   const [from, setFrom] = useState("dark");
   const [edit, setEdit] = useState<Line | null>(null);
+  const rows = useOver(); // the row under the mouse
+  const part = useOver(); // the arrow or value under the mouse: `<row>:-1`, `<row>:1`, `<row>:val`
   useScreenScope(edit ? "ajustesedit" : "ajustes", 1);
   const cur = ids.includes(sel) ? sel : ids[0]!; // "personalizado" can go away under the cursor
   const axis = AXES.find((a) => a.id === cur);
@@ -108,17 +111,41 @@ export function AjustesTab() {
     }
   });
 
+  /** A click on a row or one of its buttons selects it; a different row ends an open edit. */
+  const pickRow = (id: string) => (edit && id !== cur && setEdit(null), setSel(id));
   const listW = Math.max(40, cols - 2 - PREVIEW_W);
   const valueW = listW - 4 - 2 - LABEL_W;
-  const row = (id: string, label: string, value: React.ReactNode) => {
+  /**
+   * A row. Hover always reacts: with the list active it moves the selection, otherwise it only tints (panel background and a dim ›).
+   * A click selects the row (the tab container takes the focus). `pick` makes it a `‹ value ›` row whose arrows step the value
+   * like ←/→; `tail` is the clickable value of a token row (a click edits it).
+   */
+  const row = (id: string, label: string, pick?: { name: string; step: (d: number) => void }, tail?: React.ReactNode) => {
     const on = focused && id === cur;
+    const lit = !on && rows.over === id; // the mouse is on a row the list does not have selected: tint only
+    const mark = on ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{lit || id === cur ? `${g.query} ` : "  "}</span>; // inactive selection: a muted ›
+    const arrow = (d: number, glyph: string) => {
+      const k = `${id}:${d}`;
+      return (
+        <box flexShrink={0} onMouseOver={() => part.enter(k)} onMouseOut={() => part.leave(k)} onMouseDown={() => (pickRow(id), pick!.step(d))}>
+          <text wrapMode="none" fg={c.text}>{part.over === k ? <b><u>{glyph}</u></b> : glyph}</text>
+        </box>
+      );
+    };
     return (
-      <box key={id} flexShrink={0} backgroundColor={on ? c.selected : undefined} onMouseOver={() => setSel(id)} onMouseDown={() => setSel(id)}>
-        <text wrapMode="none">
-          <span fg={c.accent}>{on ? `${g.cursor} ` : "  "}</span>
-          <span fg={on ? c.text : c.dim}>{label.padEnd(LABEL_W)}</span>
-          {value}
+      <box key={id} flexShrink={0} flexDirection="row" backgroundColor={on ? c.selected : lit ? c.panel : undefined}
+        onMouseOver={() => (rows.enter(id), !edit && focused && setSel(id))} onMouseOut={() => rows.leave(id)} onMouseDown={() => pickRow(id)}>
+        <text wrapMode="none" flexShrink={0}>
+          {mark}
+          <span fg={on || lit || id === cur ? c.text : c.dim}>{label.padEnd(LABEL_W)}</span>
         </text>
+        {pick ? (
+          <>
+            {arrow(-1, g.moreLeft)}
+            <text wrapMode="none" fg={c.text} flexShrink={0}>{` ${pick.name.slice(0, valueW - 4)} `}</text>
+            {arrow(1, g.moreRight)}
+          </>
+        ) : tail}
       </box>
     );
   };
@@ -127,19 +154,24 @@ export function AjustesTab() {
     const editing = edit && k === cur;
     const ratio = TEXT_TOKENS.includes(k) ? contrast(h, hex.bg) : 21;
     const shown = editing ? normalizeHex(edit.text) : h;
-    return row(k, k, (
+    const vk = `${k}:val`;
+    return row(k, k, undefined, (
       <>
-        {editing ? <LineText line={edit} focused width={9} /> : <span fg={c.text}>{h}</span>}
-        <span bg={shown ?? undefined}>{shown ? "   " : ""}</span>
-        {!editing && ratio < 4.5 ? <span fg={c.warn}>{` ${g.warn} ${ratio.toFixed(1)}:1`}</span> : null}
+        <box flexShrink={0} onMouseOver={() => part.enter(vk)} onMouseOut={() => part.leave(vk)} onMouseDown={() => (pickRow(k), !editing && setEdit(lineOf(h)))}>
+          <text wrapMode="none">{editing ? <LineText line={edit} focused width={9} /> : <span fg={c.text}>{part.over === vk ? <u>{h}</u> : h}</span>}</text>
+        </box>
+        <text wrapMode="none" flexShrink={0}>
+          <span bg={shown ?? undefined}>{shown ? "   " : ""}</span>
+          {!editing && ratio < 4.5 ? <span fg={c.warn}>{` ${g.warn} ${ratio.toFixed(1)}:1`}</span> : null}
+        </text>
       </>
     ));
   };
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
       <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box(focused ? c.accent : undefined)} title={`${g.query} aparência${focused ? ` ${g.active}` : ""}`}>
-        {AXES.map((a) => row(a.id, a.label, <span fg={c.text}>{`${g.moreLeft} ${a.opts[at(a.opts, axes[a.id])]![1]} ${g.moreRight}`.slice(0, valueW)}</span>))}
-        {custom ? row(FROM, "começar de", <span fg={c.text}>{`${g.moreLeft} ${SOURCES[at(SOURCES, from)]![1]} ${g.moreRight}`}</span>) : null}
+        {AXES.map((a) => row(a.id, a.label, { name: a.opts[at(a.opts, axes[a.id])]![1], step: (d) => set({ [a.id]: cycle(a.opts, axes[a.id], d) }) }))}
+        {custom ? row(FROM, "começar de", { name: SOURCES[at(SOURCES, from)]![1], step: (d) => setFrom(cycle(SOURCES, from, d)) }) : null}
         {custom ? TOKEN_KEYS.map(token) : null}
       </box>
       <Preview />

@@ -32,10 +32,12 @@ export interface SlotHub {
   remove(moduleId: string): void;
   /** Data the host itself contributes to a slot (first in it). Does not notify. */
   setHost(slot: SlotId, data: SlotData | undefined): void;
-  /** Last data of a slot: host first, then widgets by priority. Never evaluates. Summaries are joined with " · ". */
-  read(slot: SlotId): SlotData | undefined;
+  /** Last data of a slot: host first, then widgets by priority (not those of `hidden` modules). Never evaluates. Summaries are joined with " · ". */
+  read(slot: SlotId, hidden?: ReadonlySet<string>): SlotData | undefined;
   /** Ids ("module.widget") of the widgets of this slot that were removed. */
-  broken(slot: SlotId): string[];
+  broken(slot: SlotId, hidden?: ReadonlySet<string>): string[];
+  /** True when the module contributed at least one widget. */
+  hasWidgets(moduleId: string): boolean;
   subscribe(fn: () => void): () => void;
   /** Starts the single scheduler (collects now, then by `refreshMs`). Returns stop. Only the TUI calls it. */
   start(log: Logger): () => void;
@@ -100,8 +102,8 @@ export function createSlotHub(opts: SlotOpts = {}): SlotHub {
       notify(); // a module that left must leave the Início
     },
     setHost: (slot, data) => void (data === undefined ? host.delete(slot) : host.set(slot, data)),
-    read(slot) {
-      const own = entries.filter((e) => e.def.slot === slot && e.data !== undefined).sort((a, b) => a.def.priority - b.def.priority);
+    read(slot, hidden) {
+      const own = entries.filter((e) => e.def.slot === slot && e.data !== undefined && !hidden?.has(e.moduleId)).sort((a, b) => a.def.priority - b.def.priority);
       const h = host.get(slot);
       if (!isList(slot)) {
         const all = [h, ...own.map((e) => e.data)].filter((s): s is string => typeof s === "string" && s !== "");
@@ -109,7 +111,8 @@ export function createSlotHub(opts: SlotOpts = {}): SlotHub {
       }
       return h === undefined && !own.length ? undefined : ([h, ...own.map((e) => e.data)].filter(Array.isArray).flat() as SlotData);
     },
-    broken: (slot) => entries.filter((e) => e.def.slot === slot && e.broken).map((e) => e.id),
+    broken: (slot, hidden) => entries.filter((e) => e.def.slot === slot && e.broken && !hidden?.has(e.moduleId)).map((e) => e.id),
+    hasWidgets: (moduleId) => entries.some((e) => e.moduleId === moduleId),
     subscribe(fn) {
       subs.add(fn);
       return () => void subs.delete(fn);
