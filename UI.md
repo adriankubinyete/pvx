@@ -27,6 +27,7 @@ Exemplos no código:
 - `packages/tui/src/panelnav.ts` (`pickPanel`, `panelStep`).
 - `packages/tui/src/tabs/HomeTab.tsx` (atalhos `1/2/3`, `↑` para a barra).
 - `packages/tui/src/tabs/Tabs.tsx`.
+- `packages/tui/src/tabs/SistemaTab.tsx` (seções numeradas `1`/`2` dentro de uma aba, também clicáveis).
 - `packages/tui/src/sdk-ui/pages.tsx` e `packages/sdk/src/index.ts` (`usePanels`, `useBack`, `usePageFocused`).
 
 ## 2. Três estados visuais

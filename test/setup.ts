@@ -9,6 +9,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "pvx-home-"));
   process.env.PVX_HOME = dir;
   process.env.PVX_CATALOG_URL = "http://127.0.0.1:9/catalog.json"; // refused at once: tests never reach the real registry
+  process.env.PVX_API_BASE = "http://127.0.0.1:9"; // same for the GitHub release check
 });
 
 afterEach(() => {

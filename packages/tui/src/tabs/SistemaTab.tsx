@@ -11,6 +11,10 @@ import { useLayout } from "../layout.ts";
 import { useOver } from "../hover.ts";
 import { useTabs } from "./context.ts";
 import { meter } from "./home.ts";
+import { SECTIONS, SECTION_LABELS, sectionOfKey, type Section } from "./sistema.ts";
+import { PvxSection } from "./SistemaPvx.tsx";
+import type { SessionApi } from "../session/store.ts";
+import type { Registry } from "@pvx/core";
 
 type Opts = readonly (readonly [string, string])[];
 /** The axes of the Aparência section: state key, label and the values with their display names. */
@@ -59,8 +63,8 @@ function Preview() {
   );
 }
 
-/** Ajustes: the Aparência section. Every change applies live (the theme provider repaints) and is saved by the debounced writer. */
-export function AjustesTab() {
+/** The Aparência section. Every change applies live (the theme provider repaints) and is saved by the debounced writer. */
+function AparenciaSection({ onSection }: { onSection: (section: Section) => void }) {
   const { c, g, box, axes, set } = useTheme();
   const { cols } = useLayout();
   const tabs = useTabs();
@@ -74,7 +78,7 @@ export function AjustesTab() {
   const [edit, setEdit] = useState<Line | null>(null);
   const rows = useOver(); // the row under the mouse
   const part = useOver(); // the arrow or value under the mouse: `<row>:-1`, `<row>:1`, `<row>:val`
-  useScreenScope(edit ? "ajustesedit" : "ajustes", 1);
+  useScreenScope(edit ? "sistemaedit" : "sistema", 1);
   const cur = ids.includes(sel) ? sel : ids[0]!; // "personalizado" can go away under the cursor
   const axis = AXES.find((a) => a.id === cur);
 
@@ -97,6 +101,8 @@ export function AjustesTab() {
       const e = editLine(edit, k);
       return e ? (setEdit({ text: e.text, cursor: e.cursor }), true) : undefined;
     }
+    const section = sectionOfKey(k.sequence);
+    if (section) return onSection(section), true;
     if (k.name === "up" || k.name === "down") {
       const i = ids.indexOf(cur) + (k.name === "up" ? -1 : 1);
       if (i < 0) return tabs?.focusBar(), true;
@@ -175,6 +181,38 @@ export function AjustesTab() {
         {custom ? TOKEN_KEYS.map(token) : null}
       </box>
       <Preview />
+    </box>
+  );
+}
+
+/** One entry of the section strip: `[1] aparência`. A click opens the section. */
+function SectionLabel({ section, active, focused, onPress }: { section: Section; active: boolean; focused: boolean; onPress: () => void }) {
+  const { c } = useTheme();
+  const over = useOver<Section>();
+  const label = `[${SECTIONS.indexOf(section) + 1}] ${SECTION_LABELS[section]}`;
+  const color = active && focused ? c.accent : active ? c.text : c.dim;
+  const hovered = over.over === section;
+  return (
+    <box flexShrink={0} paddingRight={2} onMouseOver={() => over.enter(section)} onMouseOut={() => over.leave(section)} onMouseDown={onPress}>
+      <text wrapMode="none" fg={color}>{active || hovered ? <b><u>{label}</u></b> : label}</text>
+    </box>
+  );
+}
+
+/** Sistema: Aparência (themes) and pvx (about, update, uninstall). `1` and `2` jump between the sections, like the numbered panels. */
+export function SistemaTab({ store, registry, version }: { store: SessionApi; registry: Registry; version: string }) {
+  const tabs = useTabs();
+  const [section, setSection] = useState<Section>("aparencia");
+  const focused = tabs?.focused ?? true;
+  return (
+    <box flexGrow={1} minHeight={0} flexDirection="column">
+      <box height={1} flexShrink={0} flexDirection="row" paddingX={1}>
+        {SECTIONS.map((id) => (
+          <SectionLabel key={id} section={id} active={id === section} focused={focused} onPress={() => setSection(id)} />
+        ))}
+      </box>
+      {section === "aparencia" ? <AparenciaSection onSection={setSection} /> : null}
+      {section === "pvx" ? <PvxSection store={store} registry={registry} version={version} onSection={setSection} /> : null}
     </box>
   );
 }

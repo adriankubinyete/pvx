@@ -45,8 +45,8 @@ test("Comando: with the bar focused, a click on the input focuses it and typing 
 });
 
 // Logs has nothing to select (down on its bar says "nada aqui"), so a click there leaves the bar focused like the keyboard does.
-test("a click inside Início and Ajustes content moves the keyboard into the tab", async () => {
-  for (const n of [0, 4]) { // inicio, ajustes
+test("a click inside Início and Sistema content moves the keyboard into the tab", async () => {
+  for (const n of [0, 4]) { // inicio, sistema
     const t = await mount();
     await goBar(t, n);
     expect(t.frame()).toContain(BAR_FOOTER);
@@ -58,7 +58,7 @@ test("a click inside Início and Ajustes content moves the keyboard into the tab
 
 test("a click on a tab label still switches tab and keeps the bar focused", async () => {
   const t = await mount();
-  await t.click(labelAt(t, "Ajustes") + 1, 0);
+  await t.click(labelAt(t, "Sistema") + 1, 0);
   const f = t.frame();
   expect(f).toContain(BAR_FOOTER);
   expect(f).toContain("aparência");

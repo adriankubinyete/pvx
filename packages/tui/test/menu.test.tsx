@@ -202,7 +202,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   await t.press("TAB", { shift: true });
   expect(t.frame()).toContain("› logs");
   await t.press("TAB"); // Comando
-  await t.press("TAB"); // Ajustes
+  await t.press("TAB"); // Sistema
   expect(t.frame()).toContain("› aparência");
   await t.press("TAB"); // wraps to Início
   expect(t.frame()).toContain("› [1] conformidade"); // the Início panel

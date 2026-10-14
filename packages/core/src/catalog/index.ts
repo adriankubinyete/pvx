@@ -5,6 +5,8 @@ import { createLogger } from "../logs/index.ts";
 import embedded from "./embedded.json";
 
 export const DEFAULT_CATALOG_URL = "https://registry.phonevox.com.br/pvx/catalog.json";
+/** The catalog endpoint in use: `PVX_CATALOG_URL` or the default. */
+export const catalogUrl = () => process.env.PVX_CATALOG_URL || DEFAULT_CATALOG_URL;
 export const CATALOG_TTL_MS = 6 * 60 * 60 * 1000;
 const FETCH_TIMEOUT_MS = 2000;
 
@@ -90,7 +92,7 @@ export async function loadCatalog(opts: CatalogLoadOpts = {}): Promise<Catalog> 
   const cache = readCache(warn, Boolean(opts.allowFile));
   if (cache && now - cache.fetchedAt < CATALOG_TTL_MS) return { modules: cache.modules, source: "cache", fetchedAt: cache.fetchedAt };
   try {
-    const res = await (opts.fetchImpl ?? fetch)(process.env.PVX_CATALOG_URL || DEFAULT_CATALOG_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    const res = await (opts.fetchImpl ?? fetch)(catalogUrl(), { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const modules = parseCatalog(await res.json(), warn, opts.allowFile);
     try {

@@ -56,7 +56,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Roteador mantém só a tela do topo montada → [Roteador mantém só a tela do topo montada](#2026-10-09--roteador-mantém-só-a-tela-do-topo-montada)
 - Palette: espaço, `ctrl+n`, `ctrl+j`; modais e rodapé próprios; núcleo, módulos e páginas na mesma lista → [Palette: espaço digita na busca; `ctrl+n` enfileira; `ctrl+j` roda a fila](#2026-10-09--palette-espaço-digita-na-busca-ctrln-enfileira-ctrlj-roda-a-fila), [Palette renderiza os próprios modais; rodapé segue o overlay](#2026-10-09--palette-renderiza-os-próprios-modais-rodapé-segue-o-overlay) (em parte), [Palette: núcleo, comandos de módulo e páginas na mesma lista](#2026-10-09--palette-núcleo-comandos-de-módulo-e-páginas-na-mesma-lista)
 - Menu em lista gerado do registry, hoje a aba Módulos; estado fora do componente; segredo só em memória → [Tela inicial por menus (muda o "command-first")](#2026-10-09--tela-inicial-por-menus-muda-o-command-first) (em parte), [Menu inicial: estado, núcleo no TUI, root e segredo no repeat](#2026-10-09--menu-inicial-estado-núcleo-no-tui-root-e-segredo-no-repeat)
-- Barra de abas no topo; ordem Início · Módulos · abas de módulo · Logs · Comando · Ajustes → [Abas no topo no lugar dos chips](#2026-10-09--abas-no-topo-no-lugar-dos-chips) (em parte), [Aviso de movimento inválido, painéis numerados, `/` da barra e ordem das abas](#2026-10-09--aviso-de-movimento-inválido-painéis-numerados--da-barra-e-ordem-das-abas), [Ajustes: temas e editor de tema](#2026-10-13--ajustes-temas-e-editor-de-tema)
+- Barra de abas no topo; ordem Início · Módulos · abas de módulo · Logs · Comando · Sistema → [Abas no topo no lugar dos chips](#2026-10-09--abas-no-topo-no-lugar-dos-chips) (em parte), [Aviso de movimento inválido, painéis numerados, `/` da barra e ordem das abas](#2026-10-09--aviso-de-movimento-inválido-painéis-numerados--da-barra-e-ordem-das-abas), [Ajustes: temas e editor de tema](#2026-10-13--ajustes-temas-e-editor-de-tema) (em parte), [Ajustes vira Sistema](#2026-10-14--ajustes-vira-sistema)
 - Rascunho do Comando, foco e destaque só onde há foco → [Abas do núcleo sob demanda, rascunho do Comando, foco e destaque só onde há foco](#2026-10-09--abas-do-núcleo-sob-demanda-rascunho-do-comando-foco-e-destaque-só-onde-há-foco) (em parte)
 - Ações de bloco por foco espacial (`r`, `l`, `c`), `esc` sobe um nível → [Ações de bloco sem combo: foco espacial no Comando](#2026-10-09--ações-de-bloco-sem-combo-foco-espacial-no-comando), [`esc` sobe um nível no Comando: bloco focado vai para a barra](#2026-10-09--esc-sobe-um-nível-no-comando-bloco-focado-vai-para-a-barra)
 - Campos de texto com cursor → [Campos de texto têm cursor (substitui "os campos não têm cursor")](#2026-10-09--campos-de-texto-têm-cursor-substitui-os-campos-não-têm-cursor)
@@ -65,7 +65,8 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Navegação espacial entre painéis, rolagem ao fim, hover que move a seleção → [Navegação espacial entre painéis, rolagem ao fim e hover](#2026-10-13--navegação-espacial-entre-painéis-rolagem-ao-fim-e-hover)
 - Spinner único de 100 ms e regras de teste do `renderTui` → [Spinner, chips e testes](#2026-10-09--spinner-chips-e-testes) (em parte)
 - Plano como painel da página Conformidade, sem Diário, built-ins sem aba, relógio na barra → [Plano dentro de Conformidade, sem Diário, built-ins sem aba, relógio na barra (substitui partes de 3D, 6B e 6C)](#2026-10-09--plano-dentro-de-conformidade-sem-diário-built-ins-sem-aba-relógio-na-barra-substitui-partes-de-3d-6b-e-6c)
-- Temas Escuro, Claro, Alto contraste, Terminal e Personalizado, acento padrão `tema` → [Ajustes: temas e editor de tema](#2026-10-13--ajustes-temas-e-editor-de-tema)
+- Temas Escuro, Claro, Alto contraste, Terminal e Personalizado, acento padrão `tema` → [Ajustes: temas e editor de tema](#2026-10-13--ajustes-temas-e-editor-de-tema) (em parte)
+- Aba Sistema, a última: seção Aparência (temas) e seção pvx (sobre, atualização, desinstalar) → [Ajustes vira Sistema](#2026-10-14--ajustes-vira-sistema)
 - Matar `!cmd` com `x` ou `ctrl+c` → [Matar um comando em execução com `x` ou `ctrl+c`](#2026-10-13--matar-um-comando-em-execução-com-x-ou-ctrlc)
 - Aviso "nada aqui" para movimento inválido → [Aviso de movimento inválido, painéis numerados, `/` da barra e ordem das abas](#2026-10-09--aviso-de-movimento-inválido-painéis-numerados--da-barra-e-ordem-das-abas)
 
@@ -353,7 +354,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 ## 2026-10-09 — Abas no topo no lugar dos chips
 
-**Status:** substituída em parte por 2026-10-09 — Aviso de movimento inválido, painéis numerados, `/` da barra e ordem das abas, e por 2026-10-13 — Ajustes: temas e editor de tema (a lista de abas mudou: hoje é Início · Módulos · abas de módulo · Logs · Comando · Ajustes; Conformidade e Plano deixaram de ser abas; ver também "Abas do núcleo sob demanda…")
+**Status:** substituída em parte por 2026-10-09 — Aviso de movimento inválido, painéis numerados, `/` da barra e ordem das abas, e por 2026-10-13 — Ajustes: temas e editor de tema (a lista de abas mudou: hoje é Início · Módulos · abas de módulo · Logs · Comando · Sistema; Conformidade e Plano deixaram de ser abas; ver também "Abas do núcleo sob demanda…")
 
 **Decisão:** A tela raiz passou a ser uma barra de abas, no lugar dos chips.
 
@@ -1010,7 +1011,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 ## 2026-10-13 — Ajustes: temas e editor de tema
 
-**Status:** vigente
+**Status:** substituída em parte por 2026-10-14 — Ajustes vira Sistema (a aba se chama Sistema; temas e editor valem como descritos)
 
 **Decisão:** A aba Ajustes, a última da barra, escolhe o tema e edita um tema personalizado.
 
@@ -1149,3 +1150,36 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** firewall e issabel reescreveram as mesmas peças (corredor de fases, leitor de `dnf`, `run`/`runOrFail`, escolha de engine, janela de lista); o dono quer cada peça genérica no framework.
 
 **Limite:** `ctx.phases` guarda o estado por nome no `store`; duas execuções ao mesmo tempo do mesmo nome não são protegidas (o job tem um só processo por nome). `ReadCtx` não tem `shell`. O `apt` não tem fase `verify`. `onAction` e o `enter` de `usePanels().step` não devem se somar na mesma lista. `useJob().view` conta o silêncio desde que a página começou a olhar, não desde a última linha escrita (o job não grava a hora da última escrita).
+
+## 2026-10-14 — Ajustes vira Sistema
+
+**Status:** vigente
+
+**Decisão:** A aba Ajustes passa a se chamar Sistema e ganha uma seção sobre o próprio pvx. Continua a última da barra: Início · Módulos · abas de módulo · Logs · Comando · Sistema.
+
+- **Nome.** Rótulo `Sistema`, id `sistema` (`TRAIL_TABS` = Logs, Comando, Sistema), componente `SistemaTab`, escopos de teclado `sistema`, `sistemaedit` e `sistemapvx`.
+- **Seções.** `1` aparência (temas e editor, sem mudança) e `2` pvx. As teclas `1`/`2` e o clique na faixa do topo trocam de seção; só uma aparece por vez, porque o editor de tema precisa da altura toda em 80x24.
+- **Sobre o pvx.** Versão, plataforma, binário (ou "rodando pelo bun"), `PVX_HOME`, pasta de módulos de usuário, URL do catálogo e quantos módulos estão carregados.
+- **Atualização.** `verificar` consulta a última release do GitHub com `Loading` visível e mostra instalada contra disponível. `atualizar` roda `self-update` pela sessão (scrollback, log, auditoria e regra de root valem) e leva ao Comando. Sem binário (rodando pelo bun) ou sem versão nova, `atualizar` fica desligado e diz o motivo; uma build de desenvolvimento conta como atualizável, como na CLI.
+- **Desinstalar.** Sem botão: a seção só mostra o texto `pvx uninstall`.
+- **Código.** `fetchLatestRelease` sai de `self-update` e vira função do núcleo, usada pelo comando e pela aba. `catalogUrl()` e `selfPath` também são exportados.
+- **Nada saiu do Início.** O Início não mostrava versão nem dica de atualização do pvx (a versão fica na barra de abas; o aviso `↓n` é de módulos), então nada foi movido; máquina e central ficam onde estão.
+- Substitui o nome "Ajustes" nas entradas "Ajustes: temas e editor de tema" e nas listas de abas.
+
+**Motivo:** O dono pediu: Sistema com aparência e as informações do pvx (versão, atualização, desinstalação) no mesmo lugar.
+
+## 2026-10-14 — Sessão SSH no host: `ctx.session.sshClient`
+
+**Status:** vigente
+
+**Decisão:** O host acha o IP do cliente SSH do técnico e o entrega a todo módulo em `ctx.session.sshClient` (`CommandCtx` e `ReadCtx`, `string | undefined`). Nenhum módulo precisa mais ler `SSH_CLIENT` nem rodar `who -m`.
+
+- **Ordem de tentativas** (`detectSshClient`, `packages/core/src/host/ssh.ts`), parando na primeira que responde: (a) `SSH_CONNECTION` ou `SSH_CLIENT` no ambiente do pvx; (b) o mesmo par no `/proc/<pid>/environ` de cada processo pai, subindo por `PPid` até o pid 1; (c) o terminal do pvx (`/proc/self/fd/0`, 1 ou 2) casado com a linha do `who` e o `(ip)` dela.
+- IPv4 e IPv6, validados por `net.isIP`. Valor que não é IP (`(:0)`, `(tmux(12).%0)`) não conta.
+- Uma vez por processo, na primeira leitura (`lazySshClient`); a resposta "nenhum" também fica guardada. `ctx.session` é um objeto com leitor, então um comando que não pergunta nunca paga o `who`.
+- O audit grava `from` nos eventos `cmd` e `module` quando há IP (o login já gravava `from`).
+- Testes: `ExecOpts.session` e `LoadOpts.session` no núcleo; `runCommand`, `runSession` e `renderPage` do `@pvx/testing` aceitam `sshClient` (sem ele, `undefined`: o teste nunca lê a sessão da máquina).
+
+**Motivo:** Em campo, `sudo pvx` numa Issabel novas (Rocky 8) falhou o failsafe do firewall: o `sudo` limpa o ambiente (`SSH_CLIENT` some) e o `who -m` lê o terminal pelo `stdin`, que o `exec` do pvx abre em pipe, então não imprime nada. O shell de login acima do `sudo` guarda a variável e o root lê o `environ` dele. Achar no host serve a todo módulo e ao audit.
+
+**Limite:** Só Linux para (b) e (c) (em outros sistemas só vale (a)). (c) usa os três descritores padrão, não o `tty_nr` de `/proc/self/stat`. Dentro de `tmux` ou `screen` sem a variável no ambiente, (b) pode achar o IP do primeiro cliente que iniciou o servidor, não o do cliente atual. Um terminal sem origem (console, serial) dá `undefined`. Um `ReadCtx` literal em teste de módulo precisa do campo `session` (o `fakeReadCtx` do `@pvx/testing` deve passá-lo).

@@ -1,8 +1,8 @@
 import { createContext, useContext } from "react";
 
-/** Core tabs before the module tabs, and after them: Comando, then Ajustes, close the bar. */
+/** Core tabs before the module tabs, and after them: Comando, then Sistema, close the bar. */
 export const LEAD_TABS = ["inicio", "modulos"] as const;
-export const TRAIL_TABS = ["logs", "comando", "ajustes"] as const;
+export const TRAIL_TABS = ["logs", "comando", "sistema"] as const;
 export const TAB_IDS = [...LEAD_TABS, ...TRAIL_TABS] as const;
 export type CoreTabId = (typeof TAB_IDS)[number];
 /** A core tab, or `page:<module>.<page>` for a tab a module contributes. */

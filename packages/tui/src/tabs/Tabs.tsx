@@ -13,14 +13,14 @@ import { Session } from "../session/Session.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
-import { AjustesTab } from "./AjustesTab.tsx";
+import { SistemaTab } from "./SistemaTab.tsx";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { fitBar } from "./bar.ts";
 import { Clock, clockWidth, pickForm } from "./clock.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 
-const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", logs: "Logs", comando: "Comando", ajustes: "Ajustes" };
+const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", logs: "Logs", comando: "Comando", sistema: "Sistema" };
 /** Tabs that show a core command's output (the id is also the command). */
 const CORE: readonly TabId[] = ["logs"];
 
@@ -124,7 +124,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
   const visited = useRef(new Set<TabId>());
   if (pageTab) visited.current.add(active);
   // A tab with nothing to select never holds focus.
-  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id === "ajustes" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
+  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
   const step = (d: number) => {
     const id = ids[(ids.indexOf(active) + d + ids.length) % ids.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
@@ -157,7 +157,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} refreshMs={logsMs} /> : null}
-          {active === "ajustes" ? <AjustesTab /> : null}
+          {active === "sistema" ? <SistemaTab store={store} registry={registry} version={version} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}
           {modTabs.filter((t) => visited.current.has(t.id)).map((t) => (
             <box key={t.id} flexGrow={t.id === active ? 1 : 0} minHeight={0} flexDirection="column" visible={t.id === active}>

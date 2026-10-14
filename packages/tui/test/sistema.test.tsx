@@ -8,35 +8,37 @@ import { TAB_IDS } from "../src/tabs/context.ts";
 import { hexTokensFor, tokens } from "../src/theme.ts";
 
 let h: TuiHarness | undefined;
+let lastStore: ReturnType<typeof createSessionStore> | undefined;
 afterEach(() => h?.destroy());
 
-/** Opens the app on Ajustes with the keyboard inside the tab. */
-async function mount(cols = 120, rows = 40) {
+/** Opens the app on Sistema with the keyboard inside the tab. */
+async function mount(cols = 120, rows = 40, env: Record<string, string> = {}) {
   const registry = createRegistry();
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
   });
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(<App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={tuiStatePath()} />, { cols, rows });
-  for (let i = 0; i < 4; i++) await h.press("TAB"); // inicio > modulos > logs > comando > ajustes
+  for (let i = 0; i < 4; i++) await h.press("TAB"); // inicio > modulos > logs > comando > sistema
   await h.press("ARROW_DOWN");
+  lastStore = store;
   return h;
 }
 const bgAt = (t: TuiHarness) => t.spans().lines[0]!.spans[0]!.bg;
 
-test("tab order: Início, Módulos, then Logs, Comando, Ajustes closing the bar", async () => {
-  expect(TAB_IDS).toEqual(["inicio", "modulos", "logs", "comando", "ajustes"]);
+test("tab order: Início, Módulos, then Logs, Comando, Sistema closing the bar", async () => {
+  expect(TAB_IDS).toEqual(["inicio", "modulos", "logs", "comando", "sistema"]);
   const t = await mount();
   await t.press("ARROW_UP", {}); // leaves the list to the bar
   const bar = t.frame().split("\n")[0]!;
-  const at = ["Início", "Módulos", "Logs", "Comando", "Ajustes"].map((l) => bar.indexOf(l));
+  const at = ["Início", "Módulos", "Logs", "Comando", "Sistema"].map((l) => bar.indexOf(l));
   expect(at.every((x) => x >= 0)).toBe(true);
   expect(at).toEqual([...at].sort((x, y) => x - y));
 });
 
-test("Ajustes renders the section, the footer and the preview at 80x24 and 120x40", async () => {
+test("Sistema renders the section, the footer and the preview at 80x24 and 120x40", async () => {
   for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
     const t = await mount(cols, rows);
     const f = t.frame();
@@ -128,7 +130,7 @@ test("hovering a row moves the selection: one marker, and ArrowDown continues fr
   expect(marked).toBe(rows().findIndex((l) => l.includes("moldura")));
 });
 
-const spotOf = (t: TuiHarness, text: string, from = 0) => {
+const spotOf = (t: TuiHarness, text: string, from = 1) => {
   const lines = t.frame().split("\n");
   const y = lines.findIndex((l, i) => i >= from && l.includes(text));
   return { x: lines[y]!.indexOf(text), y };
@@ -233,4 +235,89 @@ test("Personalizado: hovering a token row tints it with the bar focused; a click
   expect(cellAt(t, bg.x, bg.y).attributes & TextAttributes.UNDERLINE).toBeGreaterThan(0);
   await t.click(bg.x, bg.y);
   expect(t.frame()).toContain("aplica"); // editing
+});
+
+/** A stub of the GitHub API: the latest release is `v9.9.9` and has no assets, so an update stops before any download. */
+function stubReleases() {
+  const slow = async () => {
+    await new Promise((r) => setTimeout(r, 150)); // long enough for a frame with the spinner
+    return Response.json({ tag_name: "v9.9.9", assets: [] });
+  };
+  return Bun.serve({ port: 0, fetch: slow });
+}
+
+const FAKE_BINARY = () => join(pvxHome(), "pvx-fake-binary");
+
+test("pvx section: about the pvx, with the source-run text and the uninstall command as a hint", async () => {
+  const t = await mount();
+  await t.press("2");
+  const f = t.frame();
+  for (const s of ["[2] pvx", "sobre o pvx", "versão", "0.1.0", `${process.platform}/${process.arch}`, "rodando pelo bun", pvxHome(), "módulos de usuário", "catálogo", "127.0.0.1:9/catalog.json", "0 carregados", "pvx uninstall"]) expect(f, s).toContain(s);
+  expect(f).not.toContain("[ desinstalar ]"); // a hint only: no button
+  await t.press("1");
+  expect(t.frame()).toContain("cor de destaque");
+});
+
+test("pvx section: verificar shows a spinner, then installed against available; running from source disables atualizar", async () => {
+  const api = stubReleases();
+  try {
+    const t = await mount(120, 40, { PVX_API_BASE: `http://127.0.0.1:${api.port}` });
+    process.env.PVX_API_BASE = `http://127.0.0.1:${api.port}`;
+    await t.press("2");
+    expect(t.frame()).toContain("disponível");
+    await t.press("RETURN"); // verificar
+    expect(t.frame()).toContain("consultando");
+    await new Promise((r) => setTimeout(r, 400));
+    const f = t.frame();
+    expect(f).toContain("instalada");
+    expect(f).toContain("9.9.9");
+    expect(f).toContain("[ atualizar ] rodando pelo bun");
+  } finally {
+    api.stop(true);
+  }
+});
+
+test("pvx section: a refused release check says why", async () => {
+  const t = await mount();
+  await t.press("2");
+  await t.press("RETURN");
+  await new Promise((r) => setTimeout(r, 50));
+  expect(t.frame()).toContain("consulta da última release falhou");
+});
+
+test("pvx section: atualizar runs self-update through the session (a block in the scrollback)", async () => {
+  const api = stubReleases();
+  const base = `http://127.0.0.1:${api.port}`;
+  await Bun.write(FAKE_BINARY(), "binary");
+  process.env.PVX_SELF_PATH = FAKE_BINARY();
+  process.env.PVX_API_BASE = base;
+  try {
+    const t = await mount(120, 40, { PVX_API_BASE: base, PVX_SELF_PATH: FAKE_BINARY() });
+    await t.press("2");
+    await t.press("RETURN"); // verificar
+    await new Promise((r) => setTimeout(r, 400));
+    await t.press("ARROW_DOWN");
+    await t.press("RETURN"); // atualizar
+    await new Promise((r) => setTimeout(r, 100));
+    const block = lastStore!.blocks.find((b) => b.line === "self-update");
+    expect(block).toBeDefined();
+    expect(block!.lines.map((l) => l.text).join("\n")).toContain("não tem");
+  } finally {
+    delete process.env.PVX_SELF_PATH;
+    process.env.PVX_API_BASE = "http://127.0.0.1:9";
+    api.stop(true);
+  }
+});
+
+test("pvx section: a click on the section label and on [ verificar ] works", async () => {
+  const t = await mount();
+  const bar = t.frame().split("\n");
+  const y = bar.findIndex((l) => l.includes("[2] pvx"));
+  await t.click(bar[y]!.indexOf("[2] pvx") + 2, y);
+  expect(t.frame()).toContain("sobre o pvx");
+  const lines = t.frame().split("\n");
+  const row = lines.findIndex((l) => l.includes("[ verificar ]"));
+  await t.click(lines[row]!.indexOf("[ verificar ]") + 2, row);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(t.frame()).toContain("consulta da última release falhou");
 });

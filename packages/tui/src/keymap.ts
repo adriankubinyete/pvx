@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "ajustes" | "ajustesedit" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistemapvx" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -81,13 +81,18 @@ const base: readonly Shortcut[] = [
   { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
   { keys: "ctrl+k", label: "palette", scope: "tabs", footer: true },
   { keys: "r", label: "atualiza", scope: "tabs" }, // core tabs only (conformidade, plano, logs); shown inline there, not in the footer
-  { keys: "↑↓", label: "move", scope: "ajustes", footer: true },
-  { keys: "←→", label: "muda", scope: "ajustes", footer: true },
-  { keys: "enter", label: "muda/edita", scope: "ajustes", footer: true },
-  { keys: "esc", label: "abas", scope: "ajustes", footer: true },
-  { keys: "enter", label: "aplica", scope: "ajustesedit", footer: true },
-  { keys: "esc", label: "cancela", scope: "ajustesedit", footer: true },
-  { keys: "←→", label: "cursor", scope: "ajustesedit" },
+  { keys: "↑↓", label: "move", scope: "sistema", footer: true },
+  { keys: "←→", label: "muda", scope: "sistema", footer: true },
+  { keys: "enter", label: "muda/edita", scope: "sistema", footer: true },
+  { keys: "esc", label: "abas", scope: "sistema", footer: true },
+  { keys: "1/2", label: "seção", scope: "sistema", footer: true },
+  { keys: "↑↓", label: "move", scope: "sistemapvx", footer: true },
+  { keys: "enter", label: "age", scope: "sistemapvx", footer: true },
+  { keys: "esc", label: "abas", scope: "sistemapvx", footer: true },
+  { keys: "1/2", label: "seção", scope: "sistemapvx", footer: true },
+  { keys: "enter", label: "aplica", scope: "sistemaedit", footer: true },
+  { keys: "esc", label: "cancela", scope: "sistemaedit", footer: true },
+  { keys: "←→", label: "cursor", scope: "sistemaedit" },
   { keys: "←→", label: "cursor", scope: "session" },
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session" },

@@ -20,8 +20,34 @@ export const compareSemver = (a: string, b: string) => {
 const sha256 = (buf: Uint8Array) => new Bun.CryptoHasher("sha256").update(buf).digest("hex");
 const get = (url: string) => fetch(url, { signal: AbortSignal.timeout(30_000), headers: { "user-agent": "pvx-self-update" } });
 
+/** The command names, so the TUI shows the same text the CLI answers to. */
+export const SELF_UPDATE_COMMAND = "self-update";
+export const UNINSTALL_COMMAND = "uninstall";
+
+interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+interface Release {
+  tag_name: string;
+  assets: ReleaseAsset[];
+}
+export type LatestRelease = { ok: true; release: Release; version: string } | { ok: false; message: string };
+
+/** Asks GitHub for the latest release. Never throws: a failure comes back as the message to show. */
+export async function fetchLatestRelease(env: Record<string, string | undefined>): Promise<LatestRelease> {
+  try {
+    const response = await get(`${env.PVX_API_BASE ?? "https://api.github.com"}/repos/${REPO}/releases/latest`);
+    if (!response.ok) return { ok: false, message: `consulta da última release falhou: HTTP ${response.status}` };
+    const release = (await response.json()) as Release;
+    return { ok: true, release, version: release.tag_name.replace(/^v/, "") };
+  } catch (error) {
+    return { ok: false, message: `consulta da última release falhou: ${(error as Error).message}` };
+  }
+}
+
 /** The installed binary, through symlinks. Overridable for tests; from source (`bun index.ts`) there is none. */
-function selfPath(env: Record<string, string | undefined>): string | null {
+export function selfPath(env: Record<string, string | undefined>): string | null {
   if (env.PVX_SELF_PATH) return realpathSync(env.PVX_SELF_PATH);
   return /^bun(\.exe)?$/.test(basename(process.execPath)) ? null : realpathSync(process.execPath);
 }
@@ -30,7 +56,7 @@ const platformAsset = () => `pvx-${process.platform}-${process.arch === "x64" ? 
 
 export const SELF_COMMANDS: CoreCommand[] = [
   {
-    key: "self-update",
+    key: SELF_UPDATE_COMMAND,
     help: "Atualiza o pvx para a última release (não atualiza módulos: use `modules update`)",
     root: true,
     noAudit: true,
@@ -40,15 +66,10 @@ export const SELF_COMMANDS: CoreCommand[] = [
       const self = selfPath(io.env);
       if (!self) return fail(o, "self-update só funciona no binário instalado");
 
-      let rel: { tag_name: string; assets: { name: string; browser_download_url: string }[] };
-      try {
-        const r = await get(`${io.env.PVX_API_BASE ?? "https://api.github.com"}/repos/${REPO}/releases/latest`);
-        if (!r.ok) return fail(o, `consulta da última release falhou: HTTP ${r.status}`);
-        rel = (await r.json()) as typeof rel;
-      } catch (e) {
-        return fail(o, `consulta da última release falhou: ${(e as Error).message}`);
-      }
-      const latest = rel.tag_name.replace(/^v/, "");
+      const found = await fetchLatestRelease(io.env);
+      if (!found.ok) return fail(o, found.message);
+      const rel = found.release;
+      const latest = found.version;
       if (!dev && compareSemver(latest, cur) <= 0) {
         o.line({ kind: "success", text: `já está na versão mais recente (${cur})` });
         return EXIT.OK;
@@ -98,7 +119,7 @@ export const SELF_COMMANDS: CoreCommand[] = [
     },
   },
   {
-    key: "uninstall",
+    key: UNINSTALL_COMMAND,
     help: "Remove o pvx do sistema (--purge também remove o PVX_HOME)",
     root: true,
     noAudit: true, // after --purge the audit file would recreate PVX_HOME
