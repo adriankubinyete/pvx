@@ -81,6 +81,9 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Módulo gerenciado pela TUI sobre um registry vivo → [Módulos na TUI: gerenciador, catálogo, revisão e registry vivo (Fase 4C)](#2026-10-09--módulos-na-tui-gerenciador-catálogo-revisão-e-registry-vivo-fase-4c) (em parte)
 - `ctx.exec` com streaming e cancelamento, jobs em segundo plano, `useJob`, campos `secret`/`choice`/`multi`, `Steps` e `LogTail` → [SDK: exec em streaming, jobs em segundo plano e kit de instalador](#2026-10-14--sdk-exec-em-streaming-jobs-em-segundo-plano-e-kit-de-instalador)
 - Componentes de fluxo no framework (`Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading`, `useAsync`, `useCopy`) e a regra de espera visível → [SDK: componentes de fluxo e espera visível](#2026-10-14--sdk-componentes-de-fluxo-e-espera-visível)
+- Estrutura padrão de módulo = a do `pvx-firewall` reescrito → [Estrutura padrão de módulo](#2026-10-14--estrutura-padrão-de-módulo-a-do-pvx-firewall-reescrito)
+- Firewall: listas lado a lado só a partir de 120 colunas (exceção ao 100 do UI.md) → [Firewall: listas lado a lado a partir de 120 colunas](#2026-10-14--firewall-listas-lado-a-lado-a-partir-de-120-colunas)
+- Firewall: ações de linha por `enter` → formulário com `remover` e confirmação do framework → [Firewall: ações de linha pelo formulário](#2026-10-14--firewall-ações-de-linha-pelo-formulário)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1094,3 +1097,34 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o `issabel netinstall` precisa dessas peças, e o dono quer cada peça genérica no framework para o próximo módulo não reinventá-la.
 
 **Limite:** `Conversation` não rola (a conversa cabe em 80x24 com poucas perguntas). A primeira carga de um `useQuery` de um módulo continua sendo desenhada pelo módulo (o host só entrega `loading`): use `Loading`.
+
+## 2026-10-14 — Estrutura padrão de módulo = a do pvx-firewall reescrito
+
+**Status:** vigente
+
+**Decisão:** O dono aprovou o `pvx-firewall` reescrito como o padrão de todo módulo novo. A estrutura está em `CODIGO.md` ("Estrutura de um módulo") e o `templates/pvx-module-template/` a segue em forma mínima.
+
+- `index.tsx` só liga; `commands/<assunto>.ts`; `health/{prove,summary,queries,widgets}.ts`; `state.ts` com `STORE_KEY`; `texts.ts` com `FIX.*`; `exec.ts`; domínio puro na raiz de `src/`; `page/` com um componente por arquivo (fábrica sobre `sdk.ui`) e helpers puros; `test/` com stubs legíveis e `fake.ts`.
+- O modelo ganhou um comando em `commands/`, uma capacidade com `firstProblem`, `state.ts`, `texts.ts`, uma página com `usePanels`, `List`, `Button` e `Loading`, e testes com `fakeSdk` e `runSession`. O README do SDK aponta para ele ("Comece pelo modelo").
+
+**Motivo:** um layout só faz cada módulo novo se parecer com o anterior e deixa a revisão e a cópia baratas.
+
+**Limite:** o modelo omite `exec.ts` e `health/{summary,queries,widgets}.ts`, porque não executa programas nem tem consultas; o módulo cria esses arquivos quando precisar.
+
+## 2026-10-14 — Firewall: listas lado a lado a partir de 120 colunas
+
+**Status:** vigente
+
+**Decisão:** No firewall, as listas de IPs e portas só ficam lado a lado a partir de 120 colunas. É uma exceção ao 100 do UI.md.
+
+**Motivo:** a coluna de comentário ficava ilegível em 100 colunas. Aprovado pelo dono na reescrita do firewall.
+
+**Limite:** vale só para esse módulo; o limite geral do UI.md continua 100.
+
+## 2026-10-14 — Firewall: ações de linha pelo formulário
+
+**Status:** vigente
+
+**Decisão:** No firewall, as ações da linha saíram dos atalhos `x` e `c`. Agora `enter` na linha abre um formulário com o campo de comentário e o botão `remover`, e a remoção pede a confirmação do framework.
+
+**Motivo:** os atalhos soltos eram difíceis de descobrir e removiam sem confirmar. Aprovado pelo dono na reescrita do firewall.

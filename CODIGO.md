@@ -157,6 +157,34 @@ run(ctx) {
 
 O `index.tsx` de um módulo só liga as peças (comandos, capacidades, páginas); cada assunto (estado, engines, regras, telas) tem o seu arquivo.
 
+## Estrutura de um módulo
+
+Todo módulo novo segue o layout do `pvx-firewall` (a implementação de referência; leia o repositório dele) e do `templates/pvx-module-template/` (a versão mínima, para copiar). Um assunto, um arquivo; cada peça tem um lugar fixo.
+
+```
+src/
+  index.tsx            só liga as peças
+  state.ts             tipos persistidos + STORE_KEY
+  texts.ts             textos do usuário + FIX.*
+  exec.ts              helpers de ctx.exec, com constantes nomeadas
+  <dominio>.ts         módulos de domínio puros, na raiz de src/
+  commands/<assunto>.ts
+  health/{prove,summary,queries,widgets}.ts
+  page/                um componente por arquivo + helpers puros
+test/                  stubs, helpers compartilhados, fake.ts
+```
+
+- `src/index.tsx`: só monta o objeto do módulo com o que vem dos outros arquivos. Quem abre o módulo vê o mapa inteiro em 15 linhas, e nenhum efeito roda na fábrica.
+- `src/commands/<assunto>.ts`: um arquivo por assunto, cada comando como passos com nome (seção 2). Um arquivo por assunto deixa achar e revisar um comando sem ler os outros.
+- `src/health/prove.ts`: as capacidades, cada prova por `sdk.proof.firstProblem` com passos nomeados. A lista de passos é a lista de problemas que o módulo sabe achar.
+- `src/health/summary.ts`, `queries.ts`, `widgets.ts`: a leitura do estado real (uma só, reaproveitada), as consultas e os widgets. A leitura mora num lugar para prova, consulta e widget não divergirem.
+- `src/state.ts`: os tipos persistidos (um por formato) e a tabela `STORE_KEY`. É o único lugar que diz o que o módulo grava.
+- `src/texts.ts`: os textos do usuário e os comandos de correção `FIX.*`. Mudar a voz ou um comando de correção é editar um arquivo, e o UI.md e o teste de texto olham um lugar só.
+- `src/exec.ts`: helpers de `ctx.exec`, com constantes nomeadas para programa, argumentos e tempo-limite. Todo processo passa por aqui, então a revisão de confiança e os stubs dos testes enxergam um ponto só.
+- Módulos de domínio puros, na raiz de `src/` (parse, regras, cálculo): sem `exec`, `fs` nem `store`. Testam-se sem stub (seção 2, lógica pura).
+- `src/page/`: um componente pequeno por arquivo, cada um uma fábrica sobre `sdk.ui` (`makeX(ui)`), mais helpers puros: `layout.ts` (tamanhos), `rows.ts` (dados para linhas), `outcome.ts` (resultado de comando para aviso) e `commands.ts` (os `useCommand` da página). Componente pequeno cabe numa tela de leitura, e o helper puro testa-se sem renderizar.
+- `test/`: stubs legíveis, um por programa externo e comentado (o que ele finge e por quê), helpers compartilhados (como `withSshSession`) e `fake.ts` com `fakeSdk`. O teste lê como um roteiro e nunca toca a máquina.
+
 ## 3. Comentários
 
 Explique o **porquê** ou uma restrição que não se vê no código. Nunca repita o que o código já diz.

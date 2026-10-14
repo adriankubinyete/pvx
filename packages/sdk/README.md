@@ -4,6 +4,8 @@ Contrato dos módulos do pvx (SDK v1). O pacote tem tipos e a constante `EXIT` (
 
 Os exemplos marcados com `<!-- test -->` neste arquivo são extraídos e rodados por `test/sdk-readme.test.ts`: cada um é carregado pelo loader real e verificado pelo `tsc`. Exemplo desatualizado quebra o build.
 
+Comece pelo modelo: copie `templates/pvx-module-template/` (um comando, uma capacidade, uma página e testes, já no layout padrão) e leia a seção "Estrutura de um módulo" do `CODIGO.md`.
+
 ## Manifest (`pvx-module.json`)
 
 | Campo | Obrigatório | Significado |
