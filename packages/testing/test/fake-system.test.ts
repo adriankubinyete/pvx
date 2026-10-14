@@ -61,3 +61,25 @@ test("the fake contexts carry strategy, the probe shell, the errors kit and sshC
   expect(fakeCommandCtx(system).session.sshClient).toBe("10.0.0.9");
   expect(fakeSdk().errors.describeFailure(new Error("x"))).toBe("x");
 });
+
+test("fakeSystem takes a clock and isRoot, and fakeCommandCtx takes a signal", async () => {
+  const clock = { now: 5000 };
+  const stop = new AbortController();
+  const system = fakeSystem({ clock, isRoot: false });
+  const ctx = fakeCommandCtx(system, { signal: stop.signal });
+  expect(ctx.isRoot).toBe(false);
+  expect(fakeReadCtx(system).isRoot).toBe(false);
+  expect(fakeSystem().isRoot).toBe(true);
+  expect(ctx.signal).toBe(stop.signal);
+  await ctx.phases.run("n", [{ id: "a", label: "a", run: () => {} }]);
+  expect(ctx.phases.state("n")?.startedAt).toBe(5000);
+  clock.now = 9000;
+  expect(system.now()).toBe(9000);
+});
+
+test("shell.echoing on the fake ctx writes the jobLines and runs with ctx.signal", async () => {
+  const system = fakeSystem({ rules: [(call) => (call.cmd === "dnf" ? { lines: ["Complete!"] } : undefined)] });
+  const ctx = fakeCommandCtx(system);
+  await ctx.shell.echoing({ timeoutMs: 1000 }).must("dnf", ["install", "-y", "httpd"]);
+  expect(ctx.jobLines).toEqual(["$ dnf install -y httpd", "Complete!"]);
+});

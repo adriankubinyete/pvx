@@ -39,3 +39,21 @@ test("runSession shares one home between runs and the page", async () => {
   t = await ui.renderPage("counter", { cols: 80, rows: 24 });
   expect(t.frame()).toContain("n = 0");
 });
+
+const machine = join(import.meta.dir, "fixtures/machine-demo");
+
+test("onFakeMachine: the real factory runs on the fake machine, as non-root and then as root", async () => {
+  const { system } = await import("./fixtures/machine-demo/index.ts");
+  const denied = await runCommand(machine, "machine-demo run");
+  expect(denied.lines.map((line) => line.text)).toEqual(["precisa de root"]);
+  expect(system.calls).toEqual([]);
+
+  system.isRoot = true; // the fake machine decides ctx.isRoot
+  const session = await runSession(machine);
+  const ran = await session.run("machine-demo run");
+  expect(ran.text).toBe("rodou");
+  expect(system.calls.map((call) => call.cmd)).toEqual(["tool"]);
+  expect(system.lines()).toEqual(["tool go"]);
+  expect(system.fs.files.get("/etc/machine-demo/marker")).toBe("feito");
+  expect(existsSync("/etc/machine-demo/marker")).toBe(false); // nothing real was written
+});

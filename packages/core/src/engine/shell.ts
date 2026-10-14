@@ -1,4 +1,4 @@
-import type { CommandCtx, ExecResult, Shell, ShellOpts, ShellResult } from "@pvx/sdk";
+import type { AbortSignalLike, CommandCtx, ExecResult, Shell, ShellOpts, ShellResult } from "@pvx/sdk";
 import { messageOf, PermissionDenied, StepError } from "./errors.ts";
 
 /** The exit code of a program that cannot start (the shell convention for "command not found"). */
@@ -45,8 +45,38 @@ export function createReadShell(exec: CommandCtx["exec"]): Pick<Shell, "run" | "
   return { run, ok };
 }
 
+/** What `shell.echoing` needs from the command: where the job log is and the signal that stops the job. */
+export interface ShellJob {
+  jobLog: (line: string) => void;
+  signal?: AbortSignalLike;
+}
+
+const commandText = (command: string, args: string[], opts: ShellOpts): string => opts.display ?? [command, ...args].join(" ");
+
+/** The options of one echoing call: the defaults, then the call's own, with `onLine` writing every non-blank line to the job log. */
+function echoingOpts(job: ShellJob, defaults: ShellOpts, command: string, args: string[], opts: ShellOpts = {}): ShellOpts {
+  const merged: ShellOpts = { signal: job.signal, buffer: false, ...defaults, ...opts };
+  job.jobLog(`$ ${commandText(command, args, merged)}`);
+  const onLine: NonNullable<ShellOpts["onLine"]> = (line, stream) => {
+    if (line.trim()) job.jobLog(line);
+    opts.onLine?.(line, stream);
+  };
+  return { ...merged, onLine };
+}
+
+/** `shell.echoing`: the same three calls, each one echoed to the job log. */
+function createEchoing(shell: Pick<Shell, "run" | "must" | "ok">, job: ShellJob): Shell["echoing"] {
+  return (defaults = {}) => ({
+    run: (command, args = [], opts) => shell.run(command, args, echoingOpts(job, defaults, command, args, opts)),
+    must: (command, args = [], opts) => shell.must(command, args, echoingOpts(job, defaults, command, args, opts)),
+    ok: (command, args = [], opts) => shell.ok(command, args, echoingOpts(job, defaults, command, args, opts)),
+  });
+}
+
+const NO_JOB: ShellJob = { jobLog() {} };
+
 /** `ctx.shell`, built over the granted `ctx.exec` (so the allowlist, the timeout and the process rules are the same). */
-export function createShell(exec: CommandCtx["exec"]): Shell {
+export function createShell(exec: CommandCtx["exec"], job: ShellJob = NO_JOB): Shell {
   const run: Shell["run"] = async (command, args = [], opts = {}) => {
     const tail: string[] = [];
     const onLine: NonNullable<ShellOpts["onLine"]> = (line, stream) => {
@@ -65,5 +95,5 @@ export function createShell(exec: CommandCtx["exec"]): Shell {
     throw new StepError(`${shown} saiu com código ${result.code}`, shown, result.code, relevantOutput(result.tail));
   };
   const ok: Shell["ok"] = async (command, args = [], opts) => (await run(command, args, opts)).code === 0;
-  return { run, must, ok };
+  return { run, must, ok, echoing: createEchoing({ run, must, ok }, job) };
 }

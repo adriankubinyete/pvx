@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReactNode } from "react";
 import type { JobStatus, PhasesState } from "@pvx/sdk";
@@ -169,3 +170,44 @@ test("runViewOf: done stays done without the job, an interrupted run is failed, 
   expect(isCurrentRun(phasesState(["done"], { runStartedAt: 150 }), status("done", 100))).toBe(true);
   expect(stepsOf(partial, 500).map((step) => step.state)).toEqual(["done", "pending"]);
 });
+
+test("runViewOf: a trailing phase does not hold done back, a failure still fails, and loading is idle", () => {
+  const countdown = phasesState(["done", "running"]);
+  expect(runViewOf("running", countdown, true)).toBe("running");
+  expect(runViewOf("running", countdown, true, ["p1"])).toBe("done");
+  expect(runViewOf("idle", countdown, true, ["p1"])).toBe("done");
+  expect(runViewOf("running", phasesState(["running", "pending"]), true, ["p1"])).toBe("running");
+  expect(runViewOf("failed", phasesState(["done", "failed"], { failure: { phase: "p1", message: "x" } }), true, ["p1"])).toBe("failed");
+  expect(runViewOf("idle", phasesState(["done", "pending"]), true, [], true)).toBe("idle");
+});
+
+/** A run in the middle: a saved state with `database` running, and a job state that says the same, as the job's own process would leave them. */
+function leaveRunning(home: string, startedAt: number): void {
+  const root = join(home, "modules", "kit-demo");
+  mkdirSync(join(root, "jobs"), { recursive: true });
+  const record = (id: string, state: string, extra = {}) => ({ id, label: id, weight: 1, state, ...extra });
+  const phases = [record("repos", "done", { startedAt, endedAt: startedAt }), record("packages", "done", { startedAt, endedAt: startedAt }), record("database", "running", { startedAt })];
+  mkdirSync(join(root, "state"), { recursive: true });
+  writeFileSync(join(root, "state", "state.json"), JSON.stringify({ "phases:setup": { phases, startedAt, runStartedAt: startedAt } }));
+  writeFileSync(join(root, "jobs", "setup.json"), JSON.stringify({ state: "running", startedAt, pid: process.pid, line: "install" }));
+  writeFileSync(join(root, "jobs", "setup.log"), "i x\n");
+}
+
+test("useRun: loading is true until the first poll, the step times tick by themselves, and a trailing phase lets the view be done", async () => {
+  const session = await runSession(KIT);
+  leaveRunning(session.home, Date.now() - 5000);
+  h = await session.renderPage("run", { cols: 90, rows: 24 });
+  expect(h.frame()).not.toContain("view=failed"); // the saved state is there before the first poll of the job: it must not read as an interrupted run
+  await until("loading=false");
+  expect(h.frame()).toContain("view=running");
+  const first = Number(h.frame().match(/seconds=\d+,\d+,(\d+)/)?.[1]);
+  expect(first).toBeGreaterThanOrEqual(5);
+  await Bun.sleep(1300);
+  await h.flush();
+  expect(Number(h.frame().match(/seconds=\d+,\d+,(\d+)/)?.[1])).toBeGreaterThan(first);
+  h.destroy();
+  h = await session.renderPage("run-trailing", { cols: 90, rows: 24 });
+  await until("loading=false");
+  expect(h.frame()).toContain("view=done");
+  expect(h.frame()).toContain("database:running");
+}, 15_000);

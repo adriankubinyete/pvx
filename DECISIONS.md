@@ -92,6 +92,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `ctx.session.sshClient`: o host acha o IP do cliente SSH (ambiente, ambiente dos processos pais, `who`) e o audit grava `from` → [Sessão SSH no host: `ctx.session.sshClient`](#2026-10-14--sessão-ssh-no-host-ctxsessionsshclient)
 - `ctx.strategy` e `ReadCtx.shell` (`run`, `ok`) nos contextos; `sdk.errors` (`isStepError`, `describeFailure`); o catch do host mostra a saída de um `StepError` → [SDK: lacunas achadas ao migrar o firewall](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-firewall)
 - `List actionOnClick` (clique só seleciona, `enter` ou segundo clique abre), `useNudge` com tons `warn` e `error`, `stderr` do falso transmitido ao `tail` → [SDK: lacunas achadas ao migrar o firewall](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-firewall)
+- `phase.progress(fração)` e `sdk.phases` (`progress`, `finished`), `useRun` com `trailing`, `loading` e tempos vivos, `ctx.shell.echoing`, `sdk.errors.stepError`, `ctx.isRoot`, `ctx.signal`, `fakeSystem` com `clock` e `isRoot` e `onFakeMachine` no `@pvx/testing` → [SDK: lacunas achadas ao migrar o issabel](#2026-10-14--sdk-lacunas-achadas-ao-migrar-o-issabel)
 - Módulo embutido `nota` (arquivo só de acréscimo, SDK aditivo) → [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a) (em parte)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1203,3 +1204,23 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** A migração do firewall repetia, módulo a módulo, um `run` local para sondas, a escolha de estratégia fora do comando, a checagem de `StepError` por `name` e a descrição manual da falha.
 
 **Limite:** `useNudge` com tom não é para falha que pede ação do técnico: essa fica num `Notice`, que não some por tempo. Nada foi pulado: nenhum item se mostrou prejudicial.
+
+## 2026-10-14 — SDK: lacunas achadas ao migrar o issabel
+
+**Status:** vigente
+
+**Decisão:** Nove lacunas do SDK, achadas ao migrar o `pvx-issabel`, foram fechadas.
+
+- **`phase.progress(fração)`.** O progresso geral soma o peso das fases prontas e o peso da fase em curso vezes a fração (`PhaseRecord.progress`, que some quando a fase termina ou recomeça). A escrita no `store` é limitada por dentro: no máximo a cada 250 ms ou quando a fração anda 1%.
+- **`sdk.phases`.** `progress(estado)` e `finished(estado, trailing?)` para a CLI (`andamento: N%`) e para a página.
+- **`useRun(nome, { trailing })`.** Ids de fases finais (uma contagem para reiniciar) não seguram o `done`; uma falha, final ou não, continua `failed`. O módulo perde o `isInstalled` local.
+- **`loading`.** `useJob` e `useRun` devolvem `loading: true` até a primeira leitura; no `useRun` o `view` é `idle` nesse tempo. O estado salvo das fases chega antes do job e lia como "interrompido" (`failed`).
+- **Tempos vivos.** `useRun` relê o relógio a cada 1 s enquanto o `view` é `running` ou `stale`; a página não precisa de timer.
+- **`ctx.shell.echoing(padrões?)`.** Escreve `$ comando` e as linhas de saída em `ctx.jobLog`, com `signal` (`ctx.signal`) e `buffer: false` por padrão, e os padrões do módulo (`timeoutMs`). Segredo: o eco usa `display` quando o argv leva um (o `exec` não mascara nada; quem mascara é o job, que troca por `***` os valores de `secrets` no log); o `stdin` nunca aparece. Foi por isso que o `ctx.signal` entrou: o módulo criava um `AbortController` que nunca abortava só para ganhar um grupo de processos; agora o host aborta o sinal quando o job recebe SIGTERM.
+- **`sdk.errors.stepError`.** Cria um `StepError` para falha que não veio de `shell.must`.
+- **`ctx.isRoot`.** Em `CommandCtx` e `ReadCtx`, de `hostIsRoot()` (`packages/core/src/host/root.ts`; no Windows sempre `true`), repassado pelos chamadores do `execute`; `ExecOpts.isRoot` e `LoadOpts.isRoot` servem aos testes.
+- **`@pvx/testing`.** `fakeSystem({ clock, isRoot })`, `fakeCommandCtx(system, { signal })`, `runCommand`/`runSession`/`renderPage` com `isRoot` e `onFakeMachine(fábrica, system, { real })`, que roda a fábrica real sobre o sistema falso (substitui o `onFakeMachine` e o `process.getuid` do módulo).
+
+**Motivo:** A migração do issabel manteve código local para cada item: a barra parada na fase longa de pacotes (8% em vez de 45%), `isInstalled`, um tique de 1 s na página, `withJobLog`, `stepError`, `process.getuid` e o invólucro `onFakeMachine`.
+
+**Limite:** `echoing` não adivinha segredo no argv: sem `display`, o argv aparece (e só o mascaramento de `secrets` do job o protege). `phase.progress` só persiste o último valor gravado: o intervalo entre duas escritas não é visto por quem lê o `store`. Nada foi pulado.

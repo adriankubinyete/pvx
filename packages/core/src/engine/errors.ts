@@ -33,5 +33,7 @@ export function describeFailure(error: unknown): string {
   return [message, ...output].join("\n");
 }
 
+const stepError: ErrorsKit["stepError"] = (message, command, code, output) => new StepError(message, command, code, output);
+
 /** `sdk.errors`. */
-export const errorsKit: ErrorsKit = { isStepError, describeFailure };
+export const errorsKit: ErrorsKit = { isStepError, describeFailure, stepError };

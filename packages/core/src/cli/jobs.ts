@@ -44,12 +44,13 @@ async function runJob({ io, o, rest }: Ctx): Promise<number> {
   mlog.info(`[job ${name}] rodando: ${id} ${s.line}`);
   writeJobState(id, name, { ...s, pid: process.pid });
   let stopping = false;
-  const onTerm = () => ((stopping = true), killExecGroups("SIGTERM"));
+  const stopSignal = new AbortController();
+  const onTerm = () => ((stopping = true), stopSignal.abort(), killExecGroups("SIGTERM"));
   process.on("SIGTERM", onTerm);
   let exit: number = EXIT.ERROR;
   try {
     const res = await execute(io.registry, [id, ...tokenize(s.line)], {
-      makeLogger: io.makeLogger, confirmed: true, env, jobLog: write, onLine: (l) => write(`${GLYPH[l.kind]}${l.text}`, l.kind === "error" ? "error" : l.kind === "warning" ? "warn" : "info"),
+      makeLogger: io.makeLogger, confirmed: true, isRoot: io.isRoot, signal: stopSignal.signal, env, jobLog: write, onLine: (l) => write(`${GLYPH[l.kind]}${l.text}`, l.kind === "error" ? "error" : l.kind === "warning" ? "warn" : "info"),
     });
     exit = res.exit;
   } catch (e) {

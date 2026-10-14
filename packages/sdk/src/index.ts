@@ -110,6 +110,10 @@ export interface CommandCtx {
   fs: ModuleFs;
   /** Background jobs of this module: commands that outlive pvx and the SSH session. */
   jobs: Jobs;
+  /** True when pvx runs as root (always true on Windows, which has no uid). Use it instead of reading the process uid. */
+  isRoot: boolean;
+  /** Aborted when the host stops the job this command runs in (`jobs.stop`, SIGTERM). Never aborted outside a job. */
+  signal: AbortSignalLike;
   /** Writes a line to this run's job log (`log(name)`, `pvx jobs log`). Outside a job it does nothing. `out` lines go there too. */
   jobLog(line: string): void;
 }
@@ -256,6 +260,8 @@ export interface ReadCtx {
   shell: Pick<Shell, "run" | "ok">;
   /** The same `strategy.pick` as `sdk.strategy`, for a probe or a query that asks which backend runs. */
   strategy: StrategyKit;
+  /** Same as `CommandCtx.isRoot`. */
+  isRoot: boolean;
   fs: Pick<ModuleFs, "read" | "exists" | "list">;
   jobs: Pick<Jobs, "status" | "list" | "log">;
   phases: Pick<Phases, "state">;
@@ -331,6 +337,14 @@ export interface Shell {
   must(command: string, args?: string[], opts?: ShellOpts): Promise<ShellResult>;
   /** True when the exit was 0. */
   ok(command: string, args?: string[], opts?: ShellOpts): Promise<boolean>;
+  /**
+   * A `Shell` for a long job: every call writes `$ <command>` to `ctx.jobLog`, then each non-blank output line (outside a job `jobLog` does
+   * nothing, so only the defaults apply). The command shown is `opts.display` when given, else the argv: pass `display` whenever the argv
+   * holds a secret. `stdin` is never shown, and the host also masks the job's secrets (`secrets` of `jobs.start`) in the log.
+   * `defaults` fill what a call leaves out (`timeoutMs`, `buffer`, ...); `signal` defaults to `ctx.signal`, so each program runs in its own
+   * process group and `jobs.stop` kills it with the job. `buffer` is `false` unless you say otherwise: a package manager prints far more than memory needs.
+   */
+  echoing(defaults?: ShellOpts): Pick<Shell, "run" | "must" | "ok">;
 }
 
 export type PhaseState = "pending" | "running" | "done" | "failed" | "skipped";
@@ -345,8 +359,12 @@ export interface PhaseDef {
   label: string;
   /** Share of the overall progress (default 1). */
   weight?: number;
-  /** `report(text)` updates the phase's detail while it runs (it writes the store: do not call it hundreds of times a second). */
-  run(phase: { report(detail: string): void }): void | PhaseOutcome | Promise<void | PhaseOutcome>;
+  /**
+   * `report(text)` updates the phase's detail while it runs. `progress(fraction)` (0..1, clamped) says how far the phase is: the overall
+   * progress counts the finished weights plus this phase's weight times the fraction. Both write the store, so `progress` writes at most
+   * every 250 ms or when the fraction moved by 1%; `report` writes each time (do not call it hundreds of times a second).
+   */
+  run(phase: { report(detail: string): void; progress(fraction: number): void }): void | PhaseOutcome | Promise<void | PhaseOutcome>;
 }
 export interface PhaseRecord {
   id: string;
@@ -356,6 +374,8 @@ export interface PhaseRecord {
   startedAt?: number;
   endedAt?: number;
   detail?: string;
+  /** 0..1, set by `phase.progress` while the phase runs; gone once it finishes. */
+  progress?: number;
 }
 export interface PhaseFailure {
   phase: string;
@@ -373,6 +393,13 @@ export interface PhasesState {
   /** When the latest run (or resume) began: compare it with `JobStatus.startedAt` to tell a leftover of an older job. */
   runStartedAt: number;
   failure?: PhaseFailure;
+}
+/** `sdk.phases`: reads a `PhasesState` (a command's `status` prints it, a page shows it). */
+export interface PhasesKit {
+  /** 0..1 across the whole run: the weight of the finished phases plus the running phase's weight times its `progress`. */
+  progress(state: PhasesState): number;
+  /** True when every phase is done or skipped, except the `trailing` ones (ids): a countdown that is still running does not count. */
+  finished(state: PhasesState, trailing?: string[]): boolean;
 }
 export type PhasesResult = { ok: true } | { ok: false; failedPhase: string; error: unknown };
 export interface Phases {
@@ -444,6 +471,8 @@ export interface ErrorsKit {
   isStepError(error: unknown): error is StepError;
   /** The message of any error; for a `StepError`, also the useful lines of its output, one per line, indented. */
   describeFailure(error: unknown): string;
+  /** A `StepError` for a failure that came from no `shell.must` (a check that found a problem): the phase runner records it the same way. */
+  stepError(message: string, command: string, code: number | undefined, output: string[]): StepError;
 }
 
 /** What the host injects into the factory. */
@@ -456,8 +485,10 @@ export interface Sdk {
   packages: PackagesKit;
   /** Picks which of several strategies (backends, engines) a module drives. */
   strategy: StrategyKit;
-  /** Reads a `StepError`: `isStepError` and `describeFailure`. */
+  /** Reads and raises a `StepError`: `isStepError`, `describeFailure` and `stepError`. */
   errors: ErrorsKit;
+  /** Reads the phases state: `progress` and `finished`. */
+  phases: PhasesKit;
   /** Same permission rules as `ctx.fs`, for code that has no command context (queries, widgets). */
   fs: ModuleFs;
 }
@@ -649,6 +680,8 @@ export interface JobState {
   lines: string[];
   /** `stale` while the job runs but its log did not change for `staleMs` (default 30000, counted from when the page began watching). */
   view: JobView;
+  /** True until the first poll answers: `status` and `lines` are placeholders then, so show a wait, never `failed` or a start flow. */
+  loading: boolean;
   start(line: string, opts?: { secrets?: Record<string, string> }): Promise<void>;
   stop(): Promise<void>;
 }
@@ -659,8 +692,9 @@ export interface RunState extends Omit<JobState, "view"> {
   /** Of the job alone. */
   jobView: JobView;
   state?: PhasesState;
+  /** One row per phase; the times of a running phase advance by themselves (a 1 s tick while the run is `running` or `stale`). */
   steps: StepItem[];
-  /** 0..1 by the weight of the phases. */
+  /** 0..1 by the weight of the phases, counting the partial `phase.progress` of the running one. */
   progress: number;
   /** False when `state` belongs to an older job than the one the host knows. */
   current: boolean;
@@ -809,9 +843,11 @@ export interface SdkUi {
    * A phased run (`ctx.phases.run(name, ...)` inside the job `name`): the job plus the phases the command keeps in the store, polled every second.
    * `steps` feed `Steps`, `progress` feeds `ProgressBar`, `view` says what to show (`done` stays done after the job went away),
    * and `current` is false when `state` is a leftover of an older job (show the start flow, not the run). `start` runs `line`
-   * as the job; the command resumes by itself when it calls `ctx.phases.run` again.
+   * as the job; the command resumes by itself when it calls `ctx.phases.run` again. While `loading` the view is `idle`.
+   * `trailing` lists phase ids (a final countdown, a reboot) that do not hold the run back: once every other phase is done the view is `done`,
+   * even while a trailing one still runs; a failed phase (trailing or not) is still `failed`.
    */
-  useRun(name: string, opts?: { tail?: number; staleMs?: number }): RunState;
+  useRun(name: string, opts?: { tail?: number; staleMs?: number; trailing?: string[] }): RunState;
   /** This module's own store (one state.json). */
   useStore(): Store;
   /** Pages of this module only: `push("name")`, `pop()`. */

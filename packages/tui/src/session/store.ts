@@ -168,6 +168,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
           : await execute(registry, line, {
               makeLogger,
               confirmed,
+              isRoot,
               env: ro.secrets ? { ...process.env, ...secretEnv(ro.secrets) } : undefined,
               readStdin: async () => ro.stdin ?? "",
               promptSecret: (name) => ask<string | undefined>({ kind: "secret", name }),

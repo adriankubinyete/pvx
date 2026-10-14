@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { theme, ui } from "@pvx/tui";
 import { EXIT, type Logger } from "@pvx/sdk";
-import { createLogger, createRegistry, loadModules, logsDir, runCli, trustGate } from "@pvx/core";
+import { createLogger, createRegistry, hostIsRoot, loadModules, logsDir, runCli, trustGate } from "@pvx/core";
 import { builtin } from "../../../packages/builtin/index.ts";
 import { ask, askSecret } from "./prompt.ts";
 import { VERSION, VERSION_LABEL } from "./version.ts";
@@ -33,8 +33,7 @@ async function main(): Promise<number> {
   if ((argv[0] === "logs" || (argv[0] === "jobs" && argv[1] === "log")) && argv.some((a) => a === "-f" || a === "--follow")) process.once("SIGINT", () => abort.abort());
   const base = {
     env: process.env,
-    // Windows has no uid and no sudo: the gate mirrors root owning PVX_HOME on Unix, which has no equivalent there.
-    isRoot: process.platform === "win32" || process.getuid?.() === 0,
+    isRoot: hostIsRoot(),
     registry,
     makeLogger,
     profilesDir: PROFILES_DIR,

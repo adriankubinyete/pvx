@@ -1,24 +1,55 @@
-import type { Out, PhaseDef, PhaseFailure, PhaseOutcome, PhaseRecord, Phases, PhasesResult, PhasesState, Store } from "@pvx/sdk";
+import type { Out, PhaseDef, PhaseFailure, PhaseOutcome, PhaseRecord, Phases, PhasesKit, PhasesResult, PhasesState, Store } from "@pvx/sdk";
 import { isStepError, messageOf } from "./errors.ts";
 
 type Say = Pick<Out, "info" | "success" | "error">;
 
 const silent: Say = { info() {}, success() {}, error() {} };
 const DEFAULT_WEIGHT = 1;
+/** `phase.progress` writes the store at most this often... */
+const PROGRESS_WRITE_MS = 250;
+/** ...unless the fraction moved by at least this much. */
+const PROGRESS_WRITE_STEP = 0.01;
 
 /** The store key of the phases named `name`. */
 export const phasesKey = (name: string) => `phases:${name}`;
 
 const isFinished = (record: PhaseRecord) => record.state === "done" || record.state === "skipped";
 
-/** True when every phase is done or skipped. */
-export const allPhasesFinished = (state: PhasesState): boolean => state.phases.every(isFinished);
+/** True when every phase is done or skipped, except the `trailing` ones (ids): a final countdown does not hold the run back. */
+export function allPhasesFinished(state: PhasesState, trailing: string[] = []): boolean {
+  return state.phases.filter((record) => !trailing.includes(record.id)).every(isFinished);
+}
 
-/** 0..1 across the whole run, by the weight of each phase. */
+/** What a phase has earned so far: all of its weight when finished, else its weight times its partial progress. */
+function earnedBy(record: PhaseRecord): number {
+  if (isFinished(record)) return record.weight;
+  return record.weight * (record.progress ?? 0);
+}
+
+/** 0..1 across the whole run: the weight of each finished phase plus the running one's weight times its `progress`. */
 export function phasesProgress(state: PhasesState): number {
   const total = state.phases.reduce((sum, record) => sum + record.weight, 0);
-  const earned = state.phases.filter(isFinished).reduce((sum, record) => sum + record.weight, 0);
+  const earned = state.phases.reduce((sum, record) => sum + earnedBy(record), 0);
   return total > 0 ? earned / total : 0;
+}
+
+/** `sdk.phases`. */
+export const phasesKit: PhasesKit = { progress: phasesProgress, finished: allPhasesFinished };
+
+const clampFraction = (fraction: number): number => Math.min(1, Math.max(0, Number.isFinite(fraction) ? fraction : 0));
+
+/** Decides when a `progress` call is worth a store write: the first one, a 1% move, or 250 ms since the last write. */
+function progressThrottle(now: () => number): (fraction: number) => boolean {
+  let writtenAt = Number.NEGATIVE_INFINITY;
+  let writtenFraction = Number.NEGATIVE_INFINITY;
+  return (fraction) => {
+    const moved = Math.abs(fraction - writtenFraction) >= PROGRESS_WRITE_STEP;
+    const waited = now() - writtenAt >= PROGRESS_WRITE_MS;
+    if (!moved && !waited) return false;
+    writtenAt = now();
+    writtenFraction = fraction;
+    return true;
+  };
 }
 
 function newState(defs: PhaseDef[], now: number): PhasesState {
@@ -29,7 +60,7 @@ function newState(defs: PhaseDef[], now: number): PhasesState {
 /** A phase that was running when the process died is redone: it goes back to pending. */
 function resumeState(saved: PhasesState, now: number): PhasesState {
   for (const record of saved.phases.filter((phase) => !isFinished(phase))) {
-    Object.assign(record, { state: "pending", startedAt: undefined, endedAt: undefined, detail: undefined });
+    Object.assign(record, { state: "pending", startedAt: undefined, endedAt: undefined, detail: undefined, progress: undefined });
   }
   return { ...saved, runStartedAt: now, failure: undefined };
 }
@@ -52,11 +83,18 @@ export function createPhases(store: Store, say: Say = silent, now: () => number 
       record.detail = detail;
       save();
     };
-    Object.assign(record, { state: "running", startedAt: now(), endedAt: undefined, detail: undefined });
+    const shouldWrite = progressThrottle(now);
+    const progress = (fraction: number) => {
+      const clamped = clampFraction(fraction);
+      if (!shouldWrite(clamped)) return;
+      record.progress = clamped;
+      save();
+    };
+    Object.assign(record, { state: "running", startedAt: now(), endedAt: undefined, detail: undefined, progress: undefined });
     save();
     say.info(`fase ${def.label}: iniciando`);
     try {
-      const outcome: PhaseOutcome = (await def.run({ report })) ?? {};
+      const outcome: PhaseOutcome = (await def.run({ report, progress })) ?? {};
       finishRecord(record, outcome, now());
       say.success(outcome.skipped ? `fase ${def.label}: pulada (${outcome.skipped})` : `fase ${def.label}: concluída`);
       save();
@@ -92,8 +130,8 @@ export function createPhases(store: Store, say: Say = silent, now: () => number 
 
 function finishRecord(record: PhaseRecord, outcome: PhaseOutcome, endedAt: number): void {
   if (outcome.skipped) {
-    Object.assign(record, { state: "skipped", detail: outcome.skipped });
+    Object.assign(record, { state: "skipped", detail: outcome.skipped, progress: undefined });
     return;
   }
-  Object.assign(record, { state: "done", endedAt, detail: outcome.detail ?? record.detail });
+  Object.assign(record, { state: "done", endedAt, detail: outcome.detail ?? record.detail, progress: undefined });
 }

@@ -156,6 +156,7 @@ export async function runCli(io: CliIO): Promise<number | "tui"> {
     const res = await execute(io.registry, argv, {
       makeLogger: io.makeLogger,
       confirmed,
+      isRoot: io.isRoot,
       env: io.env,
       readStdin: io.isTTY ? undefined : io.readStdin,
       promptSecret: io.isTTY ? io.askSecret : undefined,

@@ -1,6 +1,7 @@
 import { argGetters } from "./helpers.ts";
 import { EXIT } from "@pvx/sdk";
-import type { Logger, OutLine, SessionInfo } from "@pvx/sdk";
+import type { AbortSignalLike, Logger, OutLine, SessionInfo } from "@pvx/sdk";
+import { hostIsRoot } from "../host/root.ts";
 import { hostSession } from "../host/ssh.ts";
 import { auditCommand, lineOf } from "../journal/audit.ts";
 import { parseArgs, type ArgValues, type ParseOpts } from "./args.ts";
@@ -24,6 +25,10 @@ export interface ExecOpts extends ParseOpts {
   jobLog?: (line: string) => void;
   /** `ctx.session` of the command. Default: the real host session (tests hand a fixed one). */
   session?: SessionInfo;
+  /** `ctx.isRoot` of the command. Default: the real process (tests hand a fixed one). */
+  isRoot?: boolean;
+  /** `ctx.signal`: aborted when the job is stopped. Default: a signal that never aborts. */
+  signal?: AbortSignalLike;
 }
 export interface ExecResult {
   ok: boolean;
@@ -55,6 +60,8 @@ export async function execute(registry: Registry, input: string | string[], opts
   }
 
   const session = opts.session ?? hostSession;
+  const signal = opts.signal ?? new AbortController().signal;
+  const jobLog = opts.jobLog ?? (() => {});
   const log = opts.makeLogger(cmd.moduleId);
   log.info(`run ${key} ${JSON.stringify(masked)}`);
   const lines: OutLine[] = [];
@@ -78,9 +85,11 @@ export async function execute(registry: Registry, input: string | string[], opts
       slots: registry.slots,
       session,
       jobs: createJobs(cmd.moduleId),
-      jobLog: opts.jobLog ?? (() => {}),
+      jobLog,
+      isRoot: opts.isRoot ?? hostIsRoot(),
+      signal,
       ...granted,
-      shell: createShell(granted.exec),
+      shell: createShell(granted.exec, { jobLog, signal }),
       strategy: strategyKit,
       phases: createPhases(store, out),
     });

@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createJobs, createStore, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
 import { phasesKey } from "@pvx/core";
-import type { CommandRun, Conformity, JobState, JobStatus, JobView, KeySpec, Logger, PhasesState, QueryState, RunState, SdkUi } from "@pvx/sdk";
+import type { CommandRun, Conformity, JobState, JobStatus, JobView, KeySpec, Logger, PhasesState, QueryState, RunState, RunView, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useNudge as useHostNudge } from "../nudge.tsx";
@@ -145,22 +145,24 @@ function useJob(name: string, opts?: { tail?: number; staleMs?: number }): JobSt
   const tail = opts?.tail ?? 200;
   const staleMs = opts?.staleMs ?? DEFAULT_STALE_MS;
   const jobs = useMemo(() => createJobs(moduleId), [moduleId]);
-  const [snap, setSnap] = useState<{ status: JobStatus; lines: string[]; view: JobView }>({ status: { state: "none" }, lines: [], view: "idle" });
+  const [snap, setSnap] = useState<{ status: JobStatus; lines: string[]; view: JobView; loading: boolean }>({ status: { state: "none" }, lines: [], view: "idle", loading: true });
   const poll = useRef<() => Promise<void>>(async () => {});
   useEffect(() => {
     let live = true;
     let lastContent = "";
     let lastView = "";
+    let answered = false;
     let changedAt = Date.now();
     poll.current = async () => {
       const [status, lines] = await Promise.all([jobs.status(name), jobs.log(name, { tail })]);
       const content = JSON.stringify([status, lines]);
       if (content !== lastContent) changedAt = Date.now();
       const view = jobViewOf(status, Date.now() - changedAt, staleMs);
-      if (!live || (content === lastContent && view === lastView)) return;
+      if (!live || (answered && content === lastContent && view === lastView)) return;
+      answered = true;
       lastContent = content;
       lastView = view;
-      setSnap({ status, lines, view });
+      setSnap({ status, lines, view, loading: false });
     };
     void poll.current();
     const timer = setInterval(() => void poll.current(), 1000);
@@ -204,13 +206,31 @@ function usePhasesState(name: string): PhasesState | undefined {
   return state;
 }
 
+const NOW_TICK_MS = 1000;
+
+/** The current time, read again every second while `active`: it is what makes the elapsed time of a running step advance. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), NOW_TICK_MS);
+    return () => clearInterval(timer);
+  }, [active]);
+  return now;
+}
+
+const RUNNING_VIEWS: RunView[] = ["running", "stale"];
+
 /** A phased run: the job `name` plus its phases. */
-function useRun(name: string, opts?: { tail?: number; staleMs?: number }): RunState {
+function useRun(name: string, opts?: { tail?: number; staleMs?: number; trailing?: string[] }): RunState {
   const { view: jobView, ...job } = useJob(name, opts);
   const state = usePhasesState(name);
   const current = isCurrentRun(state, job.status);
   const shown = current ? state : undefined;
-  return { ...job, jobView, view: runViewOf(jobView, state, current), state, current, steps: stepsOf(shown), progress: progressOf(shown) };
+  const view = runViewOf(jobView, state, current, opts?.trailing, job.loading);
+  const now = useNow(RUNNING_VIEWS.includes(view));
+  return { ...job, jobView, view, state, current, steps: stepsOf(shown, now), progress: progressOf(shown) };
 }
 
 function useStore() {

@@ -1,4 +1,5 @@
 import { errorsKit } from "./errors.ts";
+import { phasesKit } from "./phases.ts";
 import { proofKit } from "./helpers.ts";
 import { packagesKit } from "./packages.ts";
 import { strategyKit } from "./strategy.ts";
@@ -29,6 +30,8 @@ export interface LoadOpts {
   builtin?: readonly BuiltinModule[];
   /** `ctx.session` of the read contexts. Default: the real host session (tests hand a fixed one). */
   session?: SessionInfo;
+  /** `ctx.isRoot` of the read contexts. Default: the real process (tests hand a fixed one). */
+  isRoot?: boolean;
   /** Trust hook (`trustGate`). Default: allow everything. Returning false skips the module silently: its state comes from `listModules`, not from an error. */
   canImport?: (dir: string, manifest: Manifest) => boolean | Promise<boolean>;
 }
@@ -36,12 +39,12 @@ export interface LoadOpts {
 /** What a factory gets: the module's own logger and a `fs` bound to its manifest permissions. */
 const sdkFor = (manifest: Manifest, opts: LoadOpts): Sdk => {
   const log = opts.makeLogger(manifest.id);
-  return { version: 1, log, proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
+  return { version: 1, log, proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, phases: phasesKit, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
 };
 
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */
 export async function loadModules(registry: Registry, opts: LoadOpts): Promise<void> {
-  registry.readCtx = (id) => createReadCtx(id, registry.modules.get(id)?.permissions, opts.makeLogger, registry.query, opts.session);
+  registry.readCtx = (id) => createReadCtx(id, registry.modules.get(id)?.permissions, opts.makeLogger, registry.query, opts.session, opts.isRoot);
   for (const { manifest, factory } of opts.builtin ?? []) {
     try {
       registry.register(manifest, factory(sdkFor(manifest, opts)));

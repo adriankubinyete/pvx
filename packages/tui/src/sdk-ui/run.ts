@@ -20,12 +20,16 @@ export function isCurrentRun(state: PhasesState | undefined, status: JobStatus):
 
 const JOB_VIEW_TO_RUN: Partial<Record<JobView, RunView>> = { running: "running", stale: "stale" };
 
-/** A finished run stays `done` even after the job (or the central) went away; a job that ended before the last phase is `failed`. */
-export function runViewOf(jobView: JobView, state: PhasesState | undefined, current: boolean): RunView {
+/**
+ * A finished run stays `done` even after the job (or the central) went away; a job that ended before the last phase is `failed`.
+ * A `trailing` phase (a final countdown) does not hold `done` back. While `loading` nothing is known yet, so the view is `idle`.
+ */
+export function runViewOf(jobView: JobView, state: PhasesState | undefined, current: boolean, trailing: string[] = [], loading = false): RunView {
+  if (loading) return "idle";
   const alive = JOB_VIEW_TO_RUN[jobView];
   if (!state || !current) return alive ?? "idle";
   if (state.failure) return "failed";
-  if (allPhasesFinished(state)) return "done";
+  if (allPhasesFinished(state, trailing)) return "done";
   return alive ?? "failed";
 }
 

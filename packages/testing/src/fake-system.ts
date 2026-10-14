@@ -1,8 +1,8 @@
 // A fake machine for module tests: the seam that lets a command, a proof or a query run without touching the real system.
 // `fakeCommandCtx` builds the same `ctx` a command gets (shell and phases included) over a fake exec, fs and store, so a test
 // calls `command.run(ctx)` and reads what was printed, run and written. Nothing real runs and nothing real is written.
-import type { CommandCtx, ExecOpts, ExecResult, Logger, ModuleFs, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
-import { argGetters, createPhases, createReadShell, createShell, errorsKit, packagesKit, proofKit, strategyKit } from "@pvx/core";
+import type { AbortSignalLike, CommandCtx, ExecOpts, ExecResult, Logger, ModuleFs, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
+import { argGetters, createPhases, createReadShell, createShell, errorsKit, packagesKit, phasesKit, proofKit, strategyKit } from "@pvx/core";
 
 export interface Call {
   cmd: string;
@@ -25,6 +25,10 @@ export interface FakeSystemOptions {
   store?: Record<string, unknown>;
   /** `ctx.session.sshClient` of the contexts built over this system. Default: none. */
   sshClient?: string;
+  /** The time of the system: `phases` stamps with it, and a test moves it by changing `now`. Default: the real clock. */
+  clock?: { now: number };
+  /** `ctx.isRoot` of the contexts built over this system. Default: true (a fake machine is the one a module runs as root on). */
+  isRoot?: boolean;
 }
 
 export interface FakeSystem {
@@ -33,6 +37,9 @@ export interface FakeSystem {
   fs: FakeFs;
   store: FakeStore;
   session: SessionInfo;
+  isRoot: boolean;
+  /** The time the system tells (`options.clock`, else the real clock). */
+  now(): number;
   /** The calls as command lines, in order (`dnf install -y a b`). */
   lines(): string[];
   /** Index of the first call whose line starts with `prefix`, or -1. */
@@ -113,6 +120,8 @@ export function fakeSystem(options: FakeSystemOptions = {}): FakeSystem {
     fs: fakeFs(options.files),
     store: memStore(options.store),
     session: { sshClient: options.sshClient },
+    isRoot: options.isRoot ?? true,
+    now: () => options.clock?.now ?? Date.now(),
     lines: () => calls.map(callLine),
     indexOf: (prefix) => calls.findIndex((call) => callLine(call).startsWith(prefix)),
   };
@@ -142,6 +151,8 @@ export type FakeCommandCtx = CommandCtx & { lines: OutLine[]; jobLines: string[]
 export interface FakeCommandOptions {
   /** Parsed args, as `ctx.args` has them. */
   args?: CommandCtx["args"];
+  /** `ctx.signal`, which `shell.echoing` hands to every program. Default: one that never aborts. */
+  signal?: AbortSignalLike;
 }
 
 /** What a command gets, over `system`. `lines` collects `ctx.out` and `jobLines` collects `ctx.jobLog`. */
@@ -149,6 +160,8 @@ export function fakeCommandCtx(system: FakeSystem, options: FakeCommandOptions =
   const args = options.args ?? {};
   const lines: OutLine[] = [];
   const jobLines: string[] = [];
+  const jobLog = (line: string) => void jobLines.push(line);
+  const signal = options.signal ?? new AbortController().signal;
   const say = (kind: OutLine["kind"]) => (text: string) => void lines.push({ kind, text });
   const out = { success: say("success"), warning: say("warning"), error: say("error"), info: say("info"), plain: say("plain") };
   return {
@@ -161,13 +174,15 @@ export function fakeCommandCtx(system: FakeSystem, options: FakeCommandOptions =
     session: system.session,
     slots: { read: () => undefined },
     exec: system.exec,
-    shell: createShell(system.exec),
+    shell: createShell(system.exec, { jobLog, signal }),
     strategy: strategyKit,
-    phases: createPhases(system.store, out),
+    isRoot: system.isRoot,
+    signal,
+    phases: createPhases(system.store, out, system.now),
     net: unavailableNet,
     fs: system.fs,
     jobs: noJobs,
-    jobLog: (line) => void jobLines.push(line),
+    jobLog,
     lines,
     jobLines,
   };
@@ -183,13 +198,14 @@ export function fakeReadCtx(system: FakeSystem): ReadCtx {
     exec: system.exec,
     shell: createReadShell(system.exec),
     strategy: strategyKit,
+    isRoot: system.isRoot,
     fs: system.fs,
     jobs: noJobs,
-    phases: createPhases(system.store),
+    phases: createPhases(system.store, undefined, system.now),
   };
 }
 
 /** The `sdk` a factory receives when a test builds the module without the host. `ui` is empty: nothing here renders a page. */
 export function fakeSdk(fs: ModuleFs = fakeFs()): Sdk {
-  return { version: 1, log: quietLog, ui: {} as Sdk["ui"], proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, fs };
+  return { version: 1, log: quietLog, ui: {} as Sdk["ui"], proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, phases: phasesKit, fs };
 }

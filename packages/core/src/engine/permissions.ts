@@ -1,6 +1,7 @@
 import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, writeFileSync, writeSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
 import type { CommandCtx, Logger, Manifest, PhasesState, QueryFn, ReadCtx, SessionInfo, WriteOpts } from "@pvx/sdk";
+import { hostIsRoot } from "../host/root.ts";
 import { hostSession } from "../host/ssh.ts";
 import { PermissionDenied } from "./errors.ts";
 import { phasesKey } from "./phases.ts";
@@ -117,7 +118,7 @@ export function createGranted(id: string, perms: Perms | undefined, log: Logger,
 }
 
 /** The read-only context of `prove`, queries and widgets: no `store.set`, no `fs` writes (they do not exist, not just refuse); `exec` is the same allowlist, logged. */
-export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: (name: string) => Logger, query: QueryFn, session: SessionInfo = hostSession): ReadCtx {
+export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: (name: string) => Logger, query: QueryFn, session: SessionInfo = hostSession, isRoot: boolean = hostIsRoot()): ReadCtx {
   const log = makeLogger(id);
   const g = createGranted(id, perms, log, makeLogger("core"));
   const exec: ReadCtx["exec"] = (cmd, args, o) => {
@@ -128,6 +129,7 @@ export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: 
     log,
     query,
     session,
+    isRoot,
     store: { get: createStore(id).get },
     exec,
     shell: createReadShell(exec),

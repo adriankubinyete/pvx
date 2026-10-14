@@ -53,7 +53,7 @@ async function profileResults(io: CliIO): Promise<{ title: string; results: Eval
   const caps = new Map(io.registry.capabilities.map((c) => [c.id, c]));
   const results = await evaluate(profile, caps, (c) => {
     const m = caps.get(c.id)!.moduleId;
-    return createReadCtx(m, io.registry.modules.get(m)?.permissions, io.makeLogger, io.registry.query);
+    return createReadCtx(m, io.registry.modules.get(m)?.permissions, io.makeLogger, io.registry.query, undefined, io.isRoot);
   });
   recordDrift(results); // every evaluation (CLI or TUI refresh) appends the level changes
   recordSnapshot(profile.title, results); // and leaves the result the login banner shows
@@ -150,7 +150,7 @@ export const CORE: CoreCommand[] = [
           plan,
           async (s) => {
             o.line({ kind: "plain", text: `❯ ${s.cmd}` });
-            const res = await execute(io.registry, s.cmd, { makeLogger: io.makeLogger, confirmed: true, env: io.env, readStdin: io.readStdin, promptSecret: io.isTTY ? io.askSecret : undefined });
+            const res = await execute(io.registry, s.cmd, { makeLogger: io.makeLogger, confirmed: true, isRoot: io.isRoot, env: io.env, readStdin: io.readStdin, promptSecret: io.isTTY ? io.askSecret : undefined });
             res.lines.forEach((l) => o.line(l));
             return res.exit;
           },

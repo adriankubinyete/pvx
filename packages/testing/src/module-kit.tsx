@@ -15,7 +15,7 @@ process.on("exit", () => homes.forEach((d) => rmSync(d, { recursive: true, force
  * Loads ONE module (a symlink to `moduleDir` in a fresh `usermodules/`) through the real loader, with a temp `PVX_HOME`.
  * It points PVX_HOME and PVX_USERMODULES at the temp dirs and leaves them set: a test file owns the process env.
  */
-async function loadOne(moduleDir: string, sshClient?: string): Promise<{ registry: Registry; id: string; home: string }> {
+async function loadOne(moduleDir: string, sshClient?: string, isRoot?: boolean): Promise<{ registry: Registry; id: string; home: string }> {
   const dir = resolve(moduleDir);
   const { id } = JSON.parse(readFileSync(join(dir, "pvx-module.json"), "utf8")) as { id: string };
   const home = mkdtempSync(join(tmpdir(), "pvx-mod-"));
@@ -25,7 +25,7 @@ async function loadOne(moduleDir: string, sshClient?: string): Promise<{ registr
   process.env.PVX_HOME = home;
   process.env.PVX_USERMODULES = join(home, "usermodules");
   const registry = createRegistry();
-  await loadModules(registry, { hostVersion: HOST_VERSION, makeLogger: (n) => createLogger(logsDir(), n), ui, session: { sshClient } });
+  await loadModules(registry, { hostVersion: HOST_VERSION, makeLogger: (n) => createLogger(logsDir(), n), ui, session: { sshClient }, isRoot });
   const err = registry.errors[0];
   if (err) throw new Error(`módulo "${err.id}" não carregou: ${err.error}`);
   return { registry, id, home };
@@ -39,6 +39,8 @@ export interface RunCommandOpts {
   confirmed?: boolean;
   /** `ctx.session.sshClient` of the commands. Default: none (a test never reads the real session of the machine). */
   sshClient?: string;
+  /** `ctx.isRoot` of the commands. Default: the real process (a page and a session default to root). */
+  isRoot?: boolean;
 }
 
 const runOn = async (registry: Registry, line: string, opts: RunCommandOpts) => {
@@ -48,33 +50,34 @@ const runOn = async (registry: Registry, line: string, opts: RunCommandOpts) => 
     env: { ...opts.env, ...secretEnv },
     confirmed: opts.confirmed,
     session: { sshClient: opts.sshClient },
+    isRoot: opts.isRoot,
   });
   return { ok, exit, lines, text: lines.map((l) => l.text).join("\n") };
 };
 
 /** Runs a command line (`"<id> status --flag"`, module id first, as in the CLI) through the core `execute`, in a fresh home. */
 export async function runCommand(moduleDir: string, line: string, opts: RunCommandOpts = {}): Promise<{ ok: boolean; exit: number; lines: OutLine[] }> {
-  const { ok, exit, lines } = await runOn((await loadOne(moduleDir, opts.sshClient)).registry, line, opts);
+  const { ok, exit, lines } = await runOn((await loadOne(moduleDir, opts.sshClient, opts.isRoot)).registry, line, opts);
   return { ok, exit, lines };
 }
 
-const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30 }: { cols?: number; rows?: number } = {}): Promise<TuiHarness> => {
+const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30, isRoot = true }: { cols?: number; rows?: number; isRoot?: boolean } = {}): Promise<TuiHarness> => {
   const page = registry.pages.get(`${id}.${pageName}`);
   if (!page) throw new Error(`página "${pageName}" não existe em "${id}" (tem: ${[...registry.pages.keys()].join(", ") || "nenhuma"})`);
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const session = createSessionStore({
-    registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: HOST_VERSION, theme }, argv),
+    registry, makeLogger, isRoot, historyPath: join(pvxHome(), "tui-history"),
+    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: HOST_VERSION, theme }, argv),
   });
   return renderTui(
-    <App root={pageScreen(page)} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger, isRoot: true }} />,
+    <App root={pageScreen(page)} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger, isRoot }} />,
     { cols, rows },
   );
 };
 
 /** Mounts the module's page `pageName` with the real host `sdk.ui` in a headless terminal, in a fresh home. Call `destroy()` at the end. */
-export async function renderPage(moduleDir: string, pageName: string, size: { cols?: number; rows?: number; sshClient?: string } = {}): Promise<TuiHarness> {
-  const { registry, id } = await loadOne(moduleDir, size.sshClient);
+export async function renderPage(moduleDir: string, pageName: string, size: { cols?: number; rows?: number; sshClient?: string; isRoot?: boolean } = {}): Promise<TuiHarness> {
+  const { registry, id } = await loadOne(moduleDir, size.sshClient, size.isRoot);
   return mount(registry, id, pageName, size);
 }
 
@@ -88,7 +91,7 @@ export interface Session {
 }
 
 /** Like `runCommand` and `renderPage`, but ONE temp `PVX_HOME` for several calls, so a test can run a sequence ("add", then "list") and then look at the page. */
-export async function runSession(moduleDir: string, { sshClient }: { sshClient?: string } = {}): Promise<Session> {
-  const { registry, id, home } = await loadOne(moduleDir, sshClient);
-  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, size) };
+export async function runSession(moduleDir: string, { sshClient, isRoot }: { sshClient?: string; isRoot?: boolean } = {}): Promise<Session> {
+  const { registry, id, home } = await loadOne(moduleDir, sshClient, isRoot);
+  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, isRoot, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, { isRoot, ...size }) };
 }

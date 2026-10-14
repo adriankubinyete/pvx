@@ -42,11 +42,14 @@ export default (sdk: Sdk) => {
     return <Panel><Text>{`count=${count.data ?? "-"}`}</Text></Panel>;
   }
 
-  function Run() {
-    const run = useRun("setup");
+  /** `trailing` is the phases that do not hold the run back (the last one, a countdown). */
+  function Run({ trailing }: { trailing?: string[] }) {
+    const run = useRun("setup", { trailing });
+    const seconds = run.steps.map((step) => Math.floor((step.elapsedMs ?? 0) / 1000)).join(",");
     return (
       <Panel>
-        <Text>{`view=${run.view} job=${run.jobView} current=${String(run.current)} progress=${Math.round(run.progress * 100)}`}</Text>
+        <Text>{`view=${run.view} job=${run.jobView} current=${String(run.current)} progress=${Math.round(run.progress * 100)} loading=${String(run.loading)}`}</Text>
+        <Text>{`seconds=${seconds}`}</Text>
         {run.steps.map((step) => <Text key={step.id}>{`${step.id}:${step.state}`}</Text>)}
       </Panel>
     );
@@ -74,6 +77,7 @@ export default (sdk: Sdk) => {
       "rows-select": { title: "Linhas (clique seleciona)", render: () => <Rows clickOpens={false} /> },
       refetch: { title: "Refetch", render: () => <Refetch /> },
       run: { title: "Run", render: () => <Run /> },
+      "run-trailing": { title: "Run (database trailing)", render: () => <Run trailing={["database"]} /> },
     },
   };
 };

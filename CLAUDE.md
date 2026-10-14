@@ -33,7 +33,7 @@ CLI e TUI de sysadmin em Bun/TypeScript com módulos (OpenTUI + React). Versão 
 
 - O host nunca nomeia um módulo (`test/boundary.test.ts`). `process.exit` só em `apps/pvx/src/index.ts`.
 - Módulos importam só tipos do SDK (`import type`), imports relativos no resto, JSX clássico (`@jsxRuntime classic`).
-- Comandos que exigem root falham sem root (`requiresRoot` em `packages/core/src/cli/run.ts`). Exceção: no Windows `isRoot` é sempre verdadeiro (`apps/pvx/src/index.ts`).
+- Comandos que exigem root falham sem root (`requiresRoot` em `packages/core/src/cli/run.ts`). Exceção: no Windows `isRoot` é sempre verdadeiro (`hostIsRoot` em `packages/core/src/host/root.ts`).
 - Blocos `<!-- test -->` em `packages/sdk/README.md` são módulos completos: carregados pelo loader real e verificados pelo `tsc` (`test/sdk-readme.test.ts`).
 - Cores só por tokens do tema (`theme.ts`, `theme-context.tsx`); nunca hex em componente.
 - A revisão de confiança nunca mostra código-fonte (`packages/tui/test/modules.test.tsx`). Nenhuma variável de ambiente contorna a confiança.

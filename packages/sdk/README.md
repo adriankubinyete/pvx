@@ -27,7 +27,7 @@ O `entry` exporta por padrão uma função `(sdk) => ModuleDef`. O host a chama 
 
 **A fábrica não faz trabalho.** Ela só monta e devolve o objeto: nada de ler arquivo, abrir rede, rodar programa ou gravar estado. Todo efeito acontece dentro de `run()`, `prove()`, `data()` ou de uma consulta. O motivo: carregar tem de ser barato e seguro, e um módulo com defeito não pode travar a partida.
 
-`sdk` traz `version` (1), `log` (`debug`, `info`, `warn`, `error`), `ui` (veja adiante), `proof` (veja Capacidades) e `fs`.
+`sdk` traz `version` (1), `log` (`debug`, `info`, `warn`, `error`), `ui` (veja adiante), `proof` (veja Capacidades), `errors` e `phases` (veja `ctx.shell` e Fases com retomada) e `fs`.
 
 <!-- test -->
 ```ts
@@ -53,7 +53,7 @@ A chave em `commands` é o caminho do comando com espaços (`"ip trust"`); o usu
 
 `CommandDef`: `help`, `args`, `destructive`, `page`, `run(ctx)`.
 
-`ctx` traz `args`, `out` (`success`, `warning`, `error`, `info`, `plain`), `log`, `store` e `query`.
+`ctx` traz `args`, `out` (`success`, `warning`, `error`, `info`, `plain`), `log`, `store`, `query`, `isRoot` e `signal`. `ctx.isRoot` é `true` quando o pvx roda como root (no Windows é sempre `true`): use-o em vez de ler o uid do processo (o `ReadCtx` também o tem). `ctx.signal` aborta quando o host para o job em que o comando roda (`jobs.stop`); fora de um job nunca aborta.
 
 `ArgSpec`:
 
@@ -639,7 +639,9 @@ No `ReadCtx` (provas, consultas, widgets) `ctx.shell` só tem `run` e `ok`, sobr
 
 `sdk.strategy.pick(estratégias, { setting, none })` escolhe o backend que o módulo dirige. Cada estratégia é `{ id, available() }`. Com `setting` ausente ou `"auto"` vale a primeira disponível, na ordem da lista (`auto: true`); se nenhuma está, devolve `{ error: none }`. Com um `setting` explícito vale esse `id` sem perguntar `available` (o módulo explica depois por que ele não roda); um `id` desconhecido é `{ error }`. O mesmo `pick` está em `ctx.strategy` (em `CommandCtx` e em `ReadCtx`): um comando ou uma prova que escolhe o backend o chama sem depender do `sdk` da fábrica.
 
-**Ler um `StepError`: `sdk.errors`.** Um módulo importa só tipos, então não tem o `isStepError` do host. `sdk.errors.isStepError(erro)` diz se o erro tem a forma de um `StepError` (o que `shell.must` lança) e estreita o tipo; `sdk.errors.describeFailure(erro)` devolve a mensagem e, para um `StepError`, as linhas úteis da saída, uma por linha, com recuo de dois espaços (qualquer outro erro dá só a mensagem). Use-o ao relatar uma falha: `ctx.out.error(sdk.errors.describeFailure(error))`. O host usa o mesmo texto quando um `StepError` escapa de um comando (`erro interno no comando: ...`).
+**Eco no log do job: `ctx.shell.echoing(padrões?)`.** Devolve um shell (`run`, `must`, `ok`) cujas chamadas escrevem `$ <comando>` em `ctx.jobLog` e depois cada linha não vazia da saída (fora de um job `jobLog` não faz nada, e só os padrões valem). O comando mostrado é `opts.display` quando existe, senão o argv: **passe `display` sempre que o argv levar um segredo**; o `stdin` nunca aparece, e o host ainda troca por `***` os valores de `secrets` do job no log. `padrões` (`timeoutMs`, `buffer`, `onLine`...) preenchem o que a chamada não diz e a chamada vence; `signal` vale `ctx.signal` (cada programa roda no seu grupo de processos, então `jobs.stop` o derruba) e `buffer` vale `false` (a saída só passa pelo log, não fica na memória). O `onLine` da chamada continua rodando.
+
+**Ler e criar um `StepError`: `sdk.errors`.** Um módulo importa só tipos, então não tem o `isStepError` do host. `sdk.errors.isStepError(erro)` diz se o erro tem a forma de um `StepError` (o que `shell.must` lança) e estreita o tipo; `sdk.errors.describeFailure(erro)` devolve a mensagem e, para um `StepError`, as linhas úteis da saída, uma por linha, com recuo de dois espaços (qualquer outro erro dá só a mensagem). Use-o ao relatar uma falha: `ctx.out.error(sdk.errors.describeFailure(error))`. O host usa o mesmo texto quando um `StepError` escapa de um comando (`erro interno no comando: ...`). `sdk.errors.stepError(mensagem, comando, código, saída)` cria um `StepError` para uma falha que não veio de `shell.must` (uma checagem que achou o problema): o corredor de fases a grava como as outras (`command`, `code`, `output`).
 
 <!-- test -->
 ```ts
@@ -675,15 +677,18 @@ export default factory;
 
 Uma tarefa longa (um instalador) é uma lista de fases com nome, rodadas em ordem. `ctx.phases.run(nome, fases, { fresh? })` grava no `store` (chave `phases:<nome>`) o que cada fase fez, a cada mudança. Rodar de novo **retoma**: a fase pronta é pulada e as outras rodam. A fase que falhou (ou que o processo deixou rodando) roda de novo. `fresh: true`, ou uma lista de ids diferente, recomeça do zero. Para na primeira fase que lança e devolve `{ ok: false, failedPhase, error }`; o motivo fica em `state.failure` (`phase`, `message` e, se a causa foi um `StepError`, `command`, `code`, `output`). Cada fase escreve em `ctx.out` (`fase <rótulo>: iniciando`, `concluída`, `pulada (...)`, `falhou: ...`).
 
-Cada fase é `{ id, label, weight?, run(phase) }`. `run` pode devolver `{ detail }` (nota guardada) ou `{ skipped: "motivo" }` (nada a fazer: vira `skipped`); `phase.report(texto)` atualiza o detalhe enquanto roda (grava o `store`: não chame centenas de vezes por segundo). `weight` (padrão 1) pesa no progresso. `ctx.phases.state(nome)` lê o estado (também no `ReadCtx`, para consultas) e `ctx.phases.reset(nome)` o esquece.
+Cada fase é `{ id, label, weight?, run(phase) }`. `run` pode devolver `{ detail }` (nota guardada) ou `{ skipped: "motivo" }` (nada a fazer: vira `skipped`); `phase.report(texto)` atualiza o detalhe enquanto roda (grava o `store`: não chame centenas de vezes por segundo). `phase.progress(fração)` (0 a 1) diz até onde a fase foi: o progresso geral é a soma dos pesos das fases prontas mais o peso da fase em curso vezes a fração, então a barra anda numa fase longa. O host grava no máximo a cada 250 ms ou quando a fração anda 1%, e a fração some quando a fase termina. `weight` (padrão 1) pesa no progresso. `ctx.phases.state(nome)` lê o estado (também no `ReadCtx`, para consultas) e `ctx.phases.reset(nome)` o esquece.
 
-Na página, `useRun(nome, { tail?, staleMs? })` junta o job `nome` e as fases do mesmo nome:
+Para ler o estado fora da página (um `status` que imprime "andamento: N%"), use `sdk.phases.progress(estado)` (0 a 1) e `sdk.phases.finished(estado, trailing?)` (`true` quando toda fase está pronta ou pulada, salvo as de `trailing`).
+
+Na página, `useRun(nome, { tail?, staleMs?, trailing? })` junta o job `nome` e as fases do mesmo nome:
 
 | Campo | Significado |
 | --- | --- |
-| `steps` | As linhas de `Steps`, uma por fase, com o tempo. |
-| `progress` | 0 a 1, pelo peso das fases (`ProgressBar value`). |
-| `view` | `idle`, `running`, `stale`, `done` ou `failed`. `done` continua `done` depois que o job sumiu (por exemplo, no reinício da central); um job que acabou antes da última fase é `failed`. |
+| `steps` | As linhas de `Steps`, uma por fase, com o tempo; o tempo da fase em curso avança sozinho (um tique de 1 s enquanto o run está `running` ou `stale`), a página não precisa de timer. |
+| `progress` | 0 a 1, pelo peso das fases, com o `phase.progress` parcial da fase em curso (`ProgressBar value`). |
+| `loading` | `true` até a primeira leitura do job: enquanto isso o `view` é `idle`. Mostre uma espera, nunca `failed` nem o fluxo de início. |
+| `view` | `idle`, `running`, `stale`, `done` ou `failed`. `done` continua `done` depois que o job sumiu (por exemplo, no reinício da central); um job que acabou antes da última fase é `failed`. `trailing` lista ids de fases finais (uma contagem para reiniciar, o `reboot`) que não seguram o `done`: com as outras prontas o `view` é `done` mesmo com a final rodando; uma fase que falhou, final ou não, continua `failed`. Assim o módulo não precisa de um `isInstalled` local. |
 | `current` | `false` quando o estado é sobra de um job mais velho que o que o host conhece: mostre o fluxo de início, não a execução. |
 | `state` | O `PhasesState` cru (`phases`, `startedAt`, `runStartedAt`, `failure`). |
 | `status`, `lines`, `jobView`, `start`, `stop` | Os de `useJob`. |
@@ -701,7 +706,7 @@ export default (sdk: Sdk) => {
   const BAR_STATE: Record<RunView, "running" | "failed" | "done"> = { idle: "running", running: "running", stale: "running", failed: "failed", done: "done" };
 
   function Instalador() {
-    const run = useRun("instala");
+    const run = useRun("instala", { trailing: ["reinicio"] });
     useKey("i", "instala", () => void run.start("instalar").catch(() => {}));
     return (
       <Panel>
@@ -724,12 +729,17 @@ export default (sdk: Sdk) => {
               weight: 10,
               run: async (phase) => {
                 phase.report("httpd");
-                await ctx.shell.must("dnf", ["-y", "install", "httpd"], { timeoutMs: 40 * 60_000 });
+                phase.progress(0.5);
+                await ctx.shell.echoing({ timeoutMs: 40 * 60_000 }).must("dnf", ["-y", "install", "httpd"]);
+                phase.progress(1);
               },
             },
             { id: "limpeza", label: "limpeza", run: () => ({ skipped: "nada a limpar" }) },
+            { id: "reinicio", label: "reinício", run: () => {} },
           ]);
           if (!result.ok) ctx.out.error(`parou em ${result.failedPhase}`);
+          const state = ctx.phases.state("instala");
+          if (state) ctx.out.info(`andamento: ${Math.round(sdk.phases.progress(state) * 100)}%`);
         },
       },
     },
@@ -796,7 +806,7 @@ Estado e log ficam em `$PVX_HOME/modules/<id>/jobs/<nome>.json` e `<nome>.log`. 
 
 **CLI.** `pvx jobs [list]` lista todos; `pvx jobs log <módulo> <nome> [--tail N] [-f]` mostra (e com `-f` segue até o job acabar); `pvx jobs stop <módulo> <nome>` para. (`pvx jobs run` é interno: o host o usa para iniciar o job.)
 
-**Na UI.** `useJob(nome, { tail?, staleMs? })` devolve `{ status, lines, view, start(linha, { secrets? }), stop() }`, atualizado a cada 1 s; a página só renderiza de novo quando o estado, as últimas `tail` linhas (padrão 200) ou o `view` mudam. `view` é `idle`, `running`, `stale`, `done`, `failed` ou `stopped`: `stale` é um job que diz estar rodando mas não escreveu nada no log há `staleMs` (padrão 30 s, contados desde que a página começou a olhar): pinte o progresso como velho ("sem notícias há 30 s") em vez de mostrá-lo como vivo. `ui.Steps({ items })` desenha as fases (`{ id, label, state: "pending" | "running" | "done" | "failed" | "skipped", elapsedMs?, detail? }`): `✓` concluído, spinner rodando, `○` pendente, `✗` falhou, `-` pulado, sempre com a palavra do estado; o spinner só anda enquanto há um item rodando. `ui.LogTail({ lines, follow?, focused? })` é um log que rola: acompanha o fim até o usuário subir com a roda do mouse e volta a acompanhar ao chegar no fim; ele ocupa a altura que o pai der. Com `focused`, o teclado também rola: `↑`/`↓` uma linha, `pgup`/`pgdn` uma página, `home` o começo, `end` o fim (e volta a acompanhar). Sem `focused` as teclas ficam com a página.
+**Na UI.** `useJob(nome, { tail?, staleMs? })` devolve `{ status, lines, view, loading, start(linha, { secrets? }), stop() }`, atualizado a cada 1 s (`loading` é `true` até a primeira leitura: `status` e `lines` ainda são provisórios); a página só renderiza de novo quando o estado, as últimas `tail` linhas (padrão 200) ou o `view` mudam. `view` é `idle`, `running`, `stale`, `done`, `failed` ou `stopped`: `stale` é um job que diz estar rodando mas não escreveu nada no log há `staleMs` (padrão 30 s, contados desde que a página começou a olhar): pinte o progresso como velho ("sem notícias há 30 s") em vez de mostrá-lo como vivo. `ui.Steps({ items })` desenha as fases (`{ id, label, state: "pending" | "running" | "done" | "failed" | "skipped", elapsedMs?, detail? }`): `✓` concluído, spinner rodando, `○` pendente, `✗` falhou, `-` pulado, sempre com a palavra do estado; o spinner só anda enquanto há um item rodando. `ui.LogTail({ lines, follow?, focused? })` é um log que rola: acompanha o fim até o usuário subir com a roda do mouse e volta a acompanhar ao chegar no fim; ele ocupa a altura que o pai der. Com `focused`, o teclado também rola: `↑`/`↓` uma linha, `pgup`/`pgdn` uma página, `home` o começo, `end` o fim (e volta a acompanhar). Sem `focused` as teclas ficam com a página.
 
 <!-- test -->
 ```tsx
@@ -948,7 +958,7 @@ export default (sdk: Sdk) => {
 
 ## Como testar com `@pvx/testing`
 
-`runCommand(moduleDir, linha, { env?, secrets?, confirmed?, sshClient? })` carrega **só** aquele módulo num `PVX_HOME` temporário novo, roda a linha (módulo primeiro, como na CLI) pelo `execute` do núcleo e devolve `{ ok, exit, lines }`. `secrets` entra como `PVX_SECRET_<NOME>`; `confirmed: true` equivale a `--yes`; `sshClient` é o `ctx.session.sshClient` do comando.
+`runCommand(moduleDir, linha, { env?, secrets?, confirmed?, sshClient?, isRoot? })` carrega **só** aquele módulo num `PVX_HOME` temporário novo, roda a linha (módulo primeiro, como na CLI) pelo `execute` do núcleo e devolve `{ ok, exit, lines }`. `secrets` entra como `PVX_SECRET_<NOME>`; `confirmed: true` equivale a `--yes`; `sshClient` é o `ctx.session.sshClient` do comando e `isRoot` o `ctx.isRoot` (padrão: o do processo real; `renderPage` e `runSession` assumem root).
 
 `renderPage(moduleDir, página, { cols, rows })` monta a página com o `sdk.ui` real do host num terminal sem tela e devolve `{ frame(), press(tecla), type(texto), destroy(), ... }`. Chame `destroy()` no `afterEach`. Teclas são nomes do OpenTUI: `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`, ou o próprio caractere (`" "` para o espaço).
 
@@ -991,7 +1001,7 @@ test("sequência e página no mesmo estado", async () => {
 });
 ```
 
-**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, sshClient? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; um `exec` que grava as chamadas, transmite `lines` (stdout) e as linhas de `stderr` ao `onLine`, como o `exec` real (então entram no `tail` do `shell`), e responde pelas regras `(chamada) => { code?, stdout?, stderr?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args? })` (o `ctx` de um comando, com `shell`, `strategy` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas, com `shell.run`/`shell.ok` e `strategy`) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages`, `strategy` e `errors` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
+**Sistema falso para o teste de unidade.** Para testar um comando, uma prova ou uma consulta sem carregar o host, `@pvx/testing` traz o ponto de troca que todo módulo precisa: `fakeSystem({ rules?, files?, store?, sshClient?, clock?, isRoot? })` (`sshClient` vira o `ctx.session.sshClient` dos contextos; `clock: { now }` é a hora do sistema, que o `phases` usa e que o teste move mudando `now` (padrão: o relógio real); `isRoot` vira o `ctx.isRoot` (padrão `true`); um `exec` que grava as chamadas, transmite `lines` (stdout) e as linhas de `stderr` ao `onLine`, como o `exec` real (então entram no `tail` do `shell`), e responde pelas regras `(chamada) => { code?, stdout?, stderr?, lines? } | undefined`, um `fs` e um `store` em memória), `fakeCommandCtx(system, { args?, signal? })` (`signal` é o `ctx.signal`) (o `ctx` de um comando, com `shell`, `strategy` e `phases` reais sobre o sistema falso, `lines` com o que foi para `ctx.out` e `jobLines` com `ctx.jobLog`), `fakeReadCtx(system)` (o `ReadCtx` de provas e consultas, com `shell.run`/`shell.ok` e `strategy`) e `fakeSdk()` (o `sdk` de uma fábrica, com `proof`, `packages`, `strategy` e `errors` reais). O teste chama `comando.run(ctx)` e lê `system.lines()` (as linhas de comando rodadas), `system.fs.files` e `system.fs.modes` (o que foi gravado e com que modo) e `system.store.data`. Nada real roda e nada real é gravado.
 
 ```ts
 import { expect, test } from "bun:test";
@@ -1005,6 +1015,17 @@ test("aplicar roda o nft e grava o marcador com modo 0600", async () => {
   expect(system.lines()[0]).toBe("nft --version");
   expect(system.fs.modes.get("/etc/meu-modulo/ultimo")).toBe(0o600);
 });
+```
+
+**A fábrica real numa máquina falsa: `onFakeMachine(fábrica, system, { real? })`.** Para os testes que passam pelo host (`runSession`, `renderPage`) sem tocar a máquina, o módulo de teste (um diretório com `pvx-module.json`) exporta `onFakeMachine(fábrica, system)`: o loader importa a fábrica real como sempre, e todo comando, prova, consulta e widget recebe o `exec`, o `shell`, o `fs` e o `isRoot` do `FakeSystem`. `real(caminho)` devolve `true` para o que continua real (o diretório de estado do módulo, para o teste ler o que ele gravou). O teste importa o `system` do módulo de teste para armar regras e ler `system.lines()`, `system.fs.files` e `system.isRoot` (mude-o entre as chamadas).
+
+```ts
+// test/fixture/index.ts
+import { fakeSystem, onFakeMachine } from "@pvx/testing";
+import factory from "../../src/index.tsx";
+
+export const system = fakeSystem({ rules: [(call) => (call.cmd === "dnf" ? { lines: ["Complete!"] } : undefined)], isRoot: true });
+export default onFakeMachine(factory, system, { real: (caminho) => caminho.startsWith("/var/lib/meu-modulo/") });
 ```
 
 Todas definem `PVX_HOME` e `PVX_USERMODULES` do processo: use um arquivo de teste por módulo, sem paralelismo dentro dele. Para uma consulta assíncrona, use `await t.waitForFrame((f) => f.includes("..."))`.

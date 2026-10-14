@@ -33,7 +33,7 @@ export const IGNORE_COMMANDS: CoreCommand[] = [
       const argv = [...addNote, "--tag", "ignorado", "--ref", `cap:${id}`, reason];
       if (!addNote.length || !resolveCommand(io.registry, argv)) o.line({ kind: "warning", text: "módulo de notas não carregado: o motivo ficou só no registro de ignorados" });
       else {
-        const r = await execute(io.registry, argv, { makeLogger: io.makeLogger, confirmed: true, env: io.env });
+        const r = await execute(io.registry, argv, { makeLogger: io.makeLogger, confirmed: true, isRoot: io.isRoot, env: io.env });
         if (!r.ok) o.line({ kind: "warning", text: `a nota não foi criada (${r.lines.find((l) => l.kind === "error")?.text ?? `exit ${r.exit}`}); o motivo ficou no registro de ignorados` });
         else o.line({ kind: "info", text: `nota criada: ${lineOf(addNote)} --ref cap:${id}` });
       }
