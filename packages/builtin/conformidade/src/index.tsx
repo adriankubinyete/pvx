@@ -33,7 +33,7 @@ const clip = (items: Line[], max: number, tail: Line[] = []): Line[] => {
 };
 
 export default (sdk: Sdk) => {
-  const { h, Fragment, Panel, Row, Text, useState, useEffect, useConformity, useKey, useNudge, usePanels, useTheme, useViewport } = sdk.ui;
+  const { h, Fragment, Panel, Row, Text, useState, useEffect, useConformity, useKey, useNudge, usePageFocused, usePanels, useTheme, useViewport } = sdk.ui;
 
   const hhmm = (t: number) => new Date(t).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
@@ -120,6 +120,7 @@ export default (sdk: Sdk) => {
     const { cols, rows } = useViewport();
     const nudge = useNudge();
     const nav = usePanels();
+    const pageFocused = usePageFocused(); // the focused panel shows only while the page has the keys, like Início
     const [panel, setPanel] = useState<1 | 2>(1);
     const [run, setRun] = useState<Run | null>(null);
     // The first visit checks; `r` checks again. Both read and fill the host cache the Início panel shows.
@@ -166,7 +167,7 @@ export default (sdk: Sdk) => {
     const wide = cols >= WIDE;
     const inner = wide ? [body - 2, body - 2] : [Math.floor(body / 2) - 2, Math.ceil(body / 2) - 2];
     const frame = (n: 1 | 2, title: string, children: unknown) => (
-      <Panel key={n} panelRef={nav.ref(String(n))} title={`[${n}] ${title}${panel === n ? ` ${g.active}` : ""}`} tone={panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
+      <Panel key={n} panelRef={nav.ref(String(n))} onPress={() => setPanel(n)} title={`[${n}] ${title}${pageFocused && panel === n ? ` ${g.active}` : ""}`} tone={pageFocused && panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
     );
     const header = c.running ? "verificando…" : c.checkedAt ? `verificado às ${hhmm(c.checkedAt)}` : "não verificado";
     const plan = run ? <Aplicando run={run} max={inner[1]!} onClose={() => setRun(null)} /> : <Passos c={c} max={inner[1]!} />;

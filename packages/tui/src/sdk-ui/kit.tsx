@@ -1,6 +1,7 @@
-import { Children, useContext, type ReactNode } from "react";
+import { Children, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Component, SdkUi, Tone } from "@pvx/sdk";
 import { clean } from "../palette/search.ts";
+import { columnWidths, fit, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
 import { levelOf, meter } from "../tabs/home.ts";
 import { useTheme } from "../theme-context.tsx";
 import { RootPanelCtx } from "./host.tsx";
@@ -9,6 +10,7 @@ import type { Tokens } from "../theme.ts";
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
 
 const tone = (c: Tokens, t: Tone = "text") => ({ ok: c.accent, warn: c.warn, error: c.error, info: c.info, accent: c.accent, dim: c.dim, text: c.text })[t];
+const len = (s: string) => [...s].length;
 /** Module text never carries ANSI or control characters into `<text>`. */
 const textOf = (children: unknown) => clean(Children.toArray(children as ReactNode).map(String).join(""));
 
@@ -16,12 +18,12 @@ const textOf = (children: unknown) => clean(Children.toArray(children as ReactNo
  * A Panel at the page root is the page's own frame: the host already draws the border and the `› title`, so it draws
  * neither (a second border would nest inside the first). A Panel inside another Panel keeps its border and title.
  */
-export function Panel({ title, tone: t, grow, panelRef, children }: Props<"Panel">) {
+export function Panel({ title, tone: t, grow, panelRef, onPress, children }: Props<"Panel">) {
   const { c, g, box } = useTheme();
   const atRoot = useContext(RootPanelCtx);
   return (
     <RootPanelCtx.Provider value={false}>
-      <box ref={panelRef as never} flexDirection="column" flexShrink={0} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
+      <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" flexShrink={0} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
         {children as ReactNode}
       </box>
     </RootPanelCtx.Provider>
@@ -89,21 +91,62 @@ export function Table({ columns, rows }: Props<"Table">) {
   );
 }
 
-export function List({ items, selected }: Props<"List">) {
+export function List({ items, selected, columns, onPress, onHover }: Props<"List">) {
   const { c, g } = useTheme();
+  const [over0, setOver] = useState<string | undefined>(undefined); // the row under the mouse
   const marks = items.some((it) => it.mark);
+  const cols = columns?.length ? columns : undefined;
+  const box = useRef<{ width: number } | null>(null);
+  const [width, setWidth] = useState<number | undefined>(undefined);
+  const [tick, setTick] = useState({ id: selected, n: 0 });
+  const cell = (it: Props<"List">["items"][number], id: string) => {
+    const v = it.cells?.[id];
+    return { text: clean(typeof v === "string" ? v : v?.text ?? ""), tone: typeof v === "object" ? v.tone : undefined };
+  };
+  const lead = 2 + (marks ? 2 : 0);
+  const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, width - lead)) : [];
+  const sel = cols ? items.find((it) => it.id === selected) : undefined;
+  const over = cols && sel ? cols.map((col, i) => overflow(cell(sel, col.id).text, widths[i]!)) : [];
+  const moving = over.some((n) => n > 0);
+  const pause = Math.max(1, Math.round(marquee.pauseMs / marquee.stepMs));
+  // One timer per list, only while the selected row has an overflowing cell.
+  useEffect(() => {
+    setTick({ id: selected, n: 0 });
+    if (!moving) return;
+    const timer = setInterval(() => setTick((t) => ({ id: selected, n: t.n + 1 })), marquee.stepMs);
+    return () => clearInterval(timer);
+  }, [selected, moving]);
+  const n = tick.id === selected ? tick.n : 0;
+  const measure = cols ? { ref: box, onSizeChange: () => box.current && setWidth(box.current.width) } : {};
   return (
-    <box flexDirection="column" flexShrink={0}>
-      {items.map((it) => (
-        <box key={it.id} flexShrink={0} backgroundColor={it.id === selected ? c.selected : undefined}>
+    <box flexDirection="column" flexShrink={0} {...(measure as object)}>
+      {cols?.some((col) => col.title) ? (
+        <text fg={c.dim} wrapMode="none" flexShrink={0}>
+          {" ".repeat(lead) + cols.map((col, i) => fit(clean(col.title ?? ""), widths[i]!, col.align)).join(" ".repeat(GAP)).trimEnd()}
+        </text>
+      ) : null}
+      {items.map((it) => {
+        const hot = it.id === over0 && it.id !== selected; // hover only tints (panel background and a dim ›): it never looks selected
+        return (
+        <box key={it.id} flexShrink={0} backgroundColor={it.id === selected ? c.selected : hot ? c.panel : undefined}
+          onMouseOver={() => (setOver(it.id), onHover?.(it.id))} onMouseOut={() => (setOver((o) => (o === it.id ? undefined : o)), onHover?.(undefined))} onMouseDown={onPress ? () => onPress(it.id) : undefined}>
           <text wrapMode="none">
-            <span fg={c.accent}>{it.id === selected ? `${g.cursor} ` : "  "}</span>
+            {it.id === selected ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{hot ? `${g.query} ` : "  "}</span>}
             {marks ? <span fg={it.mark ? tone(c, it.mark.tone) : c.dim}>{it.mark ? `${clean(it.mark.text)} ` : "  "}</span> : null}
-            <span fg={tone(c, it.tone)}>{clean(it.label)}</span>
-            <span fg={c.dim}>{it.detail ? `  ${clean(it.detail)}` : ""}</span>
+            {cols ? cols.map((col, i) => {
+              const v = cell(it, col.id);
+              const text = fit(v.text, widths[i]!, col.align, it.id === selected ? marqueeOffset(n, over[i]!, pause) : 0);
+              return <span key={col.id} fg={tone(c, v.tone ?? it.tone)}>{i < cols.length - 1 ? text + " ".repeat(GAP) : text}</span>;
+            }) : (
+              <>
+                <span fg={tone(c, it.tone)}>{clean(it.label ?? "")}</span>
+                <span fg={c.dim}>{it.detail ? `  ${clean(it.detail)}` : ""}</span>
+              </>
+            )}
           </text>
         </box>
-      ))}
+        );
+      })}
     </box>
   );
 }

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { pickPanel, panelStep, type Rect } from "../src/panelnav.ts";
+import { pickPanel, panelStep, wrap, type Rect } from "../src/panelnav.ts";
 
 const r = (x: number, y: number, width: number, height: number): Rect => ({ x, y, width, height });
 // Início wide: máquina | conformidade over atividade.
@@ -46,4 +46,15 @@ test("two levels: arrows move panels, enter goes in only with items, esc comes o
   expect(panelStep({ panel: "conf", inside: true }, "enter", pick, size)?.act).toBe(true);
   expect(panelStep({ panel: "conf", inside: true }, "esc", pick, size)).toEqual({ panel: "conf", inside: false });
   expect(panelStep({ panel: "conf", inside: false }, "esc", pick, size)).toBeUndefined();
+});
+
+test("wrap: both ends, a single row and an empty list", () => {
+  expect(wrap(2, 1, 3)).toBe(0);
+  expect(wrap(0, -1, 3)).toBe(2);
+  expect(wrap(1, 1, 3)).toBe(2);
+  expect(wrap(1, -1, 3)).toBe(0);
+  expect(wrap(0, 1, 1)).toBe(0);
+  expect(wrap(0, -1, 1)).toBe(0);
+  expect(wrap(0, 1, 0)).toBe(0);
+  expect(wrap(0, -1, 0)).toBe(0);
 });

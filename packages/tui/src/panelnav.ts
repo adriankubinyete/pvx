@@ -62,6 +62,11 @@ export function panelStep(f: Focus, key: Dir | "enter" | "esc", pick: (panel: st
   return key === "up" ? { ...f, bar: true } : { ...f, nudge: "nada aqui" };
 }
 
+/** `index` moved by `delta` inside a list of `count` rows, wrapping at both ends (`count` 0 gives 0). */
+export function wrap(index: number, delta: number, count: number): number {
+  return count > 0 ? (((index + delta) % count) + count) % count : 0;
+}
+
 /** Layout of a renderable after layout (`x`/`y`/`width`/`height`). */
 interface Laid { x: number; y: number; width: number; height: number }
 
@@ -81,6 +86,7 @@ function makeNav(refs: Map<string, Laid>) {
     /** `ref={nav.ref(id)}` on the panel's box. Only mounted panels count. */
     ref: (id: string) => (r: Laid | null) => void (r ? refs.set(id, r) : refs.delete(id)),
     pick,
+    wrap,
     step: (f: Focus, key: Dir | "enter" | "esc", size: (panel: string) => number) => panelStep(f, key, pick, size),
   };
 }

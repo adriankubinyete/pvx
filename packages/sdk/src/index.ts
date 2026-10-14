@@ -247,6 +247,8 @@ export interface FieldSpec {
   kind: "area" | "line" | "toggle";
   /** Rows of an `area` (default 5). */
   rows?: number;
+  /** Text beside a `toggle`'s box (the label stays in the label column). */
+  text?: string;
 }
 
 /**
@@ -331,6 +333,21 @@ export interface Conformity {
   apply(confirm: (step: ConformityStep) => StepAnswer | Promise<StepAnswer>): Promise<StepOutcome[]>;
 }
 
+/** A column of `List`: `width` is fixed (never shrinks), `grow` takes a share of what is left, neither sizes to the content. */
+export interface ListColumn { id: string; title?: string; width?: number; grow?: number; align?: "left" | "right" }
+/** A cell of a column-mode `List` item. */
+export type ListCell = string | { text: string; tone?: Tone };
+export interface ListItem {
+  id: string;
+  /** One-string row (no columns). */
+  label?: string;
+  detail?: string;
+  tone?: Tone;
+  mark?: { text: string; tone: Tone };
+  /** Cell text per `ListColumn.id`. */
+  cells?: Record<string, ListCell>;
+}
+
 export interface SdkUi {
   /** JSX factory. A module file needs the classic-runtime pragmas (jsxRuntime classic, jsx h, jsxFrag Fragment), else Bun imports React. */
   h(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
@@ -341,7 +358,7 @@ export interface SdkUi {
   useRef<T>(init: T): { current: T };
 
   /** Bordered box with a title. */
-  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown }>;
+  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
   /** Children side by side, equal widths. Give each Panel `grow` so their borders match in height. */
   Row: Component<Kids>;
   Text: Component<Kids & { tone?: Tone; bold?: boolean }>;
@@ -350,20 +367,36 @@ export interface SdkUi {
   Meter: Component<{ value: number; width?: number; label?: string }>;
   KeyHint: Component<{ keys: string; label: string }>;
   Table: Component<{ columns: string[]; rows: string[][] }>;
-  /** Display list; `selected` is an item id. `mark` is a short colored prefix (an unread dot). */
-  List: Component<{ items: { id: string; label: string; detail?: string; tone?: Tone; mark?: { text: string; tone: Tone } }[]; selected?: string }>;
+  /**
+   * Display list; `selected` is an item id. `mark` is a short colored prefix (an unread dot). With `columns`, each item draws
+   * its `cells` in aligned columns (header row when a column has a `title`; `label` is ignored). Only the selected row scrolls
+   * its overflowing cells back and forth (marquee); pass `selected` undefined when the list has no focus.
+   * Mouse: `onPress(id)` on a mouse down on a row (it still bubbles to a `Panel` `onPress`); `onHover(id)` when the mouse
+   * enters a row and `onHover(undefined)` when it leaves. The row under the mouse that is not `selected` gets a light tint
+   * (panel background and a dim `›`); hover never changes `selected` by itself: the page decides in `onHover`.
+   */
+  List: Component<{ items: ListItem[]; selected?: string; columns?: ListColumn[]; onPress?: (id: string) => void; onHover?: (id: string | undefined) => void }>;
   /** Form of one of the module's commands (generated from its ArgSpec). enter runs it; esc cancels. */
   Form: Component<{ command: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
   Spacer: Component<{ size?: number }>;
   /**
-   * An editable form: `area` (multiline), `line` (one line) and `toggle` (space marks) fields. It owns the keyboard
-   * while mounted: tab/shift+tab move between fields, ctrl+s calls `onSubmit` with every value, esc calls `onCancel`.
+   * An editable form: `area` (multiline), `line` (one line) and `toggle` (checkbox) fields, then the buttons
+   * [ salvar ] and [ cancelar ] (always there) and [ remover ] (only with `onDelete`). It owns the keyboard while mounted:
+   * up/down and tab/shift+tab move across fields and buttons (wrapping; in an `area` only tab moves), left/right move the cursor
+   * in a `line` and between buttons, enter goes to the next field (submits on the last), toggles a `toggle` or presses a button,
+   * space toggles, ctrl+s calls `onSubmit` with every value, esc calls `onCancel`. Mouse: click focuses a field, toggles a checkbox, presses a button.
    */
   Fields: Component<{
     fields: FieldSpec[];
     initial?: Record<string, string | boolean>;
     onSubmit: (values: Record<string, string | boolean>) => void;
     onCancel: () => void;
+    /** Runs before `onSubmit`: return `{ fieldId: "message" }` to show it under that field and block the submit (the first one gets the focus). */
+    validate?: (values: Record<string, string | boolean>) => Record<string, string> | void;
+    /** Adds the destructive button. Activating it asks "remover? enter confirma · esc volta" before calling this. */
+    onDelete?: () => void | Promise<void>;
+    /** Label of that button (default "remover"). */
+    deleteLabel?: string;
   }>;
 
   /** Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. */
@@ -384,6 +417,11 @@ export interface SdkUi {
    * With `undefined` the default applies, so `useBack(inside ? leave : undefined)` works. With several mounted, the most recently mounted one that has a function wins.
    */
   useBack(fn?: () => void): void;
+  /**
+   * True while the page receives keys: in a tab, the tab is active and the tab bar is not focused; on a pushed page, while it is the top screen.
+   * The page re-renders when it changes. Use it to draw the focused panel only while the page has focus (Início does).
+   */
+  usePageFocused(): boolean;
   /** Shows the host's short notice ("nada aqui") for a key that has no effect. */
   useNudge(): (msg?: string) => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
@@ -397,6 +435,8 @@ export interface SdkUi {
     /** Focuses the tab bar (what `step` signals with `bar`). Does nothing when the page is not in a tab. */
     toBar(): void;
     pick(current: string, dir: "left" | "right" | "up" | "down"): string | undefined;
+    /** `index` moved by `delta` in a list of `count` rows, wrapping at both ends (`count` 0 gives 0). Use it for the `move` of `step`. */
+    wrap(index: number, delta: number, count: number): number;
     /**
      * The host's two-level focus rule for one key, from the state `{ panel, inside }` (keep it with `useState`).
      * Panel level: arrows pick the panel on that side; `enter` goes inside a panel with `size(id)` > 0 items.

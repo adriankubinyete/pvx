@@ -13,6 +13,8 @@ export interface TuiHarness {
   spans(): CapturedFrame;
   /** Presses a key (`"a"`, `"L"`, `"RETURN"`, `"ESCAPE"`, `"ARROW_DOWN"`...) inside `act` and flushes. */
   press(key: KeyInput, mods?: Mods): Promise<void>;
+  /** Clicks a cell (0-based): press and release. */
+  click(x: number, y: number): Promise<void>;
   /** Moves the mouse to a cell (0-based), firing hover handlers. */
   hover(x: number, y: number): Promise<void>;
   /** Types text char by char, each a `press`. */
@@ -60,6 +62,10 @@ export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: {
     waitFor: (pred) => t.waitFor(pred),
     waitForFrame: (pred) => t.waitForFrame(pred),
     press,
+    async click(x, y) {
+      await inAct(async () => t.mockMouse.click(x, y));
+      await flush();
+    },
     async hover(x, y) {
       await inAct(async () => t.mockMouse.moveTo(x, y));
       await flush();

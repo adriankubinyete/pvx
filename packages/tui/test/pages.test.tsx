@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { join } from "node:path";
 import type { ReactNode } from "react";
-import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
+import { createLogger, createRegistry, loadModules, loadTuiState, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
+import { writeFileSync } from "node:fs";
+import { gotoCard } from "./cards-helpers.ts";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, helpFor, Tabs, theme, ui } from "../src/index.ts";
 import { fitBar } from "../src/tabs/bar.ts";
@@ -300,6 +302,54 @@ test("usePanels().toBar: ↑ on the top panel of a page tab focuses the tab bar"
   expect(lastLine(t)).toContain("↓/enter entra na aba");
 });
 
+test("usePageFocused: true in the tab, false once ↑ goes to the bar (toBar), true again after ↓", async () => {
+  function Focus() {
+    const p = ui.usePanels();
+    const focused = ui.usePageFocused();
+    ui.useKey("↑", "sobe", () => p.toBar());
+    return <Panel title={`Foco${focused ? " ●" : ""}`}><Text>{`focused=${focused}`}</Text></Panel>;
+  }
+  const reg = createRegistry();
+  reg.register({ id: "foc", version: "1.0.0", entry: "x" }, { pages: { focus: { title: "Foco", tab: true, render: () => <Focus /> } } });
+  const t = await mount({ registry: reg });
+  await toDemo(t);
+  expect(t.frame()).toContain("focused=false"); // the bar owns the keys
+  await t.press("ARROW_DOWN");
+  await t.waitForFrame((f) => f.includes("focused=true"));
+  await t.press("ARROW_UP");
+  await t.waitForFrame((f) => f.includes("focused=false"));
+  expect(lastLine(t)).toContain("↓/enter entra na aba");
+  await t.press("ARROW_DOWN");
+  await t.waitForFrame((f) => f.includes("focused=true"));
+});
+
+test("usePageFocused on a pushed page: true on top; false for the page when another screen is pushed over it", async () => {
+  const seen: Record<string, boolean[]> = { a: [], b: [] };
+  function Probe({ id, next }: { id: string; next?: string }) {
+    const focused = ui.usePageFocused();
+    const router = ui.useRouter();
+    seen[id]!.push(focused);
+    if (next) ui.useKey("space", "empilha", () => router.push(next));
+    return <Text>{`${id} focused=${focused}`}</Text>;
+  }
+  const reg = createRegistry();
+  reg.register({ id: "stk2", version: "1.0.0", entry: "x" }, { pages: {
+    a: { title: "A", render: () => <Probe id="a" next="b" /> },
+    b: { title: "B", render: () => <Probe id="b" /> },
+  } });
+  const t = await mount({ registry: reg });
+  await t.press("k", { ctrl: true });
+  await t.type("#stk2.a");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("a focused=true");
+  expect(seen.a!.every(Boolean)).toBe(true);
+  const before = seen.a!.length;
+  await t.press(" ");
+  await t.waitForFrame((f) => f.includes("b focused=true"));
+  expect(t.frame()).not.toContain("a focused"); // a is under b: not rendered, so it never draws as focused again
+  expect(seen.a!.slice(before).some(Boolean)).toBe(false);
+});
+
 test("useBack(fn): esc calls fn and stays on the page; with undefined esc goes back to the bar", async () => {
   const calls: string[] = [];
   const t = await mount({ registry: stackedRegistry("leave", calls) });
@@ -335,4 +385,91 @@ test("useBack on a pushed page: esc calls fn first, then pops", async () => {
   expect(t.frame()).toContain("on=false");
   await t.press("ESCAPE");
   expect(t.frame()).toContain("Início");
+});
+
+const barLine = (t: TuiHarness) => t.frame().split("\n")[0]!;
+
+test("t on a module card hides its tab from the bar and shows it again; the choice is saved; the module still works", async () => {
+  const t = await mount({ cols: 120, rows: 30 });
+  expect(barLine(t)).toContain("Demo");
+  await t.press("TAB"); // Módulos
+  await t.press("ARROW_DOWN");
+  await gotoCard(t, "ui-demo");
+  await t.press("t");
+  expect(t.frame()).toContain("✓ aba Demo oculta");
+  expect(barLine(t)).not.toContain("Demo");
+  expect(t.frame()).toContain("aba oculta"); // the dim chip on the card
+  await t.press("RETURN");
+  expect(t.frame()).toMatch(/mostrar a aba\s+— t/);
+  expect(t.frame()).not.toContain("abrir a aba");
+  await t.press("ESCAPE");
+  await Bun.sleep(400); // the state writer is debounced
+  expect(loadTuiState(join(pvxHome(), "s.json")).hiddenTabs).toEqual(["ui-demo"]);
+  await t.press("k", { ctrl: true }); // hidden from the bar, not from the palette
+  await t.type("#counter");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("n = 0");
+  await t.press("ESCAPE");
+  await t.press("ESCAPE");
+  await t.press("t");
+  expect(t.frame()).toContain("✓ aba Demo visível");
+  expect(barLine(t)).toContain("Demo");
+  await Bun.sleep(400);
+  expect(loadTuiState(join(pvxHome(), "s.json")).hiddenTabs).toEqual([]);
+});
+
+test("the open-the-tab action goes to the module tab", async () => {
+  const t = await mount({ cols: 120, rows: 30 });
+  await t.press("TAB");
+  await t.press("ARROW_DOWN");
+  await gotoCard(t, "ui-demo");
+  await t.press("RETURN");
+  await t.press("RETURN"); // "abrir a aba Demo" is the first action
+  expect(t.frame()).toContain("estado: off");
+  expect(lastLine(t)).toContain("t alterna");
+});
+
+test("a tab hidden in the saved state is not on the bar, and the active one falls back to Módulos", async () => {
+  writeFileSync(join(pvxHome(), "s.json"), JSON.stringify({ hiddenTabs: ["ui-demo"] }));
+  const makeLogger = () => noopLog;
+  const store = createSessionStore({
+    registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
+  });
+  const nav = createTabsNav();
+  nav.active = pageTabs(registry)[0]!.id; // it was the active tab
+  const root = { id: "menu", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={nav} version="0.1.0" now={() => 1_700_000_000_000} /> };
+  h = await renderTui(
+    <App root={root} logger={noopLog} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />,
+    { cols: 120, rows: 30 },
+  );
+  expect(barLine(h)).not.toContain("Demo");
+  expect(h.frame()).toContain("instalados"); // Módulos
+});
+
+test("Panel onPress: a click anywhere in a panel calls it, so the page focuses the clicked panel", async () => {
+  function Clickable() {
+    const [panel, setPanel] = ui.useState("a");
+    const focused = ui.usePageFocused();
+    return (
+      <Panel>
+        <Panel title={`A${focused && panel === "a" ? " ●" : ""}`} onPress={() => setPanel("a")}><Text>a-body</Text></Panel>
+        <Panel title={`B${focused && panel === "b" ? " ●" : ""}`} onPress={() => setPanel("b")}><Text>b-body</Text></Panel>
+      </Panel>
+    );
+  }
+  const reg = createRegistry();
+  reg.register({ id: "clk", version: "1.0.0", entry: "x" }, { pages: { clickable: { title: "Clique", tab: true, render: () => <Clickable /> } } });
+  const t = await mount({ registry: reg });
+  await toDemo(t);
+  const at = (s: string) => { const l = t.frame().split("\n"); const y = l.findIndex((x) => x.includes(s)); return [l[y]!.indexOf(s) + 1, y] as const; };
+  expect(t.frame()).not.toContain("B ●");
+  const [x, y] = at("b-body");
+  await t.click(x, y);
+  expect(t.frame()).toContain("B ●"); // the bar had the keys: the click also entered the tab
+  expect(t.frame()).not.toContain("A ●");
+  const [ax, ay] = at("a-body");
+  await t.click(ax, ay);
+  expect(t.frame()).toContain("A ●");
+  expect(t.frame()).not.toContain("B ●");
 });

@@ -6,6 +6,7 @@ import { builtin } from "../../builtin/index.ts";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme, ui } from "../src/index.ts";
 import { conformityOf } from "../src/tabs/conformity.ts";
+import { gotoCard } from "./cards-helpers.ts";
 
 const fixtures = join(import.meta.dir, "../../core/test/fixtures");
 let h: TuiHarness | undefined;
@@ -66,16 +67,17 @@ test("Módulos marks the built-in module as official ◆", async () => {
   const { t } = await mount(await load());
   await t.press("TAB");
   await t.press("ARROW_DOWN");
-  expect(t.frame()).toMatch(/conformidade ◆/);
-  expect(t.frame()).not.toMatch(/cap-fixture ◆/);
+  expect(t.frame()).toMatch(/◆ conformidade/);
+  expect(t.frame()).toMatch(/oficial +[0-9]/); // origin on the left, the version on the right
+  expect(t.frame()).not.toMatch(/◆ cap-fixture/);
 });
 
 test("Módulos: enter on a module lists its pages first (§); enter opens the page, esc returns to the same row", async () => {
   const { t } = await mount(await load());
   await t.press("TAB");
   await t.press("ARROW_DOWN");
-  for (let i = 0; i < 20 && !/» conformidade/.test(t.frame()); i++) await t.press("ARROW_DOWN");
-  await t.press("RETURN");
+  await gotoCard(t, "conformidade");
+  await t.press("l"); // commands and pages
   expect(t.frame()).toMatch(/§ conformidade/);
   await t.press("RETURN");
   await t.flush();

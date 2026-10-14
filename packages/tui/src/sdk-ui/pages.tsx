@@ -9,7 +9,7 @@ import { Boundary, useRouter, type Screen } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import { useTabs } from "../tabs/context.ts";
 import { useTheme } from "../theme-context.tsx";
-import { activeBack, BackCtx, HostCtx, RootPanelCtx, runOwn, useHost, usePages, type BackEntry, type HostPage } from "./host.tsx";
+import { activeBack, BackCtx, FocusCtx, HostCtx, RootPanelCtx, runOwn, useHost, usePages, type BackEntry, type HostPage } from "./host.tsx";
 
 /** Keys the host owns: a page cannot take them over. */
 const RESERVED = ["esc", "?", "ctrl+c", "ctrl+k"];
@@ -58,6 +58,8 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
       return () => void backs.splice(backs.indexOf(entry), 1);
     },
   }), [page.moduleId, page.key, deps, router.push, router.pop, backs]);
+  // In a tab `enabled` already says it (active, bar not focused); a pushed page must also be the top screen.
+  const focused = enabled && (!!outerBacks || router.top.id === `#${page.key}`);
   useKeys((k) => {
     if (!enabled) return;
     if (k.name === "escape" && !outerBacks) { // pushed page: a useBack takes esc, else the router pops
@@ -75,12 +77,14 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
   });
   return (
     <HostCtx.Provider value={host}>
-      <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box()} title={`${g.query} ${clean(page.title)}`}>
-        <RootPanelCtx.Provider value={true}>
-          <Render page={page} />
-        </RootPanelCtx.Provider>
-      </box>
-      {enabled && router.scope !== "palette" ? <SessionModals store={deps.session} pending={pending} /> : null}
+      <FocusCtx.Provider value={focused}>
+        <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box()} title={`${g.query} ${clean(page.title)}`}>
+          <RootPanelCtx.Provider value={true}>
+            <Render page={page} />
+          </RootPanelCtx.Provider>
+        </box>
+        {enabled && router.scope !== "palette" ? <SessionModals store={deps.session} pending={pending} /> : null}
+      </FocusCtx.Provider>
     </HostCtx.Provider>
   );
 }

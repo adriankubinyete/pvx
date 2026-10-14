@@ -1,6 +1,6 @@
 # @pvx/sdk
 
-Contrato dos módulos do pvx (SDK v1). O pacote tem tipos e a constante `EXIT` (para o host e os testes; o módulo importa só tipos). Um módulo é um diretório com `pvx-module.json` e um arquivo de entrada que exporta uma fábrica. O modelo pronto está em `templates/pvx-module-template/`.
+Contrato dos módulos do pvx (SDK v1). O pacote tem tipos e a constante `EXIT` (para o host e os testes; o módulo importa só tipos). Um módulo é um diretório com `pvx-module.json` e um arquivo de entrada que exporta uma fábrica. O modelo pronto está em `templates/pvx-module-template/`. Para o padrão de interação e visual das telas (foco, seleção, mouse, listas, formulários), siga o [`UI.md`](../../UI.md).
 
 Os exemplos marcados com `<!-- test -->` neste arquivo são extraídos e rodados por `test/sdk-readme.test.ts`: cada um é carregado pelo loader real e verificado pelo `tsc`. Exemplo desatualizado quebra o build.
 
@@ -180,9 +180,54 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id), `Form` (formulário gerado do `ArgSpec` de um comando do módulo) e `Spacer`.
+- **Componentes:** `Panel` (`title`, `tone`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo) e `Spacer`.
 - **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)`; `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
+
+**List em colunas.** Com `columns` a `List` alinha as células de cada item em colunas, mesmo com textos de tamanhos diferentes. Cada coluna é `{ id, title?, width?, grow?, align? }`: `width` é fixa e nunca encolhe; `grow` divide o que sobra (peso relativo); sem nenhuma das duas a coluna ocupa o tamanho do conteúdo e é a primeira a encolher se faltar espaço. `align` é `"left"` (padrão) ou `"right"`. Se alguma coluna tem `title`, aparece uma linha de cabeçalho (dim). O item traz `cells: { [idDaColuna]: texto | { text, tone? } }` (`label` e `detail` são ignorados nesse modo; `tone` e `mark` valem). Célula que não cabe é cortada com `…`. A largura vem da própria lista, então acompanha o redimensionamento.
+
+**Mouse na List.** `onPress(id)` roda no clique numa linha (o clique ainda sobe para o `onPress` do `Panel`; a página ignora o do painel quando a linha já tratou, como o Início faz) e `onHover(id)` roda quando o mouse entra numa linha (`onHover(undefined)` quando sai). A linha sob o mouse que não é a `selected` ganha um destaque leve (fundo do painel e um `›` apagado), diferente da selecionada. Passar o mouse nunca muda `selected`: se a lista está ativa, mude a seleção no `onHover`.
+
+**Marquee.** Só a linha `selected` anima, e só as células cortadas: mostra o começo, espera cerca de 1,2 s, rola 1 caractere a cada 120 ms até o fim aparecer, espera de novo e volta, em vai e volta. Trocar `selected` zera a linha anterior. Sem célula cortada na linha selecionada não existe timer. Para a lista sem foco, passe `selected` indefinido: nada anima.
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, Panel, List, useState, useKey } = sdk.ui;
+  const regras = [
+    { id: "a", ip: "189.124.85.152/29", estado: "aceito", nota: "PHONEVOX REDE" },
+    { id: "b", ip: "192.168.1.1", estado: "bloqueado", nota: "teste" },
+  ];
+
+  function Regras() {
+    const [sel, setSel] = useState("a");
+    useKey("space", "próxima", () => setSel((s) => (s === "a" ? "b" : "a")));
+    return (
+      <Panel>
+        <List
+          selected={sel}
+          columns={[
+            { id: "ip", title: "IP", width: 18 },
+            { id: "estado", title: "ESTADO", width: 10 },
+            { id: "nota", title: "NOTA", grow: 1 },
+          ]}
+          items={regras.map((r) => ({
+            id: r.id,
+            cells: { ip: r.ip, estado: { text: r.estado, tone: r.estado === "aceito" ? "ok" : "error" }, nota: r.nota },
+          }))}
+        />
+      </Panel>
+    );
+  }
+
+  return { pages: { regras: { title: "Regras", render: () => <Regras /> } } };
+};
+```
 
 Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança "UI indisponível na CLI": por isso componentes só rodam dentro de `render()`.
 
@@ -192,12 +237,14 @@ Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança
 
 - `render()` devolve JSX e roda dentro do componente da página: pode chamar hooks. Se lançar, o host registra o erro, volta e avisa; o resto não é afetado.
 - Abre-se por `#<módulo>.<nome>` (ou `#<nome>`, se for único), na palette (`ctrl+k`, escopo `#`) ou no campo de comando; ou por um comando com `page`.
-- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`, `←`, `→`. Um quarto argumento `{ help: true }` põe a tecla só no `?`. `useNudge()(msg)` mostra o aviso curto do host para uma tecla sem efeito. `Row` põe filhos lado a lado e `Panel grow` iguala a altura de painéis irmãos. **Foco entre painéis: `usePanels()`.** Dê a cada `Panel` navegável `panelRef={p.ref(id)}`; `p.pick(atual, "left"|"right"|"up"|"down")` devolve o id do painel que está de fato naquela direção na tela (pela posição desenhada, então segue o layout: `→` com painéis lado a lado, `↓` empilhados). `p.step({ panel, inside }, tecla, size)` aplica a regra de dois níveis do host: no nível do painel, as setas trocam de painel e `enter` entra num painel com itens (`size(id) > 0`; sem itens vem `nudge: "nada para selecionar"`); dentro, `up`/`down` dão `move`, `enter` dá `act` e `esc` sai. A página guarda o estado e a lista; `bar` indica `↑` sem painel acima, e `p.toBar()` foca a barra de abas (o que o Início faz nesse caso; sem efeito se a página não está numa aba). **Esc: `useBack(fn?)`.** Enquanto um componente com `useBack(fn)` está montado, `esc` chama `fn` e fica na página, em vez de voltar (à barra de abas, ou à tela anterior numa página empilhada); com `fn` indefinido vale o padrão, então `useBack(inside ? sai : undefined)` funciona. Com vários montados, vale o último montado que tenha função. `ctrl+c` e `ctrl+k` continuam do host. Reservadas (ignoradas em `useKey`): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
+- **Teclas: `useKey(teclas, rótulo, handler)`.** Chame no `render` ou em qualquer componente da página: o `handler` enxerga o estado do componente, e a tecla vale enquanto o componente está montado (some do rodapé e do `?` quando ele sai). Formatos: `a`, `space`, `enter`, `ctrl+x`, `L`, `←`, `→`. Um quarto argumento `{ help: true }` põe a tecla só no `?`. `useNudge()(msg)` mostra o aviso curto do host para uma tecla sem efeito. `Row` põe filhos lado a lado e `Panel grow` iguala a altura de painéis irmãos. **Foco entre painéis: `usePanels()`.** Dê a cada `Panel` navegável `panelRef={p.ref(id)}`; `p.pick(atual, "left"|"right"|"up"|"down")` devolve o id do painel que está de fato naquela direção na tela (pela posição desenhada, então segue o layout: `→` com painéis lado a lado, `↓` empilhados). `p.step({ panel, inside }, tecla, size)` aplica a regra de dois níveis do host: no nível do painel, as setas trocam de painel e `enter` entra num painel com itens (`size(id) > 0`; sem itens vem `nudge: "nada para selecionar"`); dentro, `up`/`down` dão `move`, `enter` dá `act` e `esc` sai. A página guarda o estado e a lista; `bar` indica `↑` sem painel acima, e `p.toBar()` foca a barra de abas (o que o Início faz nesse caso; sem efeito se a página não está numa aba). **Foco da página: `usePageFocused()`.** Devolve `true` enquanto a página recebe teclas: numa aba, quando a aba está ativa e a barra de abas não tem o foco; numa página empilhada, enquanto ela é a tela do topo. A página redesenha quando o valor muda (por exemplo, depois de `p.toBar()` ou de `↓` de volta à aba). Use-o para desenhar o painel focado só enquanto a página tem o foco. **Esc: `useBack(fn?)`.** Enquanto um componente com `useBack(fn)` está montado, `esc` chama `fn` e fica na página, em vez de voltar (à barra de abas, ou à tela anterior numa página empilhada); com `fn` indefinido vale o padrão, então `useBack(inside ? sai : undefined)` funciona. Com vários montados, vale o último montado que tenha função. `ctrl+c` e `ctrl+k` continuam do host. Reservadas (ignoradas em `useKey`): `esc`, `?`, `ctrl+c`, `ctrl+k`. Uma tecla que lança vai para o log do módulo.
 - **Receita: aba de módulo como o Início.** Painéis navegáveis por setas, `enter` entra, `esc` sai, `↑` no painel de cima foca a barra:
   1. `const p = usePanels()`; dê `panelRef={p.ref(id)}` a cada `Panel`.
-  2. Guarde `{ panel, inside }` com `useState`. Nas setas e no `enter`, chame `p.step({ panel, inside }, tecla, size)` e aplique o resultado: `panel`/`inside` viram o novo estado, `move` e `act` agem na lista de dentro, `nudge` vai para `useNudge()`, e `bar` vira `p.toBar()`.
-  3. `useBack(inside ? () => setInside(false) : undefined)`: `esc` sai do painel; no nível do painel o padrão leva à barra.
-  4. Rodapé por nível: ponha as `useKey` de cada nível em um componente próprio e renderize só o do nível atual (`<NoPainel />` ou `<Dentro />`); a tecla some do rodapé quando o componente sai.
+  2. Guarde `{ panel, inside }` com `useState`. Nas setas e no `enter`, chame `p.step({ panel, inside }, tecla, size)` e aplique o resultado: `panel`/`inside` viram o novo estado, `move` e `act` agem na lista de dentro (use `p.wrap(i, move, total)` para `↑`/`↓` voltarem ao outro extremo da lista), `nudge` vai para `useNudge()`, e `bar` vira `p.toBar()`.
+  3. Desenhe o painel focado (borda de destaque e `●`) só com `usePageFocused()` verdadeiro: `focused = usePageFocused() && f.panel === id`. Assim, com o foco na barra de abas, nenhum painel aparece focado, como no Início.
+  4. `useBack(inside ? () => setInside(false) : undefined)`: `esc` sai do painel; no nível do painel o padrão leva à barra.
+  5. Rodapé por nível: ponha as `useKey` de cada nível em um componente próprio e renderize só o do nível atual (`<NoPainel />` ou `<Dentro />`); a tecla some do rodapé quando o componente sai.
+  6. Clique do mouse: `<Panel onPress={() => setF({ panel: id, inside: false })}>` é chamado no clique em qualquer ponto do painel (filhos incluídos); use-o para focar o painel clicado.
 
   ```tsx
   const [f, setF] = useState({ panel: "a", inside: false });
@@ -402,7 +449,27 @@ const factory: ModuleFactory = () => ({
 export default factory;
 ```
 
-Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário com `area`, `line` e `toggle`; `ctrl+s` envia, `esc` cancela), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
+Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário, veja abaixo), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
+
+`ui.Fields` desenha um formulário com campos `area`, `line` e `toggle` (caixa de marcar; `text` é o texto ao lado dela) e os botões `[ salvar ]` e `[ cancelar ]`, sempre presentes. Todo o teclado é do formulário:
+
+- `↑`/`↓` e `tab`/`shift+tab` andam por campos e botões, dando a volta (dentro de uma `area` só o `tab` anda).
+- `←`/`→` movem o cursor no texto e, num botão, passam para o botão vizinho.
+- `enter` num texto vai ao próximo campo e, no último, envia; numa caixa marca; num botão ativa. `espaço` também marca.
+- `ctrl+s` sempre envia e `esc` cancela. O mouse foca o campo, marca a caixa e ativa o botão.
+- `validate(valores)` roda antes de `onSubmit`: devolva `{ idDoCampo: "mensagem" }` para mostrar o erro sob o campo e bloquear o envio.
+- `onDelete` (e `deleteLabel`, padrão "remover") acrescenta o botão `[ remover ]`; ele pergunta "remover? enter confirma · esc volta" antes de chamar a função.
+
+```tsx
+<Fields
+  fields={[
+    { id: "ip", label: "IP ou CIDR", kind: "line" },
+    { id: "deny", label: "bloquear", kind: "toggle", text: "em vez de aceitar" },
+  ]}
+  validate={(v) => (String(v.ip).trim() ? undefined : { ip: "informe o IP" })}
+  onSubmit={salva} onCancel={volta} onDelete={remove}
+/>
+```
 
 <!-- test -->
 ```ts
@@ -432,9 +499,11 @@ export default factory;
 
 **Modelo de confiança**
 
-- Um módulo instalado por `modules add` só é importado depois de o técnico aprovar aquele commit (`modules trust <id> --sha <sha>`, ou `--trust` no `add`). A aprovação fica em `PVX_HOME/trust.json` com o sha, quem aprovou e as permissões vistas.
+- Um módulo instalado por `modules add` só é importado depois de o técnico aprovar aquele commit, por padrão um a um (`modules trust <id> --sha <sha>`, ou `--trust` no `add`; veja "confiança sempre" abaixo). A aprovação fica em `PVX_HOME/trust.json` com o sha, quem aprovou e as permissões vistas.
 - O módulo só carrega se `HEAD` for igual ao sha aprovado e a árvore git estiver limpa. Commit novo ou arquivo alterado: não carrega.
-- `modules update` busca e lista os commits novos e as mudanças de permissões, mas só avança com `--trust <sha do remoto>`; o avanço vai exatamente àquele commit (fast-forward).
+- `modules update` busca e lista os commits novos e as mudanças de permissões. Por padrão só avança com `--trust <sha do remoto>`; o avanço vai exatamente àquele commit (fast-forward). A exceção é a confiança sempre, descrita abaixo.
+- **Confiança sempre** (`--always` junto de `--trust` ou `--sha`; tecla `T` na tela de revisão): os commits novos da mesma origem (a mesma URL) entram no `modules update` sem revisão. Continuam exigidos fast-forward, árvore limpa e manifest legível; cada aplicação automática fica no registro de auditoria. Revogue com `modules trust --revoke <id>`. A verificação em segundo plano da TUI só avisa, nunca aplica.
+- **Módulos do catálogo** são confiados sempre: a instalação por id do catálogo, ou por uma URL igual à de uma entrada do catálogo, não abre a revisão, e as atualizações entram direto. Quem usa o catálogo confia em quem o publica.
 - Nenhuma variável de ambiente desliga a confiança. `PVX_USERMODULES` só muda o diretório. Módulos embutidos no binário não passam pelo gate: são código do próprio pvx.
 - Git roda sem hooks, sem submódulos, sem credenciais na URL, só `https` e `ssh`.
 - Um symlink em `usermodules/` só carrega se `modules link` o registrou (`PVX_HOME/modules.json`) e se ainda aponta para onde foi registrado. Um módulo dev (link) carrega **sem confiança por commit**: é para a máquina de quem desenvolve, não para uma central de cliente. Na TUI ele recarrega ao salvar; um erro de carga aparece no scrollback e a versão anterior continua ativa. Sem `dispose` ainda: timers e listeners da versão antiga continuam rodando depois da recarga.
