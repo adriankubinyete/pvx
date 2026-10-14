@@ -635,7 +635,7 @@ No `ReadCtx` (provas, consultas, widgets) `ctx.shell` só tem `run` e `ok`, sobr
 
 `opts` é o de `ctx.exec` mais `display` (o texto do comando no `StepError`, para quando o argv leva um segredo). O corredor de fases (`ctx.phases`) grava o `command`, o `code` e o `output` de um `StepError` na falha da fase.
 
-`store.update(chave, mudar)` lê o valor (`undefined` se faltar), aplica `mudar` e grava o resultado, que também devolve: `store.update<number>("contagem", (atual) => (atual ?? 0) + 1)`.
+`store.update(chave, mudar)` lê o valor (`undefined` se faltar), aplica `mudar` e grava o resultado, que também devolve: `store.update<number>("contagem", (atual) => (atual ?? 0) + 1)`. O estado é gravado com permissão 0600.
 
 `sdk.strategy.pick(estratégias, { setting, none })` escolhe o backend que o módulo dirige. Cada estratégia é `{ id, available() }`. Com `setting` ausente ou `"auto"` vale a primeira disponível, na ordem da lista (`auto: true`); se nenhuma está, devolve `{ error: none }`. Com um `setting` explícito vale esse `id` sem perguntar `available` (o módulo explica depois por que ele não roda); um `id` desconhecido é `{ error }`. O mesmo `pick` está em `ctx.strategy` (em `CommandCtx` e em `ReadCtx`): um comando ou uma prova que escolhe o backend o chama sem depender do `sdk` da fábrica.
 

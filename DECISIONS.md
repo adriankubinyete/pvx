@@ -29,6 +29,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - O host nunca cita um módulo pelo nome; papéis no lugar → [Fase 6C: banner de login, gancho `motd` e papéis (o host não cita módulo)](#2026-10-09--fase-6c-banner-de-login-gancho-motd-e-papéis-o-host-não-cita-módulo)
 - `!cmd` roda no shell do host como o usuário atual, sem root, auditado quando possível → [`!cmd`: shell do host, sem root](#2026-10-13--cmd-shell-do-host-sem-root)
 - Sondas, consultas e widgets recebem um contexto somente leitura com `exec` → [Sondas com `exec` somente leitura](#2026-10-13--sondas-com-exec-somente-leitura)
+- Estado do módulo (`state.json`) gravado com 0600 em pasta 0700, por arquivo temporário e `rename` → [Estado do módulo com permissão 0600](#2026-10-14--estado-do-módulo-com-permissão-0600)
 
 ### Distribuição e execução
 
@@ -1239,3 +1240,17 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** Desenvolver contra uma pasta local (`../meu-modulo`) pedia `sudo -E` e um `PVX_HOME` à mão; e o teste de página lia a sessão real da máquina nos comandos.
 
 **Limite:** `dev:link` só mexe em `.dev/pvx`; para outro `PVX_HOME` use `modules link` com root.
+
+## 2026-10-14 — Estado do módulo com permissão 0600
+
+**Status:** vigente.
+
+**Decisão:** o `store` do host grava `state.json` com modo 0600 e cria a pasta de estado com 0700.
+
+- **Escrita.** Arquivo temporário ao lado, criado 0600, depois `rename`. Um arquivo antigo mais aberto é trocado na próxima escrita, então fica 0600.
+- **Já protegidos:** `jobs/` (pasta 0700; segredos em 0600) e o estado das fases (vive no `store`).
+- **Deixados como estão:** `audit` e journal (0644: o log é de leitura aberta por desenho), `modules.json`, `trust.json` e `tui-state.json` (sem dado sensível: ids, commits aprovados, tema), cache do catálogo.
+
+**Motivo:** `state.json` saía 0644 pelo umask e qualquer usuário local lia o estado do módulo (tokens, por exemplo).
+
+**Limite:** arquivos que já existem só são apertados na próxima escrita; a pasta já criada com 0755 não muda.
