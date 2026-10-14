@@ -38,7 +38,9 @@ interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; onHo
 const Row = memo(function Row({ id, hit, selected, fav, onHover, onPick }: RowProps) {
   const { c, g } = useTheme();
   const mark = hit.core ? [g.core, c.info] : hit.page ? [g.page, c.dim] : hit.origin === "official" ? [g.official, c.accent] : hit.origin === "dev" ? [g.dev, c.warn] : [g.thirdParty, c.thirdParty];
-  const key = hit.key.length > 30 ? `${hit.key.slice(0, 29)}…` : hit.key;
+  const full = hit.page ? hit.label ?? hit.key : hit.key;
+  const max = hit.page && hit.tab ? 26 : 30; // room for the " aba" tag
+  const key = full.length > max ? `${full.slice(0, max - 1)}…` : full;
   const [a, b] = hit.range && hit.range[1] <= key.length ? hit.range : [0, 0];
   return (
     <box
@@ -51,6 +53,7 @@ const Row = memo(function Row({ id, hit, selected, fav, onHover, onPick }: RowPr
         <span fg={c.text}>{key.slice(0, a)}</span>
         <span fg={c.accent}><b>{key.slice(a, b)}</b></span>
         <span fg={c.text}>{key.slice(b)}</span>
+        <span fg={c.dim}>{hit.page && hit.tab ? " aba" : ""}</span>
         <span fg={c.error}>{hit.destructive ? " !" : ""}</span>
         <span fg={c.warn}>{fav ? ` ${g.favorite}` : ""}</span>
       </text>
@@ -193,8 +196,18 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
       <box flexGrow={1} flexDirection="column" paddingLeft={1}>
         {hit && built ? (
           <>
-            <text fg={c.text}>{`${hit.key}${hit.destructive ? " !" : ""}`}</text>
-            <text fg={c.dim}>{hit.help}</text>
+            {hit.page ? (
+              <>
+                <text fg={c.text}>{`página ${hit.label}`}</text>
+                <text fg={c.dim}>{`módulo ${clean(hit.moduleId)}`}</text>
+                <text fg={c.dim}>{hit.tab ? "aba na barra" : "abre com enter"}</text>
+              </>
+            ) : (
+              <>
+                <text fg={c.text}>{`${hit.key}${hit.destructive ? " !" : ""}`}</text>
+                <text fg={c.dim}>{hit.help}</text>
+              </>
+            )}
             {hit.page ? null : <Form specs={specs} values={values} focus={focus} cursor={fcur} line={built} last={last} />}
           </>
         ) : null}

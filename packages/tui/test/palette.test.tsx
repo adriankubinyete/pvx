@@ -170,3 +170,40 @@ test("→ on a command without args nudges \"sem argumentos\", and the notice go
   await h!.flush();
   expect(h!.frame()).not.toContain("sem argumentos");
 });
+
+test("`#` pages: rows show the title (not the key), tab pages carry an `aba` tag, preview does not repeat", async () => {
+  const pages = search(registry, "#");
+  expect(pages.length).toBeGreaterThan(0);
+  expect(search(registry, "#quadro")[0]).toMatchObject({ key: "ui-demo.board", label: "Quadro", tab: true, range: [0, 6] });
+  expect(search(registry, "#ui-demo.board")[0]).toMatchObject({ key: "ui-demo.board", range: null }); // found by key, nothing to highlight in the title
+  expect(search(registry, "#ui-demo.counter")[0]).toMatchObject({ label: "Contador", tab: false });
+  expect(search(registry, "#visão")[0]).toMatchObject({ key: "ui-demo.overview", range: [0, 5] });
+  await open(fake().session);
+  await h!.type("#ui-demo");
+  const f = h!.frame();
+  expect(f).toContain("Quadro aba");
+  expect(f).toContain("Contador");
+  expect(f).not.toContain("§ ui-demo.");
+  expect(f).toContain("página Quadro");
+  expect(f).toContain("módulo ui-demo");
+  expect(f).toContain("aba na barra");
+});
+
+test("`#` page whose title equals the module id is not printed twice as a key", async () => {
+  const reg = createRegistry();
+  const noop = { debug() {}, info() {}, warn() {}, error() {} };
+  const { builtin } = await import("../../builtin/index.ts");
+  const { ui } = await import("../src/index.ts");
+  await loadModules(reg, { hostVersion: "1.0.0", makeLogger: () => noop, ui, builtin });
+  expect(search(reg, "#conformidade")[0]).toMatchObject({ key: "conformidade.conformidade", label: "conformidade", range: [0, 12] });
+  expect(search(reg, "#conformidade.conformidade")).toHaveLength(1); // by key too
+  let closed = 0;
+  h = await renderTui(
+    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={fake().session} registry={reg} onClose={() => closed++} /></KeyRouter></NudgeProvider></ThemeProvider>,
+  );
+  await h.type("#conf");
+  const f = h.frame();
+  expect(f).not.toContain("conformidade.conformidade");
+  expect(f).toContain("página conformidade");
+  expect(f).toContain("abre com enter");
+});

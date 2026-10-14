@@ -19,7 +19,11 @@ export interface Hit {
   /** A core command (group "núcleo"); its `args` come from the CORE list, not from the registry. */
   core?: boolean;
   args?: ArgSpec[];
-  /** Matched range in `key` (start inclusive, end exclusive); null when nothing to highlight. */
+  /** Page row text: the title, or the key part after the module id. */
+  label?: string;
+  /** The page is also a tab in the tab bar. */
+  tab?: boolean;
+  /** Matched range in `key` (in `label` for pages; start inclusive, end exclusive); null when nothing to highlight. */
   range: [number, number] | null;
 }
 
@@ -58,8 +62,13 @@ export function search(registry: Registry, query: string): Hit[] {
   const hits: (Hit & { r: number })[] = [];
   if (scope !== ">" && scope !== "!") {
     for (const p of registry.pages.values()) {
+      const title = clean(p.title);
+      const label = title || p.key.slice(p.moduleId.length + 1) || p.key;
+      const byLabel = scope === "@" ? null : rank(label, term);
       const m = scope === "@" ? rank(p.moduleId, term) : rank(p.key, term);
-      if (m.r >= 0) hits.push({ key: p.key, moduleId: p.moduleId, origin: originOf(registry.modules.get(p.moduleId)), help: clean(p.title), destructive: false, page: true, range: scope === "@" ? null : m.range, r: m.r });
+      const r = byLabel && byLabel.r >= 0 && (m.r < 0 || byLabel.r <= m.r) ? byLabel.r : m.r; // best of title and key
+      if (r < 0) continue;
+      hits.push({ key: p.key, moduleId: p.moduleId, origin: originOf(registry.modules.get(p.moduleId)), help: title, label, tab: !!p.tab, destructive: false, page: true, range: byLabel && byLabel.r >= 0 ? byLabel.range : null, r });
     }
   }
   if (scope !== "#" && scope !== "!") {
