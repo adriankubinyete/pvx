@@ -99,6 +99,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Duas `List` com `onAction` na mesma tela: só a lista que tem uma linha com o id de `selected` registra o `enter` (o rodapé o mostra uma vez, sem chave duplicada no React) → [List: só a lista dona da seleção registra o enter](#2026-10-14--list-só-a-lista-dona-da-seleção-registra-o-enter)
 - `ctx.net.fetch` com `body` binário, `bodyFile`, `signal` e `timeoutMs` (30 s); `ctx.net.upload` (multipart em fluxo, sem carregar o arquivo); `ctx.fs` com `entries`, `stat`, `du`, `free`, `mkdir` e `remove` recursivo (as leituras também no `ReadCtx`); `@pvx/testing` com `buffer: false` honrado, `fs` e `net` falsos completos → [SDK: envio binário em `ctx.net`, mais operações em `ctx.fs` e fakes completos](#2026-10-14--sdk-envio-binário-em-ctx-net-mais-operações-em-ctx-fs-e-fakes-completos)
 - `useCommand(linha).run({ args, stdin, secrets })`: o segredo vai ao comando pelo ambiente da execução (como o `Form`), nunca por argv nem pela linha do scrollback → [useCommand().run aceita secrets](#2026-10-14--usecommand-run-aceita-secrets)
+- `sdk.cron` (`validate`, `describe`, `normalize`), `sdk.crontab.block(id)` (leitura com "no crontab for", fusão do bloco marcado, escrita conferida e volta) e `sdk.validate.firstProblem` → [SDK: sdk.cron, sdk.crontab e sdk.validate](#2026-10-14--sdk-sdk-cron-sdk-crontab-e-sdk-validate)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1300,3 +1301,18 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o autobackup colava o token por `args` para entrar no UOE, e um argumento aparece no argv e na linha.
 
 **Limite:** continua valendo só para argumentos declarados `secret: true`; um valor passado em `args` não é mascarado.
+
+## 2026-10-14 — SDK: sdk.cron, sdk.crontab e sdk.validate
+
+**Status:** vigente.
+
+**Decisão:** o que o autobackup mantinha de cron e de crontab (`validate.ts`, `schedule.ts`, `crontab.ts`) vira SDK, pois qualquer módulo que agenda precisa do mesmo.
+
+- **`sdk.cron`.** `validate` (cinco campos, texto pt-BR com o campo e a faixa; recusa `@reboot`, nomes, `%` e aspas), `describe` (`diário 03:30`, `semanal dom 02:00`, `mensal dia 5 03:30`, `a cada 15 min`, `de hora em hora`, `a cada 2 h`; o resto volta normalizado) e `normalize`.
+- **`sdk.crontab.block(id)`.** As marcas saem do id (`# BEGIN pvx <id> (gerenciado pelo pvx: não edite à mão)` e `# END pvx <id>`), iguais às que o autobackup já grava, então os crontabs existentes continuam valendo. `read` pede o locale C e só aceita "no crontab for" como vazio; outra falha lança `CrontabError`. `merge` troca só o bloco e mantém todas as outras linhas; um bloco danificado vira erro, nunca um palpite. `sync` confere o código de saída da escrita e devolve o crontab anterior; `restore` e `update(shell, entradas, commit)` voltam o crontab quando o `commit` (gravar o estado) falha.
+- **`sdk.validate.firstProblem`.** O `sdk.proof.firstProblem` roda passos assíncronos que devolvem `Proof`; uma validação escolhe entre textos já calculados, então ganhou um helper próprio e pequeno.
+- **Fica no módulo:** a marca do módulo antigo (`LEGACY_MARKERS`), a linha de cada rotina e `staleLimitMs`.
+
+**Motivo:** o autobackup tinha cópias próprias de tudo isso, com testes; outro módulo com agenda as reescreveria.
+
+**Limite:** `describe` só conhece os ritmos acima (dia da semana único, dia do mês único; faixas e listas voltam como escritas). `block` mexe no crontab do usuário que roda o pvx e não trata `/etc/cron.d`.

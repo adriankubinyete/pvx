@@ -3,7 +3,7 @@
 // calls `command.run(ctx)` and reads what was printed, run and written. Nothing real runs and nothing real is written.
 import type { AbortSignalLike, CommandCtx, ExecOpts, ExecResult, FsSpace, Logger, ModuleFs, ModuleNet, NetInit, NetResponse, NetUploadInit, OutLine, ReadCtx, Sdk, SessionInfo, Store } from "@pvx/sdk";
 import { fakeFs, type FakeFs } from "./fake-fs.ts";
-import { argGetters, createPhases, createReadShell, createShell, errorsKit, packagesKit, phasesKit, proofKit, strategyKit } from "@pvx/core";
+import { argGetters, cronKit, crontabKit, validateKit, createPhases, createReadShell, createShell, errorsKit, packagesKit, phasesKit, proofKit, strategyKit } from "@pvx/core";
 
 export interface Call {
   cmd: string;
@@ -246,5 +246,5 @@ export function fakeReadCtx(system: FakeSystem): ReadCtx {
 
 /** The `sdk` a factory receives when a test builds the module without the host. `ui` is empty: nothing here renders a page. */
 export function fakeSdk(fs: ModuleFs = fakeFs()): Sdk {
-  return { version: 1, log: quietLog, ui: {} as Sdk["ui"], proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, phases: phasesKit, fs };
+  return { version: 1, log: quietLog, ui: {} as Sdk["ui"], proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, phases: phasesKit, cron: cronKit, crontab: crontabKit, validate: validateKit, fs };
 }

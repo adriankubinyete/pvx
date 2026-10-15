@@ -17,3 +17,5 @@ export * from "./shell.ts";
 export * from "./phases.ts";
 export { strategyKit } from "./strategy.ts";
 export { packagesKit } from "./packages.ts";
+export { cronKit } from "./cron.ts";
+export { crontabKit } from "./crontab.ts";

@@ -27,7 +27,7 @@ O `entry` exporta por padrão uma função `(sdk) => ModuleDef`. O host a chama 
 
 **A fábrica não faz trabalho.** Ela só monta e devolve o objeto: nada de ler arquivo, abrir rede, rodar programa ou gravar estado. Todo efeito acontece dentro de `run()`, `prove()`, `data()` ou de uma consulta. O motivo: carregar tem de ser barato e seguro, e um módulo com defeito não pode travar a partida.
 
-`sdk` traz `version` (1), `log` (`debug`, `info`, `warn`, `error`), `ui` (veja adiante), `proof` (veja Capacidades), `errors` e `phases` (veja `ctx.shell` e Fases com retomada) e `fs`.
+`sdk` traz `version` (1), `log` (`debug`, `info`, `warn`, `error`), `ui` (veja adiante), `proof` (veja Capacidades), `errors` e `phases` (veja `ctx.shell` e Fases com retomada), `cron`, `crontab` e `validate` (veja `sdk.cron`, `sdk.crontab` e `sdk.validate`) e `fs`.
 
 <!-- test -->
 ```ts
@@ -720,6 +720,58 @@ const factory: ModuleFactory = (sdk) => ({
     },
   },
 });
+export default factory;
+```
+
+## `sdk.cron`, `sdk.crontab` e `sdk.validate`
+
+**`sdk.cron`** (puro). `validate(expressão)` devolve `undefined` se são cinco campos válidos (minuto hora dia-do-mês mês dia-da-semana; `*`, `5`, `1-5`, listas com vírgula, `/passo`; 0 e 7 são domingo) ou um texto em pt-BR que diz o campo errado e a faixa (`agendamento inválido, minuto: use de 0 a 59`). Recusa `@reboot`, nomes (`mon`), `%` e aspas: o texto vai parar num crontab. `describe(expressão)` dá um texto curto: `diário 03:30`, `semanal dom 02:00`, `mensal dia 5 03:30`, `a cada 15 min`, `de hora em hora`, `a cada 2 h`; o que não cabe nesses ritmos volta normalizado, como foi escrito. `normalize(expressão)` deixa um espaço entre os campos.
+
+**`sdk.validate.firstProblem(...problemas)`** devolve o primeiro texto de problema de uma lista de checagens (cada uma `string | undefined`, como `sdk.cron.validate` responde), ou `undefined`. Não é o `sdk.proof.firstProblem`: aquele roda passos que devolvem `Proof` e é assíncrono; este só escolhe entre textos já calculados.
+
+**`sdk.crontab.block(id)`** é o bloco marcado de um módulo no crontab do usuário (`# BEGIN pvx <id> (gerenciado pelo pvx: não edite à mão)` até `# END pvx <id>`): o módulo é dono das linhas entre as marcas e não toca em mais nenhuma. Precisa de `crontab` em `permissions.exec`.
+
+| API | O que faz |
+| --- | --- |
+| `block.read(shell)` | As linhas do crontab (`crontab -l` no locale C). `[]` só quando a resposta é "no crontab for <usuário>"; qualquer outra falha lança um `CrontabError`: um tropeço nunca vira a gravação de um crontab vazio por cima do verdadeiro. |
+| `block.entries(linhas)` / `block.merge(linhas, entradas)` | Puros. `entries` lê as linhas do bloco; `merge` troca o bloco por `entradas` (some sem entradas, vai ao fim se não existia) e mantém toda linha de fora. Um bloco pela metade, repetido ou invertido (editado à mão) devolve `{ error }` em vez de adivinhar. |
+| `block.sync(shell, entradas)` | Lê, funde e grava (`crontab -`, o código de saída é conferido). Devolve o crontab como estava. Lança `CrontabError` e não grava nada se a leitura falha ou o bloco está danificado. |
+| `block.restore(shell, linhas)` | Grava `linhas` como o crontab inteiro: o caminho de volta. |
+| `block.update(shell, entradas, commit)` | `sync` e depois `commit()` (grave o seu estado). Se `commit` lança, o crontab volta ao que era e o erro do `commit` é relançado: crontab e estado nunca divergem. Se a volta também falha, o `CrontabError` diz que o crontab pode ainda ter o bloco novo. |
+
+`sdk.crontab.isError(erro)` diz se o erro é um `CrontabError` (o texto já traz a causa e o que fazer).
+
+<!-- test -->
+```ts
+import type { ModuleFactory } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["crontab"] }
+const factory: ModuleFactory = (sdk) => {
+  const block = sdk.crontab.block("meumodulo");
+  return {
+    commands: {
+      agenda: {
+        help: "Agenda a rotina no crontab",
+        args: [{ name: "quando", help: "Cron de 5 campos", kind: "positional", required: true }],
+        async run(ctx) {
+          const quando = sdk.cron.normalize(ctx.arg("quando") ?? "");
+          const problem = sdk.validate.firstProblem(sdk.cron.validate(quando), quando.includes("*/1 ") ? "use `* * * * *` para todo minuto" : undefined);
+          if (problem) {
+            ctx.out.error(problem);
+            return;
+          }
+          try {
+            await block.update(ctx.shell, [`${quando} /usr/bin/pvx meumodulo rodar >/dev/null 2>&1`], () => ctx.store.set("quando", quando));
+          } catch (error) {
+            ctx.out.error(sdk.crontab.isError(error) ? error.message : sdk.errors.describeFailure(error));
+            return;
+          }
+          ctx.out.success(`agendado: ${sdk.cron.describe(quando)}`);
+        },
+      },
+    },
+  };
+};
 export default factory;
 ```
 

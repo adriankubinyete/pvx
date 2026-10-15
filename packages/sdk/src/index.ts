@@ -541,6 +541,64 @@ export interface ErrorsKit {
   stepError(message: string, command: string, code: number | undefined, output: string[]): StepError;
 }
 
+/** `sdk.cron`: the five-field cron expressions a module puts in a crontab. Pure. */
+export interface CronKit {
+  /** The expression with single spaces between fields. */
+  normalize(expression: string): string;
+  /**
+   * `undefined` when `expression` is five valid fields (minute hour day-of-month month day-of-week; `*`, `5`, `1-5`, lists with `,`, `/step`; 0 and 7 are Sunday),
+   * else a pt-BR text that says which field is wrong and the range it takes. `@reboot`, names (`mon`, `jan`), `%` and quotes are refused: the text ends up in a crontab.
+   */
+  validate(expression: string): string | undefined;
+  /** A short pt-BR text for a valid expression: `diário 03:30`, `semanal dom 02:00`, `mensal dia 5 03:30`, `a cada 15 min`, `de hora em hora`, `a cada 2 h`. Any other expression is returned normalized, as written. */
+  describe(expression: string): string;
+}
+
+/** What `sdk.crontab` throws: the crontab could not be read or written, or its managed block is damaged. Nothing was changed. */
+export interface CrontabError extends Error {
+  name: "CrontabError";
+}
+
+/** One module's marked block of a user's crontab: the module owns the lines between the markers and touches nothing else. */
+export interface CrontabBlock {
+  /** `# BEGIN pvx <id> (gerenciado pelo pvx: não edite à mão)`. */
+  readonly begin: string;
+  /** `# END pvx <id>`. */
+  readonly end: string;
+  /**
+   * The lines of the user's crontab (`crontab -l`, in the C locale). `[]` only when the answer is "no crontab for <user>"; any other failure
+   * throws a `CrontabError`, so a hiccup can never turn into a write of an empty crontab over the real one. Needs `crontab` in `permissions.exec`.
+   */
+  read(shell: Pick<Shell, "run">): Promise<string[]>;
+  /** The entries inside the block of `lines`, `[]` when there is none, or `{ error }` for a half, reversed or duplicated block (someone edited it by hand). */
+  entries(lines: string[]): string[] | { error: string };
+  /** `lines` with the block replaced by `entries` (dropped when `entries` is empty, appended when there was none). Every line outside the block stays as it was. */
+  merge(lines: string[], entries: string[]): { lines: string[] } | { error: string };
+  /** Reads, merges and installs (`crontab -`, the exit is checked). Returns the crontab as it was. Throws a `CrontabError` and writes nothing when the read fails or the block is damaged. */
+  sync(shell: Pick<Shell, "run" | "must">, entries: string[]): Promise<string[]>;
+  /** Installs `lines` as the whole crontab, checking the exit: the way back after a `sync`. */
+  restore(shell: Pick<Shell, "must">, lines: string[]): Promise<void>;
+  /**
+   * `sync`, then `commit()` (save your state). When `commit` throws, the crontab is restored to what it was and the error is rethrown, so the crontab
+   * and the state never disagree. If the restore fails too, the `CrontabError` says the crontab may still hold the new block.
+   */
+  update(shell: Pick<Shell, "run" | "must">, entries: string[], commit: () => void | Promise<void>): Promise<void>;
+}
+
+/** `sdk.crontab`. */
+export interface CrontabKit {
+  /** The block of module `id` (`autobackup`): the markers are derived from it, so two modules never touch each other's lines. */
+  block(id: string): CrontabBlock;
+  /** True for the error `read`, `sync`, `restore` and `update` throw. */
+  isError(error: unknown): error is CrontabError;
+}
+
+/** `sdk.validate`: helpers for the checks a command runs on what the technician typed. */
+export interface ValidateKit {
+  /** The first problem text of a list of checks (each one `string | undefined`, as `sdk.cron.validate` answers), or `undefined` when all pass. */
+  firstProblem(...problems: (string | undefined)[]): string | undefined;
+}
+
 /** What the host injects into the factory. */
 export interface Sdk {
   version: 1;
@@ -555,6 +613,12 @@ export interface Sdk {
   errors: ErrorsKit;
   /** Reads the phases state: `progress` and `finished`. */
   phases: PhasesKit;
+  /** Cron expressions: `validate`, `describe`, `normalize`. */
+  cron: CronKit;
+  /** The managed block of a crontab: `block(id)` reads, merges and writes it safely. */
+  crontab: CrontabKit;
+  /** `firstProblem` for validation texts. */
+  validate: ValidateKit;
   /** Same permission rules as `ctx.fs`, for code that has no command context (queries, widgets). */
   fs: ModuleFs;
 }

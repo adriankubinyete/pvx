@@ -1,4 +1,4 @@
-import type { CommandCtx, Proof, ProofKit } from "@pvx/sdk";
+import type { CommandCtx, Proof, ProofKit, ValidateKit } from "@pvx/sdk";
 
 type Args = CommandCtx["args"];
 
@@ -27,4 +27,9 @@ export const proofKit: ProofKit = {
     }
     return undefined;
   },
+};
+
+/** `sdk.validate`. */
+export const validateKit: ValidateKit = {
+  firstProblem: (...problems) => problems.find((problem) => problem !== undefined),
 };
