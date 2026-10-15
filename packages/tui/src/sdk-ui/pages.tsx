@@ -147,11 +147,11 @@ export function PageHost() {
 }
 
 /** `sdk.ui.Form`: the form of one of the module's commands, drawn by `Fields` (no box, no command line). */
-export const Form: Component<Parameters<SdkUi["Form"]>[0]> = ({ command, title, description, submitLabel, derive, onRun, onCancel }) => {
+export const Form: Component<Parameters<SdkUi["Form"]>[0]> = ({ command, title, description, submitLabel, busyLabel, derive, onRun, onCancel }) => {
   const host = useHost();
   const cmd = host.deps.registry.commands.get(command);
   if (!cmd || cmd.moduleId !== host.moduleId) throw new Error(`Form: "${command}" não é um comando deste módulo`);
   if (!cmd.args?.length) return <text>{`${clean(command)}: sem argumentos`}</text>;
-  const run = (line: string, secrets: Record<string, string>) => void runOwn(host, line, secrets).then((result) => onRun?.(result));
-  return <CommandForm line={command} args={cmd.args} title={title ?? clean(cmd.title ?? cmd.help)} description={description ?? (cmd.title ? helpOf(cmd.help) : undefined)} submitLabel={submitLabel} derive={derive} onRun={run} onCancel={() => onCancel?.()} />;
+  const run = (line: string, secrets: Record<string, string>) => runOwn(host, line, secrets).then((result) => onRun?.(result));
+  return <CommandForm line={command} args={cmd.args} title={title ?? clean(cmd.title ?? cmd.help)} description={description ?? (cmd.title ? helpOf(cmd.help) : undefined)} submitLabel={submitLabel} busyLabel={busyLabel} derive={derive} onRun={run} onCancel={() => onCancel?.()} />;
 };

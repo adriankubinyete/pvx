@@ -1,6 +1,8 @@
-import { memo, useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
+import { BACKGROUND_NUDGE } from "../sdk-ui/busy.ts";
+import { Loading } from "../sdk-ui/flow.tsx";
 import { useNudge } from "../nudge.tsx";
 import { matchKey } from "../keymap.ts";
 import { editLine } from "../lineedit.ts";
@@ -80,6 +82,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   const [queue, setQueue] = useState<{ display: string; secrets: Record<string, string> }[]>([]);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const left = useRef(false); // esc closed the palette while the queue was still running
 
   const rev = useRegistryRev(registry); // a module added or removed while the palette is open
   const hits = useMemo(() => search(registry, query), [registry, rev, query]);
@@ -124,7 +127,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
   async function runAll(list: { display: string; secrets: Record<string, string> }[]) {
     setBusy(true);
     for (const it of list) if ((await session.run(it.display, { secrets: it.secrets })).exit !== 0) break; // stops at the first failure
-    onClose();
+    if (!left.current) onClose();
   }
   const ready = () => {
     if (!built) return null;
@@ -137,8 +140,18 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     if (it) setQueue([...queue, it]);
   };
 
+  /** While the queue runs only `esc` works: it closes the palette and the commands go on. */
+  const leaveBusy = () => {
+    left.current = true;
+    nudge(BACKGROUND_NUDGE);
+    onClose();
+  };
+
   useKeys((k) => {
-    if (busy) return;
+    if (busy) {
+      if (matchKey(k, "esc")) leaveBusy();
+      return;
+    }
     setMsg("");
     if (matchKey(k, "esc")) return focus >= 0 ? setFocus(-1) : onClose();
     if (matchKey(k, "ctrl+enter") || matchKey(k, "ctrl+j")) return queue.length ? void runAll(queue) : setMsg("fila vazia");
@@ -224,7 +237,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
         <text><span fg={c.accent}>{`${g.query} `}</span><LineText line={{ text: query, cursor: qcur }} focused={focus < 0} width={30} /><span fg={c.dim}>{query ? "" : " @módulo  >comando  #página  !destrutivo"}</span></text>
         {body}
         <text fg={queue.length ? c.accent : c.dim}>{queue.length ? `fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}` : "fila vazia"}</text>
-        <text fg={c.warn}>{busy ? "rodando..." : msg}</text>
+        {busy ? <Loading label="rodando…" /> : <text fg={c.warn}>{msg}</text>}
       </box>
       <SessionModals store={session} pending={pending} />
     </box>

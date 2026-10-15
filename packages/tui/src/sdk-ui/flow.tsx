@@ -11,6 +11,8 @@ import { toneColor as tone } from "./tones.ts";
 import { Fields } from "./fields.tsx";
 import { FocusCtx, useHost } from "./host.tsx";
 import { Button } from "./button.tsx";
+import { BACKGROUND_NUDGE, DEFAULT_BUSY_LABEL, useBusy } from "./busy.ts";
+import { useSpin } from "./spin.ts";
 import { CLOCK_W, clock, fixedClock } from "./kit.tsx";
 
 export { Button, unreachableButtons } from "./button.tsx";
@@ -25,19 +27,6 @@ function useWidth() {
   const box = useRef<{ width: number } | null>(null);
   const [width, setWidth] = useState<number | undefined>(undefined);
   return [{ ref: box, onSizeChange: () => box.current && setWidth(box.current.width) }, width] as const;
-}
-
-/** The current spinner frame; it ticks (every 100 ms, like `Steps`) only while `active`. */
-function useSpin(active: boolean) {
-  const { g } = useTheme();
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    const t = setInterval(() => setTick((n) => n + 1), 100);
-    return () => clearInterval(t);
-  }, [active]);
-  const frames = [...g.spinner];
-  return frames[tick % frames.length]!;
 }
 
 /** Adds a footer/`?` row while mounted (no handler: the caller's key code runs the action). */
@@ -237,10 +226,12 @@ function summaryOf(q: Question, v: Value | undefined, dot: string): string {
   return clean(v.split("\n")[0]!);
 }
 
-export function Conversation({ questions, answers, onAnswer, onConfirm, header, footerSummary, confirmLabel = "confirmar", onCancel }: Props<"Conversation">) {
+export function Conversation({ questions, answers, onAnswer, onConfirm, header, footerSummary, confirmLabel = "confirmar", busyLabel = DEFAULT_BUSY_LABEL, onCancel }: Props<"Conversation">) {
   const { c, g } = useTheme();
   const host = useHost();
   const nudge = useNudge();
+  const { busy, track } = useBusy();
+  const spinner = useSpin(busy);
   const flow = questions.filter((q) => !q.skip);
   const [cur, setCur] = useState(0); // the flow question being asked; flow.length is the confirm step
   const [editing, setEditing] = useState<string | undefined>(undefined); // an answered question reopened in place
@@ -252,7 +243,15 @@ export function Conversation({ questions, answers, onAnswer, onConfirm, header, 
   const stops = confirming ? [...questions.map((q) => q.id), CONFIRM_STOP, ...(onCancel ? [CANCEL_STOP] : [])] : shown.map((q) => q.id);
   const asking = editing === undefined && !confirming && cursor === undefined; // the current question owns the keyboard
   const leave = () => (onCancel ? onCancel() : host.pop());
-  const confirm = () => onConfirm({ ...answers });
+  const confirm = () => {
+    if (busy) return;
+    track(onConfirm({ ...answers }));
+  };
+  /** While busy only `esc` works: it leaves and the command keeps running. */
+  const leaveBusy = () => {
+    nudge(BACKGROUND_NUDGE);
+    leave();
+  };
 
   const markTouched = (id: string) => setTouched((ids) => (ids.includes(id) ? ids : [...ids, id]));
   /** Back to where the user was: the confirm list row, or the open question. */
@@ -300,6 +299,10 @@ export function Conversation({ questions, answers, onAnswer, onConfirm, header, 
     escape: () => (confirming ? leave() : setCursor(undefined)),
   };
   useKeys((key) => {
+    if (busy) {
+      if (matchKey(key, "esc")) leaveBusy();
+      return true; // a busy flow takes every other key and ignores it
+    }
     if (!listFocus) return;
     const name = Object.keys(listKeys).find((candidate) => matchKey(key, candidate === "escape" ? "esc" : candidate));
     if (!name) return;
@@ -307,7 +310,7 @@ export function Conversation({ questions, answers, onAnswer, onConfirm, header, 
     return true;
   });
   const enterLabel: Record<string, string> = { [CONFIRM_STOP]: confirmLabel, [CANCEL_STOP]: "sai" };
-  useHints(listFocus ? ["↑↓|resposta", `enter|${enterLabel[cursor!] ?? "edita"}`, `esc|${confirming ? "sai" : "pergunta"}`].join("\n") : "");
+  useHints(busy ? "esc|sai" : listFocus ? ["↑↓|resposta", `enter|${enterLabel[cursor!] ?? "edita"}`, `esc|${confirming ? "sai" : "pergunta"}`].join("\n") : "");
 
   const tw = Math.max(0, ...shown.map((q) => len(clean(q.title)))) + 3;
   const field = (q: Question): FieldSpec => ({ ...q.field, id: q.id, label: q.field.kind === "area" ? q.title : "" });
@@ -357,8 +360,8 @@ export function Conversation({ questions, answers, onAnswer, onConfirm, header, 
         <box flexDirection="column" flexShrink={0}>
           {footerSummary ? <box flexDirection="column" flexShrink={0} paddingTop={1}>{footerSummary as ReactNode}</box> : null}
           <box flexDirection="row" flexShrink={0} gap={2} paddingTop={1} paddingLeft={3}>
-            <Button label={confirmLabel} primary keys="ctrl+enter" focused={listFocus && cursor === CONFIRM_STOP} onPress={confirm} />
-            {onCancel ? <Button label="cancelar" focused={listFocus && cursor === CANCEL_STOP} onPress={leave} /> : null}
+            <Button label={busy ? `${spinner} ${busyLabel}` : confirmLabel} primary keys="ctrl+enter" focused={listFocus && !busy && cursor === CONFIRM_STOP} onPress={confirm} />
+            {onCancel ? <Button label="cancelar" disabled={busy ? "" : undefined} focused={listFocus && !busy && cursor === CANCEL_STOP} onPress={leave} /> : null}
           </box>
         </box>
       ) : null}

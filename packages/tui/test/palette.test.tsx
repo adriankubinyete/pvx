@@ -98,6 +98,26 @@ test("queue runs in order and stops at the first failure; favorites persist", as
   expect(loadFavorites()).toEqual([]);
 });
 
+test("a running queue shows a spinner, ignores keys, and esc closes the palette once while the command goes on", async () => {
+  const slow = fake();
+  let finish = () => {};
+  slow.session.run = async (line) => (slow.calls.push({ line }), await new Promise<void>((resolve) => (finish = resolve)), { exit: 0 });
+  const o = await open(slow.session);
+  await h!.type("@cap");
+  await h!.press("n", { ctrl: true });
+  await h!.press("RETURN", { ctrl: true });
+  expect(h!.frame()).toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] rodando…/);
+  await h!.press("RETURN", { ctrl: true });
+  await h!.type("zz");
+  expect(slow.calls).toHaveLength(1);
+  expect(o.closes()).toBe(0);
+  await h!.press("ESCAPE");
+  expect(o.closes()).toBe(1);
+  finish();
+  await h!.flush();
+  expect(o.closes()).toBe(1); // the finished queue does not close it again
+});
+
 test("form shows required *, masks the secret and keeps it out of the line and the history line", async () => {
   const { session, calls } = fake();
   await open(session);

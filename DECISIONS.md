@@ -1456,3 +1456,19 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 **Limite:** o mouse por cima também enche um botão; com o foco em outro, os dois podem parecer cheios enquanto o mouse está parado ali.
 
+
+## 2026-10-15 — Formulário ocupado após o envio
+
+**Status:** vigente.
+
+**Decisão:** do envio até o fim do comando o formulário fica ocupado, no framework (`Fields`, `Form`, `CommandForm`, `Conversation`, palette).
+
+- **Gatilho.** `onSubmit`/`onConfirm` que devolve uma promessa. `Form` devolve a do comando. Sem promessa, nada muda.
+- **Ocupado.** Tudo apagado (`opacity`), sem foco, edição ou clique; o primário mostra `[ ⠹ rótulo… ]` (`busyLabel`, padrão `executando…`); segundo envio ignorado.
+- **Teclas.** Só `esc`: sai da página com o aviso "continua rodando em segundo plano" e não cancela o comando. Sem prisão de teclado (`expectNoKeyboardTrap` passa ocupado). Na palette, `esc` fecha e a fila segue.
+- **Fim.** O estado ocupado sai; valores mantidos; foco no primeiro campo com erro, senão no primário.
+- **Código.** `useBusy` (`sdk-ui/busy.ts`) e `useSpin` (`sdk-ui/spin.ts`, antes em `flow.tsx`).
+
+**Motivo:** o dono enviava o formulário e ainda movia o cursor, sem sinal de que algo rodava.
+
+**Limite:** não há cancelamento do comando (precisaria de abort no contrato).

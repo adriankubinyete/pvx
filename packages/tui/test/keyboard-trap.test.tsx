@@ -20,10 +20,14 @@ const TEXT_FIELDS = [
 ];
 const AREA_FIELDS = [{ id: "note", label: "Nota", kind: "area" }];
 
+/** What `onSubmit` returns: undefined (a quick submit), or a promise that never settles (a busy form). */
+let submitting: Promise<void> | undefined;
+afterEach(() => void (submitting = undefined));
+
 /** Two page tabs: `Trap` holds an always-mounted `Fields` whose `onCancel` does nothing; `Outra` is plain text. */
 function registryWith(fields: unknown[]): Registry {
   const registry = createRegistry();
-  const trap = () => <Fields fields={fields} onSubmit={() => {}} onCancel={() => {}} />;
+  const trap = () => <Fields fields={fields} onSubmit={() => submitting} onCancel={() => {}} />;
   const other = () => <Text>corpo outra</Text>;
   registry.register({ id: "trap", version: "1.0.0", entry: "x" }, {
     pages: {
@@ -111,4 +115,12 @@ test("a form kept mounted behind another tab takes no key", async () => {
   await t.press("ARROW_DOWN"); // into Outra: the hidden form is still mounted
   await t.press("TAB"); // must switch tab, not move inside the hidden form
   expect(t.frame()).not.toContain("corpo outra");
+});
+
+test("a busy form (its command still running) does not trap the keyboard either", async () => {
+  submitting = new Promise(() => {});
+  const t = await mount(TEXT_FIELDS);
+  await t.press("s", { ctrl: true });
+  expect(t.frame()).toContain("executando…");
+  await expectNoKeyboardTrap(t);
 });

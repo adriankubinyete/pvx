@@ -268,3 +268,78 @@ test("buttons: only the focused one is filled (the focus on cancel leaves the pr
   expect(filled("[ salvar ]")).toBe(false);
   expect(filled("[ cancelar ]")).toBe(true);
 });
+
+// ---- busy: from submit until the command finishes ----
+
+/** The red channel of an unfocused label: lower when the fields are dim. */
+function labelBrightness(t: TuiHarness): number {
+  const [, y] = at(t, "comentário");
+  const label = t.spans().lines[y]!.spans.find((span) => span.text.includes("comentário"))!;
+  return label.fg.buffer[0]!;
+}
+
+/** A submit that stays pending until `finish()`. */
+function slowSubmit() {
+  let finish = () => {};
+  const done = new Promise<void>((resolve) => (finish = resolve));
+  const calls = { count: 0 };
+  return { calls, finish, onSubmit: () => (calls.count++, done) };
+}
+
+/** Types into the first field and presses enter until the primary button runs the submit. */
+async function submitBusy(extra: Partial<Props> = {}) {
+  const slow = slowSubmit();
+  const m = await mount({ onSubmit: slow.onSubmit, busyLabel: "entrando…", ...extra });
+  await m.t.type("a");
+  await m.t.press("ARROW_DOWN");
+  await m.t.press("ARROW_DOWN");
+  await m.t.press("ARROW_DOWN"); // salvar
+  await m.t.press("RETURN");
+  return { ...m, slow };
+}
+
+test("busy: the primary button shows a spinner and the progress label, the fields are dim (80x24)", async () => {
+  const { t } = await submitBusy();
+  const frame = t.frame();
+  expect(frame).toMatch(/\[ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] entrando… \]/);
+  expect(frame).not.toContain("[ salvar ]");
+  const idle = await mount();
+  expect(labelBrightness(t)).toBeLessThan(labelBrightness(idle.t));
+});
+
+test("busy: the default label is executando…", async () => {
+  const { t } = await submitBusy({ busyLabel: undefined });
+  expect(t.frame()).toMatch(/\[ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] executando… \]/);
+});
+
+test("busy: arrows and typing do nothing, a second enter does not submit twice, esc leaves", async () => {
+  const { t, calls, slow } = await submitBusy();
+  const before = t.frame().replace(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g, "*");
+  await t.press("ARROW_UP");
+  await t.type("zzz");
+  await t.press("TAB");
+  await t.press("RETURN");
+  await t.press("RETURN");
+  expect(slow.calls.count).toBe(1);
+  expect(t.frame().replace(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/g, "*")).toBe(before);
+  expect(calls.cancel).toBe(0);
+  await t.press("ESCAPE");
+  expect(calls.cancel).toBe(1);
+});
+
+test("busy: when the command finishes the form is back, the values kept, the focus on the primary button", async () => {
+  const { t, slow } = await submitBusy();
+  slow.finish();
+  await t.flush();
+  await t.waitForFrame((frame) => frame.includes("[ salvar ]"));
+  expect(t.frame()).toContain("a");
+  await t.press("RETURN");
+  expect(slow.calls.count).toBe(2);
+});
+
+test("busy: a clicked button does nothing", async () => {
+  const { t, calls } = await submitBusy();
+  const [x, y] = at(t, "[ cancelar ]");
+  await t.click(x + 2, y);
+  expect(calls.cancel).toBe(0);
+});

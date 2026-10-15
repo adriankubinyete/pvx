@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { Component, SdkUi } from "@pvx/sdk";
 import { useKeys } from "../keys.tsx";
+import { useNudge } from "../nudge.tsx";
 import { useLayout } from "../layout.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
 import { matchKey } from "../keymap.ts";
@@ -10,7 +11,9 @@ import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
 import { END_OF_TEXT, withDerived } from "./derive.ts";
 import { buttonLook, LookText } from "./button.tsx";
+import { BACKGROUND_NUDGE, DEFAULT_BUSY_LABEL, useBusy } from "./busy.ts";
 import { FocusCtx, HostCtx } from "./host.tsx";
+import { useSpin } from "./spin.ts";
 
 type Props = Parameters<SdkUi["Fields"]>[0];
 type Value = string | boolean;
@@ -49,6 +52,9 @@ function fitHint(text: string, width: number): string {
   return cells.length <= width ? text : `${cells.slice(0, width - 1).join("")}…`;
 }
 const TEXT_KINDS: readonly string[] = ["line", "secret", "area"];
+
+/** How strong the fields draw while the form is busy. */
+const BUSY_OPACITY = 0.5;
 
 /** Blank rows between two fields. */
 const FIELD_GAP = 1;
@@ -106,14 +112,19 @@ function Keys({ on }: { on: (k: KeyEvent) => void | typeof RELEASE }) {
 }
 
 export const Fields: Component<Props> = (props) => {
-  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, initialFocus, title, description, submitLabel = "salvar", details } = props;
+  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, initialFocus, title, description, submitLabel = "salvar", busyLabel = DEFAULT_BUSY_LABEL, details } = props;
   const { c, g } = useTheme();
   const { cols } = useLayout();
   const host = useContext(HostCtx); // a form outside a page (the Módulos tab) has no page footer: its screen sets the scope
   // A form in a page owns the keyboard only while the page has it: with the tab bar focused, or in a tab kept mounted behind another, every key goes to the host.
   const keyboardOwner = useContext(FocusCtx) ?? true;
   const [inside, setInside] = useState(true); // false after `esc`: the form is on screen but the page has the keyboard (`enter` goes back in)
+  const { busy, track } = useBusy();
+  const nudge = useNudge();
+  const spinner = useSpin(busy);
+  const wasBusy = useRef(false);
   const engaged = active && keyboardOwner && inside;
+  const live = engaged && !busy; // while busy nothing draws the focus
   const [focus, setFocus] = useState(() => Math.max(0, fields.findIndex((f) => f.id === initialFocus)));
   const [ready, setReady] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -133,6 +144,13 @@ export const Fields: Component<Props> = (props) => {
     if (active && keyboardOwner) setInside(true); // entering the form again (the page got the keyboard back, the parent turned it on) puts the focus in a field
   }, [active, keyboardOwner]);
   useEffect(() => {
+    if (busy) wasBusy.current = true;
+    if (busy || !wasBusy.current) return;
+    wasBusy.current = false;
+    const bad = fields.findIndex((f) => errors[f.id]);
+    setFocus(bad >= 0 ? bad : fields.length); // the first field with an error, else the primary button
+  }, [busy]);
+  useEffect(() => {
     const at = fields[focus];
     if (at) scroll.current?.scrollChildIntoView(fieldId(at));
   }, [focus]);
@@ -147,7 +165,7 @@ export const Fields: Component<Props> = (props) => {
   const rowy = here !== undefined && isRowStyle(here);
   const enterHint = button ? "ativa" : here?.kind === "toggle" ? "marca" : here?.kind === "choice" ? "escolhe" : here?.kind === "area" ? "" : focus === fields.length - 1 ? "salva" : "avança";
   const marks_ = fields.some((f) => f.kind === "toggle" || f.kind === "multi" || f.kind === "choice");
-  const hints = !inside ? "enter|edita" : [
+  const hints = busy ? "esc|sai" : !inside ? "enter|edita" : [
     here?.kind === "area" ? "tab|campo" : listy ? "↑↓|opção\ntab|campo" : rowy ? "←→|opção\n↑↓ tab|campo" : "↑↓ tab|campo",
     marks_ ? `space|${here?.kind === "choice" ? "escolhe" : "marca"}` : "",
     here?.kind === "secret" && here.generate ? `${here.generate}|gera` : "",
@@ -176,19 +194,31 @@ export const Fields: Component<Props> = (props) => {
   });
   const shownLines = withDerived(fields, lines, touched, (from) => valuesOf(from));
   const read = (over: Record<string, Value> = {}): Record<string, Value> => valuesOf(shownLines, over);
-  const go = (n: number) => (setFocus(n), setConfirm(false), setShown(undefined), setInside(true));
+  const go = (n: number) => {
+    if (busy) return;
+    setFocus(n);
+    setConfirm(false);
+    setShown(undefined);
+    setInside(true);
+  };
   /** `over`: values the state has not caught up with yet (a choice picked by the same enter). */
   const submit = (over?: Record<string, Value>) => {
+    if (busy) return;
     const values = read(over);
     const found = { ...requiredProblems(fields, values), ...(validate?.(values) ?? {}) };
     setErrors(found);
     const bad = fields.findIndex((f) => found[f.id]);
     if (bad >= 0) return go(bad);
-    onSubmit(read(over));
+    track(onSubmit(read(over)));
   };
-  const flip = (id: string) => (setMarks({ ...marks, [id]: !marks[id] }), setErrors({ ...errors, [id]: "" }));
+  const flip = (id: string) => {
+    if (busy) return;
+    setMarks({ ...marks, [id]: !marks[id] });
+    setErrors({ ...errors, [id]: "" });
+  };
   const clear = (id: string) => errors[id] && setErrors({ ...errors, [id]: "" });
   const pick = (f: (typeof fields)[number], at: number) => {
+    if (busy) return;
     const v = f.options?.[at]?.value;
     if (v === undefined) return;
     setCursors({ ...cursors, [f.id]: at });
@@ -204,7 +234,12 @@ export const Fields: Component<Props> = (props) => {
     const question = { title: `${deleteLabel}?`, confirmLabel: deleteLabel, destructive: true, ...deleteConfirm };
     void session.confirm(question).then((yes) => yes && remove());
   };
-  const press = (b: Button) => (b === "save" ? submit() : b === "cancel" ? onCancel() : askDelete());
+  const press = (b: Button) => {
+    if (busy) return;
+    if (b === "save") return submit();
+    if (b === "cancel") return onCancel();
+    askDelete();
+  };
 
   /** An arrow past the first or last stop hands the key to `onEdge` (when given) instead of wrapping; tab always wraps. */
   const step = (d: number, arrow = false) => {
@@ -232,7 +267,15 @@ export const Fields: Component<Props> = (props) => {
     onCancel();
     setInside(false);
   };
+  /** While busy only `esc` works: it leaves the page and the command keeps running. */
+  const onBusyKey = (k: KeyEvent): void | typeof RELEASE => {
+    if (!inside) return RELEASE;
+    if (k.name !== "escape") return;
+    nudge(BACKGROUND_NUDGE);
+    leave();
+  };
   const onKey = (k: KeyEvent): void | typeof RELEASE => {
+    if (busy) return onBusyKey(k);
     if (confirm) {
       if (k.name === "escape") setConfirm(false);
       else if (matchKey(k, "enter")) remove();
@@ -313,7 +356,7 @@ export const Fields: Component<Props> = (props) => {
   const focusMark = (on: boolean) => <box width={MARK_W} flexShrink={0}><text wrapMode="none" fg={c.accent}>{on ? g.query : " "}</text></box>;
   const labelColumn = (f: Field, on: boolean) => (stacked ? null : <box width={labelCol} flexShrink={0}>{labelOf(f, on)}</box>);
   /** The buttons look like every `Button` (UI.md, section 12): all `[ label ]`, only the focused one filled. */
-  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(label, { primary: b === "save", danger: b === "remove", lit: button === b && engaged }, c)} />);
+  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(b === "save" && busy ? `${spinner} ${clean(busyLabel)}` : label, { primary: b === "save", danger: b === "remove", lit: button === b && live, disabled: busy && b !== "save" ? "" : undefined }, c)} />);
   const btnBox = (b: Button, content: React.ReactNode) => (
     <box key={b} flexShrink={0} onMouseDown={() => (go(fields.length + buttons.indexOf(b)), press(b))}>{content}</box>
   );
@@ -406,11 +449,11 @@ export const Fields: Component<Props> = (props) => {
   );
   const areaField = (f: Field, i: number, on: boolean) => (
     <box key={f.id} flexShrink={0} height={(f.rows ?? 5) + 2} border borderStyle="rounded" borderColor={on ? c.accent : c.border} title={clean(f.label)} onMouseDown={() => go(i)}>
-      <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && engaged} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
+      <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && live} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
     </box>
   );
   const fieldView = (f: Field, i: number) => {
-    const on = i === focus && !confirm && engaged;
+    const on = i === focus && !confirm && live;
     if (f.kind === "area") return areaField(f, i, on);
     if (f.kind === "toggle") return toggleField(f, i, on);
     if (isRowStyle(f)) return rowField(f, i, on);
@@ -439,14 +482,14 @@ export const Fields: Component<Props> = (props) => {
       {title ? <text wrapMode="none" flexShrink={0} fg={c.text}><b>{clean(title)}</b></text> : null}
       {description ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(description)}</text> : null}
       {title ? <text flexShrink={0}> </text> : null}
-      <scrollbox ref={scroll} flexShrink={1} minHeight={0} maxHeight={areaRows} focused={false}>
+      <scrollbox ref={scroll} flexShrink={1} minHeight={0} maxHeight={areaRows} focused={false} opacity={busy ? BUSY_OPACITY : 1}>
         {fields.map(spaced)}
       </scrollbox>
       {details && detailsOpen ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(details(read()))}</text> : null}
       {showButtons ? <text flexShrink={0}> </text> : null}
       {showButtons ? <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <box flexDirection="row" flexShrink={0} gap={2}>
-          {focusMark(button !== undefined && engaged)}
+          {focusMark(button !== undefined && live)}
           {btn("save", clean(submitLabel))}
           {btn("cancel", "cancelar")}
         </box>

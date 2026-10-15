@@ -62,6 +62,24 @@ async function mountConv(extra: Partial<Parameters<typeof Conversation>[0]> = {}
   return { t: h, log, fh };
 }
 
+test("Conversation: a slow onConfirm makes the primary button busy; keys do nothing, a second confirm is ignored, esc leaves", async () => {
+  let confirms = 0;
+  const { t, log, fh } = await mountConv({ busyLabel: "instalando…", onConfirm: () => (confirms++, new Promise(() => {})) });
+  await t.press("RETURN"); // Versão
+  await t.type("x");
+  await t.press("RETURN"); // Nome -> confirm step
+  await t.press("RETURN"); // instalar
+  expect(t.frame()).toMatch(/\[ [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏] instalando… \]/);
+  await t.press("RETURN");
+  await t.press("ARROW_UP");
+  await t.press("RETURN", { ctrl: true });
+  expect(confirms).toBe(1);
+  expect(log.cancels).toBe(0);
+  await t.press("ESCAPE");
+  expect(log.cancels).toBe(1);
+  expect(fh.pops()).toBe(0);
+});
+
 test("Conversation: asks one question at a time, collapses answers, then confirm lists skipped ones as (padrão)", async () => {
   const { t, log } = await mountConv();
   let f = t.frame();

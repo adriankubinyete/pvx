@@ -17,7 +17,9 @@ export interface CommandFormProps {
   /** Fields that follow the others, by argument name. */
   derive?: Record<string, (values: Record<string, string | boolean>) => string>;
   /** The line to run (secrets are never in it) and the secrets by argument name. */
-  onRun: (line: string, secrets: Record<string, string>) => void;
+  onRun: (line: string, secrets: Record<string, string>) => void | Promise<unknown>;
+  /** Progress label of the primary button while `onRun` is pending. */
+  busyLabel?: string;
   onCancel: () => void;
 }
 
@@ -27,12 +29,12 @@ const FieldsView = Fields as (props: Parameters<typeof Fields>[0]) => ReactNode;
 const DEFAULT_SUBMIT_LABEL = "executar";
 
 /** The form of a command with args: `Fields` with the labels, marks and help of its `ArgSpec`s. The CLI line shows only behind `ctrl+d`. */
-export function CommandForm({ line, args, title, description, submitLabel = DEFAULT_SUBMIT_LABEL, derive, onRun, onCancel }: CommandFormProps) {
+export function CommandForm({ line, args, title, description, submitLabel = DEFAULT_SUBMIT_LABEL, busyLabel, derive, onRun, onCancel }: CommandFormProps) {
   const fields = useMemo(() => fieldsOfArgs(args, derive), [args, derive]);
   const run = (values: Record<string, string | boolean>) => {
     const built = buildLine(line, args, values);
-    onRun(built.display, built.secrets);
+    return onRun(built.display, built.secrets);
   };
   const preview = (values: Record<string, string | boolean>) => `$ pvx ${buildLine(line, args, values).display}`;
-  return <FieldsView title={title} description={description} fields={fields} submitLabel={submitLabel} onSubmit={run} onCancel={onCancel} details={preview} />;
+  return <FieldsView title={title} description={description} fields={fields} submitLabel={submitLabel} busyLabel={busyLabel} onSubmit={run} onCancel={onCancel} details={preview} />;
 }

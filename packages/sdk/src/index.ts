@@ -996,7 +996,7 @@ export interface SdkUi {
    * no box, a header line with `title` (default: the command's `title`, else the command line), the buttons `[ submitLabel ]` (default "executar")
    * and `[ cancelar ]`. No command line on screen by default; `ctrl+d` shows it dim. Secrets reach the command through the environment, never the line.
    */
-  Form: Component<{ command: string; title?: string; description?: string; submitLabel?: string; /** Derived fields by argument name (`FieldSpec.derive`): `{ "root-path": (v) => `clientes/${v["id-cliente"]}-${v.empresa}` }`. The values are keyed by argument name. */ derive?: Record<string, (values: Record<string, string | boolean>) => string>; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
+  Form: Component<{ command: string; title?: string; description?: string; submitLabel?: string; /** Derived fields by argument name (`FieldSpec.derive`): `{ "root-path": (v) => `clientes/${v["id-cliente"]}-${v.empresa}` }`. The values are keyed by argument name. */ derive?: Record<string, (values: Record<string, string | boolean>) => string>; /** Progress label of the primary button while the command runs (default "executando…"). */ busyLabel?: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
   Spacer: Component<{ size?: number }>;
   /** Phases of a long task, one row each: `✓` done, a spinner running, `○` pending, `✗` failed, `-` skipped. The spinner ticks only while an item is running. */
   Steps: Component<{ items: StepItem[] }>;
@@ -1019,8 +1019,11 @@ export interface SdkUi {
   Fields: Component<{
     fields: FieldSpec[];
     initial?: Record<string, string | boolean>;
-    onSubmit: (values: Record<string, string | boolean>) => void;
+    /** Return a promise for a slow submit: until it settles the form is busy (everything dim, no focus or edits, the primary button shows a spinner and `busyLabel`, only `esc` works and it leaves while the work goes on). Then the focus goes to the first field with an error, else to the primary button. */
+    onSubmit: (values: Record<string, string | boolean>) => void | Promise<unknown>;
     onCancel: () => void;
+    /** Progress label of the primary button while busy (default "executando…"). */
+    busyLabel?: string;
     /** Runs before `onSubmit`: return `{ fieldId: "message" }` to show it under that field and block the submit (the first one gets the focus). */
     validate?: (values: Record<string, string | boolean>) => Record<string, string> | void;
     /** Adds the destructive button. Activating it asks "remover? enter confirma · esc volta" before calling this. */
@@ -1062,7 +1065,10 @@ export interface SdkUi {
     questions: Question[];
     answers: Record<string, string | boolean>;
     onAnswer: (id: string, value: string | boolean) => void;
-    onConfirm: (answers: Record<string, string | boolean>) => void;
+    /** Return a promise for a slow confirm: the primary button shows a spinner and `busyLabel`, only `esc` works (it leaves; the work goes on). */
+    onConfirm: (answers: Record<string, string | boolean>) => void | Promise<unknown>;
+    /** Progress label of the primary button while `onConfirm` runs (default "executando…"). */
+    busyLabel?: string;
     /** Drawn above the lines (an already-answered check, a breadcrumb). */
     header?: unknown;
     /** Drawn in the confirm step, above the buttons: the module's notes (`Text` lines, a `Panel`). */
