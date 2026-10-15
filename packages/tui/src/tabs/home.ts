@@ -2,7 +2,7 @@ import type { SlotHub } from "@pvx/core";
 import type { SlotId } from "@pvx/sdk";
 import type { Glyphs } from "../theme.ts";
 import type { Block } from "../session/store.ts";
-import type { CoreResult } from "./CoreTab.tsx";
+import type { CoreResult } from "./conformity.ts";
 
 export type Level = "ok" | "warn" | "error";
 

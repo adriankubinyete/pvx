@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "logs" | "logsearch" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -81,7 +81,6 @@ const base: readonly Shortcut[] = [
   { keys: "/", label: "comando", scope: "tabs" },
   { keys: "shift+tab", label: "aba anterior", scope: "tabs" },
   { keys: "ctrl+k", label: "palette", scope: "tabs", footer: true },
-  { keys: "r", label: "atualiza", scope: "tabs" }, // core tabs only (conformidade, plano, logs); shown inline there, not in the footer
   { keys: "enter", label: "escolhe", scope: "sistema", footer: true },
   { keys: "←→", label: "opção", scope: "sistema", footer: true },
   { keys: "u", label: "atualiza", scope: "sistema", footer: true },
@@ -95,6 +94,17 @@ const base: readonly Shortcut[] = [
   { keys: "enter", label: "aplica", scope: "sistemaedit", footer: true },
   { keys: "esc", label: "cancela", scope: "sistemaedit", footer: true },
   { keys: "←→", label: "cursor", scope: "sistemaedit" },
+  { keys: "←→", label: "módulo", scope: "logs", footer: true },
+  { keys: "n", label: "nível", scope: "logs", footer: true },
+  { keys: "/", label: "buscar", scope: "logs", footer: true },
+  { keys: "enter", label: "detalhes", scope: "logs", footer: true },
+  { keys: "a", label: "audit", scope: "logs", footer: true },
+  { keys: "c", label: "copia a linha", scope: "logs" },
+  { keys: "end", label: "ao vivo", scope: "logs" },
+  { keys: "↑↓", label: "linha", scope: "logs" },
+  { keys: "enter", label: "aplica", scope: "logsearch", footer: true },
+  { keys: "esc", label: "limpa", scope: "logsearch", footer: true },
+  { keys: "←→", label: "cursor", scope: "logsearch" },
   { keys: "enter", label: "abre", scope: "tasks", footer: true },
   { keys: "x", label: "para", scope: "tasks", footer: true },
   { keys: "c", label: "continua daqui", scope: "tasks", footer: true },

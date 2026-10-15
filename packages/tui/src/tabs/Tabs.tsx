@@ -15,7 +15,7 @@ import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { LEAD_TABS, onTabRequest, TASKS_TAB, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { SistemaTab } from "./SistemaTab.tsx";
-import { CoreTab, type CoreCache } from "./CoreTab.tsx";
+import { createLogsNav, LogsTab, type LogsNav } from "./LogsTab.tsx";
 import { barVersion, fitBar } from "./bar.ts";
 import { Clock, clockCost, pickForm } from "./clock.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
@@ -25,8 +25,6 @@ import { finishedTasks, runningTasks, tabLabel } from "./tasks-view.ts";
 import { useTasks } from "./useTasks.ts";
 
 const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", tarefas: "Tarefas", logs: "Logs", comando: "Comando", sistema: "Sistema" };
-/** Tabs that show a core command's output (the id is also the command). */
-const CORE: readonly TabId[] = ["logs"];
 
 /** Which tab is open and who has the keyboard. Outside the components: the active tab is the only one mounted. */
 export interface TabsNav {
@@ -38,8 +36,8 @@ export interface TabsNav {
   /** Módulos: the module menu. */
   menu: MenuNav;
   home: HomeNav;
-  /** Last result of each core command tab (Logs): memory only, for the TUI session. */
-  core: CoreCache;
+  /** Logs: the chips, the search and which log (memory only, for the TUI session). */
+  logs: LogsNav;
   /** Comando input draft: memory only (a secret never goes in the line; it goes through the modal). */
   draft: string;
   /** Modules with commits upstream (background check, memory only). */
@@ -47,7 +45,7 @@ export interface TabsNav {
   /** Tarefas: the selected task (`<module>/<name>`). */
   taskSel?: string;
 }
-export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), core: {}, draft: "", updates: [] });
+export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), logs: createLogsNav(), draft: "", updates: [] });
 
 function Tab({ label, errors, behind, active, focused, onPick }: { label: string; errors: number; behind: number; active: boolean; focused: boolean; onPick: () => void }) {
   const { c, g } = useTheme();
@@ -143,7 +141,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
   if (pageTab) visited.current.add(active);
   // A tab with nothing to select never holds focus.
   const runningCount = runningTasks(tasks).length;
-  const hasSel = (id: TabId) => id === "inicio" || (id === TASKS_TAB && runningCount + finishedTasks(tasks, tasksNow).length > 0) || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
+  const hasSel = (id: TabId) => id === "inicio" || id === "logs" || (id === TASKS_TAB && runningCount + finishedTasks(tasks, tasksNow).length > 0) || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
   const step = (d: number) => {
     const id = ids[(ids.indexOf(active) + d + ids.length) % ids.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
@@ -178,7 +176,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} session={session} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {active === TASKS_TAB ? <TarefasTab store={store} registry={registry} tasks={tasks} now={tasksNow} selected={nav.taskSel} onSelect={(id) => update({ taskSel: id })} /> : null}
-          {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} refreshMs={logsMs} /> : null}
+          {active === "logs" ? <LogsTab store={store} registry={registry} nav={nav.logs} refreshMs={logsMs} /> : null}
           {active === "sistema" ? <SistemaTab store={store} registry={registry} version={version} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}
           {modTabs.filter((t) => visited.current.has(t.id)).map((t) => (

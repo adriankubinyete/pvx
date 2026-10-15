@@ -78,22 +78,18 @@ test("Módulos marks the embedded modules, with the commit and a star when dirty
   expect(frame).not.toContain("alpha 1.0.0"); // the installed copy has no row
 });
 
-test("Sistema lists the embedded modules in the pvx section, with the commit and a star when dirty", async () => {
+test("Sistema lists the embedded modules in one row of the pvx section, with the commit and a star when dirty", async () => {
   const t = await mount(await loadedRegistry());
   for (let i = 0; i < 4; i++) await t.press("TAB"); // inicio > modulos > logs > comando > sistema
   await t.press("ARROW_DOWN"); // into the tab
-  await t.press("2");
   const frame = t.frame();
-  expect(frame).toContain("módulos embutidos (dev)");
-  expect(frame).toContain("alpha               0.3.0 · abc1234 · /work/pvx-alpha");
-  expect(frame).toContain("beta                0.3.0 · abc1234* · /work/pvx-beta");
+  expect(frame).toContain("embutidos     alpha abc1234 · beta abc1234*");
 });
 
-test("a release build shows no embedded section", async () => {
+test("a release build shows no embedded row", async () => {
   const registry = createRegistry();
   const t = await mount(registry);
   for (let i = 0; i < 4; i++) await t.press("TAB");
   await t.press("ARROW_DOWN");
-  await t.press("2");
-  expect(t.frame()).not.toContain("módulos embutidos");
+  expect(t.frame()).not.toContain("embutidos");
 });

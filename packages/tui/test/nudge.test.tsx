@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
@@ -36,8 +37,9 @@ async function gone(t: TuiHarness, msg: string) {
 }
 
 test("↓ from the bar on a tab with nothing selectable nudges and the notice expires", async () => {
+  writeFileSync(join(pvxHome(), "s.json"), JSON.stringify({ showTasksTab: true })); // Tarefas, with no task on this central
   const t = await mount();
-  await t.press("TAB"); await t.press("TAB"); // Módulos, Logs
+  for (let i = 0; i < 2; i++) await t.press("TAB"); // Módulos, Tarefas (no module tab: the app has no page host)
   expect(footer(t)).not.toContain("nada aqui");
   await t.press("ARROW_DOWN");
   await gone(t, "nada aqui");

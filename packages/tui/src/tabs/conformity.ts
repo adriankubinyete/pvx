@@ -1,7 +1,13 @@
-import { applyPlan } from "@pvx/core";
+import { applyPlan, type CoreLine } from "@pvx/core";
 import type { Conformity, ConformityResult, ConformityStep } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
-import type { CoreResult } from "./CoreTab.tsx";
+
+/** The last result of a core command: when it ran, its exit code and its lines. */
+export interface CoreResult {
+  at: number;
+  exit: number;
+  lines: CoreLine[];
+}
 
 /** What the last `conformidade` and `plano` runs returned. They fill together, so the two never disagree. */
 export interface ConformitySnap {

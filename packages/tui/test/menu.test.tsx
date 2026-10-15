@@ -112,22 +112,18 @@ test("a command with args opens the form and shows the result; a secret field st
   expect(t.frame()).not.toContain("hunter2zz");
 });
 
-test("a core tab runs once on the first visit, then only on r; it leaves no block and no history", async () => {
+test("the Logs tab reads the logs on its own and leaves no block and no history", async () => {
   const { t, store } = await mount();
   await t.press("TAB"); // Módulos
-    await t.press("TAB"); // Logs
+  await t.press("TAB"); // Logs
   await t.flush();
-  expect(t.frame()).toMatch(/atualizado|verificando/); // the Logs tab, named by the bar: no frame title
-  expect(t.frame()).toMatch(/atualizado \d\d:\d\d:\d\d/);
+  expect(t.frame()).toContain("● ao vivo"); // the Logs tab, named by the bar: no frame title
+  expect(t.frame()).toContain("/ buscar");
   expect(store.history).toEqual([]);
   expect(store.blocks).toEqual([]);
-  const first = t.frame().match(/atualizado \d\d:\d\d:\d\d/)![0];
   await t.press("TAB", { shift: true });
-  await t.press("TAB"); // back: cached, not run again
-  expect(t.frame()).toContain(first);
-  await t.press("r");
-  await t.flush();
-  expect(t.frame()).toMatch(/atualizado/);
+  await t.press("TAB"); // back: read again, still no block
+  expect(t.frame()).toContain("● ao vivo");
   expect(store.blocks).toEqual([]);
   expect(store.history).toEqual([]);
 });
@@ -163,7 +159,7 @@ test("/ goes to the Comando tab, esc with an empty input focuses the bar, tab st
   await t.press("ESCAPE"); // empty: focus goes to the bar
   expect(t.frame()).toContain("tab próxima aba"); // footer of the tabs scope
   await t.press("ARROW_LEFT");
-  expect(t.frame()).toMatch(/atualizado|verificando/); // the Logs tab, named by the bar: no frame title
+  expect(t.frame()).toContain("● ao vivo"); // the Logs tab, named by the bar: no frame title
   await t.press("ARROW_RIGHT");
   await t.press("ARROW_DOWN"); // enters Comando: typing works again
   await t.type("x");
@@ -200,7 +196,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   await t.press("TAB");
   expect(t.frame()).toContain("tab completa"); // Comando
   await t.press("TAB", { shift: true });
-  expect(t.frame()).toMatch(/atualizado|verificando/); // the Logs tab, named by the bar: no frame title
+  expect(t.frame()).toContain("● ao vivo"); // the Logs tab, named by the bar: no frame title
   await t.press("TAB"); // Comando
   await t.press("TAB"); // Sistema
   expect(t.frame()).toContain("1 Pvx");
@@ -220,9 +216,9 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
   expect(selectedName(t)).toBe("bad-range");
   expect(t.frame()).toContain("↑↓←→ cartão");
   await t.press("ARROW_UP");
-    await t.press("ARROW_RIGHT"); // Logs has nothing to select
+    await t.press("ARROW_RIGHT"); // Logs
   await t.press("ARROW_DOWN");
-  expect(t.frame()).toContain("tab próxima aba");
+  expect(t.frame()).toContain("enter detalhes");
 });
 
 test("tabs: each tab keeps its state; a failed module in Módulos opens its log", async () => {
@@ -370,10 +366,10 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expectScope("modules"); // the Módulos cards
   expect(selectedName(t)).toBeDefined();
   await t.press("ARROW_UP");
-    await t.press("TAB"); // Logs: nothing to select, enter does nothing
+    await t.press("TAB"); // Logs: has lines to select, enter goes in
   await t.press("RETURN");
-  expect(foot()).toContain("troca aba");
-  expect(t.frame()).toMatch(/atualizado|verificando/);
+  expect(foot()).toContain("enter detalhes");
+  expect(t.frame()).toContain("● ao vivo");
 });
 
 test("every tab content and pushed screen uses the same title convention", async () => {

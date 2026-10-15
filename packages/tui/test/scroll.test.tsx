@@ -176,25 +176,20 @@ test("streamed output of a running !cmd follows the bottom, and PageUp stops the
   expect(t.frame()).not.toContain("m29");
 }, 20000);
 
-test("the Logs tab refreshes on its own while visible, follows the end, and stops on leave", async () => {
+test("the Logs tab reads the logs of every module on its own while visible and follows the end", async () => {
   const registry = await load();
   const makeLogger = (n: string) => createLogger(logsDir(), n);
-  let calls = 0;
-  const st = createSessionStore({
-    registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: async () => (calls++, { exit: 0, lines: Array.from({ length: 50 + calls }, (_, i) => ({ kind: "plain" as const, text: `L${i + 1}` })) }),
-  });
+  const st = createSessionStore({ registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history") });
+  for (let i = 1; i <= 60; i++) makeLogger("alfa").info(`linha ${i}`);
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={st} registry={registry} nav={createTabsNav()} version="0.1.0" logsMs={60} /> };
   const t = (h = await renderTui(<App root={root} logger={{ debug() {}, info() {}, warn() {}, error() {} }} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: st, registry }} />, { cols: 100, rows: 24 }));
   await t.press("TAB");
   await t.press("TAB"); // Logs
-  await until(t, () => calls >= 3);
-  expect(t.frame()).toMatch(/atualizado \d\d:\d\d:\d\d/);
-  await until(t, () => t.frame().includes(`L${50 + calls}`)); // the end of the longer output is on screen
-  await t.press("TAB"); // Comando
-  const seen = calls;
-  await Bun.sleep(250);
-  expect(calls).toBe(seen);
+  expect(t.frame()).toContain("linha 60"); // the end of a long log is on screen
+  expect(t.frame()).not.toContain("linha 1 ");
+  makeLogger("beta").info("linha de outro módulo");
+  await until(t, () => t.frame().includes("linha de outro módulo"));
+  expect(t.frame()).toContain("● ao vivo");
 });
 
 test("typing a core command prefix and tab completes it", async () => {
