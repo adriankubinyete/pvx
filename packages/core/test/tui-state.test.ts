@@ -35,3 +35,12 @@ test("hidden lists are validated as string arrays: anything else is dropped", ()
     expect(s.theme).toBe("light"); // the other axes still load
   });
 });
+
+test("the Tarefas tab is off by default, round-trips, and anything but true counts as off", () => {
+  expect(defaultTuiState().showTasksTab).toBe(false);
+  withFile("{}", (p) => {
+    saveTuiState({ ...defaultTuiState(), showTasksTab: true }, p);
+    expect(loadTuiState(p).showTasksTab).toBe(true);
+  });
+  withFile(JSON.stringify({ showTasksTab: "sim" }), (p) => expect(loadTuiState(p).showTasksTab).toBe(false));
+});

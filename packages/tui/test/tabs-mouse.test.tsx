@@ -61,7 +61,7 @@ test("a click on a tab label still switches tab and keeps the bar focused", asyn
   await t.click(labelAt(t, "Sistema") + 1, 0);
   const f = t.frame();
   expect(f).toContain(BAR_FOOTER);
-  expect(f).toContain("aparência");
+  expect(f).toContain("2 Aparência");
 });
 
 /** Click inside a Início section, on the blank row under its header. */

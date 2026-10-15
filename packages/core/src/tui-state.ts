@@ -16,10 +16,12 @@ export interface TuiState {
   hiddenTabs: string[];
   /** Ids of modules whose Início widgets the user hid. */
   hiddenWidgets: string[];
+  /** The Tarefas tab (background jobs of every module) is shown. Off by default. */
+  showTasksTab: boolean;
 }
 
 export function defaultTuiState(): TuiState {
-  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {}, hiddenTabs: [], hiddenWidgets: [] };
+  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {}, hiddenTabs: [], hiddenWidgets: [], showTasksTab: false };
 }
 
 export function tuiStatePath(): string {
@@ -37,6 +39,7 @@ export function loadTuiState(path = tuiStatePath()): TuiState {
     return {
       hiddenTabs: strings(raw?.hiddenTabs),
       hiddenWidgets: strings(raw?.hiddenWidgets),
+      showTasksTab: raw?.showTasksTab === true,
       theme: pick("theme", ["dark", "light", "contrast", "terminal", "custom"]),
       accent: typeof raw?.accent === "string" ? raw.accent : d.accent,
       symbols: pick("symbols", ["unicode", "ascii"]),

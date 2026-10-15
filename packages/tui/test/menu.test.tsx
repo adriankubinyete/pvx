@@ -203,7 +203,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   expect(t.frame()).toMatch(/atualizado|verificando/); // the Logs tab, named by the bar: no frame title
   await t.press("TAB"); // Comando
   await t.press("TAB"); // Sistema
-  expect(t.frame()).toContain("[1] aparência");
+  expect(t.frame()).toContain("1 Pvx");
   await t.press("TAB"); // wraps to Início
   expect(t.frame()).toContain("1 Atenção"); // the Início section
 });

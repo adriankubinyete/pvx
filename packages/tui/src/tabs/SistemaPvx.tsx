@@ -1,98 +1,51 @@
 import { useState } from "react";
-import { catalogUrl, fetchLatestRelease, pvxHome, selfPath, SELF_UPDATE_COMMAND, UNINSTALL_COMMAND, usermodulesDir, type Registry } from "@pvx/core";
-import { matchKey } from "../keymap.ts";
-import { useKeys } from "../keys.tsx";
-import { useLayout } from "../layout.ts";
+import { fetchLatestRelease, pvxHome, selfPath, SELF_UPDATE_COMMAND, UNINSTALL_COMMAND, type Registry } from "@pvx/core";
 import { useNudge } from "../nudge.tsx";
-import { useScreenScope } from "../router.tsx";
-import { Button, Loading } from "../sdk-ui/flow.tsx";
+import { Button } from "../sdk-ui/flow.tsx";
 import type { SessionApi } from "../session/store.ts";
+import { toneColor } from "../sdk-ui/tones.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
-import { availableText, embeddedRows, fit, plainVersion, pvxInfoRows, sectionOfKey, updateBlocker, type InfoRow, type PvxFacts, type ReleaseCheck, type Section } from "./sistema.ts";
+import { SETTING_LABEL_W } from "./SistemaRows.tsx";
+import { fit, pvxInfoRows, updateBlocker, updateStatus, type InfoRow, type PvxFacts, type ReleaseCheck } from "./sistema.ts";
 
-const LABEL_W = 20;
-/** Padding (2) of the section, plus the gap after the label. */
-const CHROME_W = 4;
-const ACTIONS = ["verificar", "atualizar"] as const;
-type Action = (typeof ACTIONS)[number];
+/** Cells the update row gives to what it says before its buttons: a fixed width, so the buttons stay where they are as the text changes. */
+const STATUS_W = 27;
+/** Cells of the cursor column and of the gap after the status. */
+const CURSOR_W = 2;
+const STATUS_GAP_W = 2;
+/** The two buttons of the update row. */
+export const UPDATE_BUTTONS = ["update", "verify"] as const;
+export type UpdateButton = (typeof UPDATE_BUTTONS)[number];
 
 /** What the section reads from the host. Running from source has no binary, and `selfPath` says so. */
 function readFacts(registry: Registry, version: string, binary: string | null): PvxFacts {
-  return {
-    version,
-    binary,
-    home: pvxHome(),
-    usermodules: usermodulesDir(),
-    catalog: catalogUrl(),
-    modules: registry.modules.size,
-    embedded: [...registry.embedded.values()],
-  };
+  return { version, binary, home: pvxHome(), modules: registry.modules.size, embedded: [...registry.embedded.values()] };
 }
 
-function Heading({ text }: { text: string }) {
-  const { c } = useTheme();
-  return <text wrapMode="none" fg={c.dim}>{text}</text>;
+export interface UpdateCheck {
+  facts: PvxFacts;
+  check: ReleaseCheck;
+  blocker: string | undefined;
+  verify(): Promise<void>;
+  update(): void;
 }
 
-function Info({ row, width }: { row: InfoRow; width: number }) {
-  const { c } = useTheme();
-  return (
-    <text wrapMode="none">
-      <span fg={c.dim}>{row.label.padEnd(LABEL_W)}</span>
-      <span fg={c.text}>{fit(row.value, width)}</span>
-    </text>
-  );
-}
-
-/** The modules a dev build carries; nothing at all in a release. */
-function EmbeddedRows({ facts, width }: { facts: PvxFacts; width: number }) {
-  const rows = embeddedRows(facts);
-  if (!rows.length) return null;
-  return (
-    <>
-      <text wrapMode="none"> </text>
-      <Heading text="módulos embutidos (dev)" />
-      {rows.map((row) => (
-        <Info key={row.label} row={row} width={width} />
-      ))}
-    </>
-  );
-}
-
-/** The "disponível" line: a spinner while the check runs. */
-function Available({ check, width }: { check: ReleaseCheck; width: number }) {
-  const { c } = useTheme();
-  if (check.status === "loading") return <Loading label="consultando a última release…" />;
-  const tone = check.status === "error" ? c.error : c.text;
-  return (
-    <text wrapMode="none">
-      <span fg={c.dim}>{"disponível".padEnd(LABEL_W)}</span>
-      <span fg={tone}>{fit(availableText(check), width)}</span>
-    </text>
-  );
-}
-
-/** The pvx section: about, update and the uninstall hint. Both actions are rows: `↑↓` and `enter`, or a click. */
-export function PvxSection({ store, registry, version, onSection }: { store: SessionApi; registry: Registry; version: string; onSection: (section: Section) => void }) {
-  const { c } = useTheme();
-  const { cols } = useLayout();
+/** The state of the update: the release check and the two actions. `update` goes through the session (scrollback, log, audit and the root rule). */
+export function useUpdateCheck(store: SessionApi, registry: Registry, version: string): UpdateCheck {
   const tabs = useTabs();
   const nudge = useNudge();
-  const focused = tabs?.focused ?? true;
-  const [selected, setSelected] = useState<Action>("verificar");
   const [check, setCheck] = useState<ReleaseCheck>({ status: "idle" });
-  useScreenScope("sistemapvx", 1);
   const [binary] = useState(() => selfPath(process.env)); // a real path lookup: once, not on every render
   const facts = readFacts(registry, version, binary);
   const blocker = updateBlocker(facts, check);
-  const valueWidth = cols - CHROME_W - LABEL_W;
 
   async function verify() {
     if (check.status === "loading") return;
     setCheck({ status: "loading" });
     const latest = await fetchLatestRelease(process.env);
     setCheck(latest.ok ? { status: "done", available: latest.version } : { status: "error", message: latest.message });
+    if (!latest.ok) nudge(latest.message, "error");
   }
 
   function update() {
@@ -100,53 +53,50 @@ export function PvxSection({ store, registry, version, onSection }: { store: Ses
       nudge(blocker);
       return;
     }
-    void store.run(SELF_UPDATE_COMMAND); // through the session: scrollback, log and audit, and the root rule
+    void store.run(SELF_UPDATE_COMMAND);
     tabs?.goto("comando");
   }
+  return { facts, check, blocker, verify, update };
+}
 
-  const RUN: Record<Action, () => void> = { verificar: () => void verify(), atualizar: update };
-  const press = (action: Action) => {
-    setSelected(action);
-    RUN[action]();
-  };
-
-  function move(delta: number) {
-    const next = ACTIONS.indexOf(selected) + delta;
-    if (next < 0) tabs?.focusBar();
-    else if (next >= ACTIONS.length) nudge("fim da lista");
-    else setSelected(ACTIONS[next]!);
-  }
-
-  useKeys((key) => {
-    if (!focused) return;
-    const section = sectionOfKey(key.sequence);
-    if (section) return onSection(section), true;
-    if (key.name === "up") return move(-1), true;
-    if (key.name === "down") return move(1), true;
-    if (matchKey(key, "enter")) return RUN[selected](), true;
-    if (matchKey(key, "esc")) return tabs?.focusBar(), true;
-  });
-
+function Info({ row, width, dim }: { row: InfoRow; width: number; dim?: boolean }) {
+  const { c } = useTheme();
   return (
-    <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden">
-      <Heading text="sobre o pvx" />
-      {pvxInfoRows(facts).map((row) => (
-        <Info key={row.label} row={row} width={valueWidth} />
-      ))}
-      <EmbeddedRows facts={facts} width={valueWidth} />
-      <text wrapMode="none"> </text>
-      <Heading text="atualização" />
-      <Info row={{ label: "instalada", value: plainVersion(version) }} width={valueWidth} />
-      <Available check={check} width={valueWidth} />
-      <Button label="verificar" onPress={() => press("verificar")} focused={focused && selected === "verificar"} />
-      {blocker ? (
-        <text wrapMode="none" fg={focused && selected === "atualizar" ? c.accent : c.dim} onMouseDown={() => press("atualizar")}>{`[ atualizar ] ${blocker}`}</text>
-      ) : (
-        <Button label="atualizar" primary onPress={() => press("atualizar")} focused={focused && selected === "atualizar"} />
-      )}
-      <text wrapMode="none"> </text>
-      <Heading text="desinstalar" />
-      <text wrapMode="none" fg={c.text}>{`pvx ${UNINSTALL_COMMAND}`}</text>
+    <text wrapMode="none" flexShrink={0}>
+      <span>{" ".repeat(CURSOR_W)}</span>
+      <span fg={c.dim}>{row.label.padEnd(SETTING_LABEL_W)}</span>
+      <span fg={dim ? c.dim : c.text}>{fit(row.value, width - CURSOR_W - SETTING_LABEL_W)}</span>
+    </text>
+  );
+}
+
+/** The rows of the pvx section that only say something; `update` is the row between them that has buttons. */
+export function PvxInfo({ facts, width, update }: { facts: PvxFacts; width: number; update: React.ReactNode }) {
+  const rows = pvxInfoRows(facts);
+  return (
+    <>
+      <Info row={rows.version} width={width} />
+      {update}
+      <Info row={rows.platform} width={width} />
+      <Info row={rows.data} width={width} />
+      {rows.embedded ? <Info row={rows.embedded} width={width} /> : null}
+      <Info row={{ label: "desinstalar", value: `sudo pvx ${UNINSTALL_COMMAND}` }} width={width} dim />
+    </>
+  );
+}
+
+/** The status of the check, then `[ atualizar ]` and `[ verificar ]`; `current` is the button the keyboard is on. */
+export function UpdateStatus({ state, current, onPress }: { state: UpdateCheck; current?: UpdateButton; onPress: (button: UpdateButton) => void }) {
+  const { c } = useTheme();
+  const status = updateStatus(state.check, state.blocker);
+  const loading = state.check.status === "loading";
+  return (
+    <box flexDirection="row" flexShrink={0}>
+      <text wrapMode="none" flexShrink={0} fg={toneColor(c, status.tone)}>{fit(loading ? "consultando…" : status.text, STATUS_W).padEnd(STATUS_W + STATUS_GAP_W)}</text>
+      <box flexDirection="row" columnGap={STATUS_GAP_W} flexShrink={0}>
+        <Button label="atualizar" primary disabled={state.blocker === undefined ? undefined : ""} focused={current === "update"} onPress={() => onPress("update")} />
+        <Button label="verificar" focused={current === "verify"} onPress={() => onPress("verify")} />
+      </box>
     </box>
   );
 }

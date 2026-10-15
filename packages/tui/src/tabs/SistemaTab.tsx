@@ -1,219 +1,130 @@
-import { useState } from "react";
-import { editLine, lineOf, type Line } from "../lineedit.ts";
-import { LineText } from "../LineText.tsx";
+import { useEffect, useRef, useState } from "react";
+import type { ScrollBoxRenderable } from "@opentui/core";
+import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
-import { useKeys } from "../keys.tsx";
-import { useNudge } from "../nudge.tsx";
-import { useScreenScope } from "../router.tsx";
-import { useTheme } from "../theme-context.tsx";
-import { contrast, hexTokensFor, normalizeHex, TEXT_TOKENS, TOKEN_KEYS, type HexTokens, type TokenKey } from "../theme.ts";
+import { useKeys, type RoutedKey } from "../keys.tsx";
 import { useLayout } from "../layout.ts";
 import { useOver } from "../hover.ts";
-import { useTabs } from "./context.ts";
-import { meter } from "./home.ts";
-import { SECTIONS, SECTION_LABELS, sectionOfKey, type Section } from "./sistema.ts";
-import { PvxSection } from "./SistemaPvx.tsx";
+import { useNudge } from "../nudge.tsx";
+import { wrap } from "../panelnav.ts";
+import { useScreenScope } from "../router.tsx";
+import { Button } from "../sdk-ui/flow.tsx";
+import { Panel } from "../sdk-ui/kit.tsx";
 import type { SessionApi } from "../session/store.ts";
-import type { Registry } from "@pvx/core";
+import { useTheme } from "../theme-context.tsx";
+import { tokensFor } from "../theme.ts";
+import { useTabs } from "./context.ts";
+import { ThemeEditor } from "./SistemaEditor.tsx";
+import { PvxInfo, UpdateStatus, UPDATE_BUTTONS, useUpdateCheck, type UpdateButton } from "./SistemaPvx.tsx";
+import { ChoiceCells, SETTING_LABEL_W, SettingRow, SwatchCells } from "./SistemaRows.tsx";
+import { ACCENT_OPTIONS, choiceAxisOf, CHOICE_AXES, cycle, firstRowOf, presetColor, ROW_IDS, SECTION_OF_ROW, SECTION_TITLES, SECTIONS, sectionOfKey, type RowId, type Section } from "./sistema.ts";
 
-type Opts = readonly (readonly [string, string])[];
-/** The axes of the Aparência section: state key, label and the values with their display names. */
-const AXES: readonly { id: "theme" | "accent" | "symbols" | "border" | "result"; label: string; opts: Opts }[] = [
-  { id: "theme", label: "tema", opts: [["dark", "Escuro"], ["light", "Claro"], ["contrast", "Alto contraste"], ["terminal", "Terminal"], ["custom", "Personalizado"]] },
-  { id: "accent", label: "cor de destaque", opts: [["tema", "do tema"], ["menta", "menta"], ["azul", "azul"], ["ambar", "âmbar"], ["roxo", "roxo"]] },
-  { id: "symbols", label: "símbolos", opts: [["unicode", "unicode"], ["ascii", "ascii"]] },
-  { id: "border", label: "moldura", opts: [["rounded", "arredondada"], ["single", "simples"], ["none", "nenhuma"]] },
-  { id: "result", label: "linha de resultado", opts: [["bracket", "colchetes"], ["glyph", "símbolo"], ["text", "texto"]] },
-];
-/** Themes with known hex values: the ones "Começar de" can copy. */
-const SOURCES: Opts = [["dark", "Escuro"], ["light", "Claro"], ["contrast", "Alto contraste"]];
-const FROM = "from";
-const LABEL_W = 19;
-const PREVIEW_W = 34;
+/** Columns the frame and the page padding take from the terminal width. */
+const FRAME_W = 4;
+/** Columns of a section's gutter (the `▌` and its padding). */
+const GUTTER_W = 2;
+/** Cells of the marker column of a row. */
+const CURSOR_W = 2;
+const TASKS_NOTE = "tarefas em segundo plano de todos os módulos";
 
-const at = (opts: Opts, v: string) => Math.max(0, opts.findIndex(([k]) => k === v));
-const cycle = (opts: Opts, v: string, d: number) => opts[(at(opts, v) + d + opts.length) % opts.length]![0];
-
-function Preview() {
-  const { c, g, box, result } = useTheme();
-  const [full, empty] = meter(60, 10, g);
-  return (
-    <box width={PREVIEW_W} flexShrink={0} flexDirection="column" paddingX={1} overflow="hidden">
-      <text wrapMode="none" fg={c.dim}>prévia</text>
-      {(["ok", "warn", "error", "info"] as const).map((k, i) => {
-        const r = result(k);
-        return (
-          <text key={k} wrapMode="none">
-            <span fg={r.color}>{r.marker}</span>
-            <span fg={c.text}>{` ${["operação concluída", "revise isto", "falhou", "para saber mais"][i]}`}</span>
-          </text>
-        );
-      })}
-      <text wrapMode="none"> </text>
-      <text wrapMode="none">
-        <span fg={c.accent} bg={c.selected}>{` ${g.active} chip `}</span>
-        <span fg={c.text}>{"  "}</span>
-        <span fg={c.accent}>{full}</span>
-        <span fg={c.dim}>{empty}</span>
-        <span fg={c.dim}>{" 60%"}</span>
-      </text>
-      <box height={3} {...box(c.accent)} paddingX={1}>
-        <text fg={c.text} wrapMode="none">foco</text>
-      </box>
-    </box>
-  );
-}
-
-/** The Aparência section. Every change applies live (the theme provider repaints) and is saved by the debounced writer. */
-function AparenciaSection({ onSection }: { onSection: (section: Section) => void }) {
-  const { c, g, axes, set } = useTheme();
+/** Sistema: three sections in one page, the cursor going through their rows. `1`, `2` and `3` jump between the sections. */
+export function SistemaTab({ store, registry, version }: { store: SessionApi; registry: Registry; version: string }) {
+  const { c, axes, set } = useTheme();
   const { cols } = useLayout();
   const tabs = useTabs();
   const nudge = useNudge();
   const focused = tabs?.focused ?? true;
-  const custom = axes.theme === "custom";
-  const hex: HexTokens = hexTokensFor("custom", axes.custom)!;
-  const ids = [...AXES.map((a) => a.id as string), ...(custom ? [FROM, ...TOKEN_KEYS] : [])];
-  const [sel, setSel] = useState<string>(ids[0]!);
-  const [from, setFrom] = useState("dark");
-  const [edit, setEdit] = useState<Line | null>(null);
+  const [row, setRow] = useState<RowId>(ROW_IDS[0]);
+  const [button, setButton] = useState<UpdateButton>("verify");
+  const [editing, setEditing] = useState(false);
+  const state = useUpdateCheck(store, registry, version);
   const rows = useOver(); // the row under the mouse
-  const part = useOver(); // the arrow or value under the mouse: `<row>:-1`, `<row>:1`, `<row>:val`
-  useScreenScope(edit ? "sistemaedit" : "sistema", 1);
-  const cur = ids.includes(sel) ? sel : ids[0]!; // "personalizado" can go away under the cursor
-  const axis = AXES.find((a) => a.id === cur);
+  const scroll = useRef<ScrollBoxRenderable>(null);
+  useScreenScope("sistema", 1);
+  useEffect(() => void scroll.current?.scrollChildIntoView(`sistema:${row}`), [row]);
 
-  const change = (d: number) => {
-    if (axis) return set({ [axis.id]: cycle(axis.opts, axes[axis.id], d) });
-    if (cur === FROM) return setFrom(cycle(SOURCES, from, d));
-    nudge("enter edita o valor");
+  const width = cols - FRAME_W;
+  const press = (which: UpdateButton) => (setButton(which), which === "update" ? state.update() : void state.verify());
+  const openEditor = () => (set({ theme: "custom" }), setEditing(true)); // editing a theme means being on it: the preview is the page itself
+  const toggleTasks = () => set({ showTasksTab: !axes.showTasksTab });
+  const choose = (axis: "theme" | "symbols" | "border" | "result" | "accent", value: string) => set({ [axis]: value });
+  /** `delta` steps the value of a row; the rows with nothing to step ignore it. */
+  const step = (delta: number) => {
+    const axis = choiceAxisOf(row);
+    if (axis) return choose(axis.id, cycle(axis.options, axes[axis.id], delta));
+    if (row === "accent") return choose("accent", cycle(ACCENT_OPTIONS, axes.accent, delta));
+    if (row === "update") return setButton(UPDATE_BUTTONS[wrap(UPDATE_BUTTONS.indexOf(button), delta, UPDATE_BUTTONS.length)]!);
+    nudge("nada para escolher");
   };
+  const activate = () => {
+    if (row === "update") return press(button);
+    if (row === "edit") return openEditor();
+    if (row === "tasks") return toggleTasks();
+    step(1);
+  };
+  const move = (delta: number) => {
+    const index = ROW_IDS.indexOf(row) + delta;
+    if (index < 0) return tabs?.focusBar();
+    setRow(ROW_IDS[index % ROW_IDS.length]!); // ↓ on the last row wraps to the first
+  };
+  const onKey = (key: RoutedKey) => {
+    const section = sectionOfKey(key.sequence);
+    if (section && !key.ctrl) return setRow(firstRowOf(section)), true;
+    if (key.name === "up") return move(-1), true;
+    if (key.name === "down") return move(1), true;
+    if (key.name === "left" || key.name === "right") return step(key.name === "left" ? -1 : 1), true;
+    if (matchKey(key, "enter") || (key.sequence === " " && row === "tasks")) return activate(), true;
+    if (matchKey(key, "u")) return state.update(), true;
+    if (matchKey(key, "esc")) return tabs?.focusBar(), true;
+  };
+  useKeys((key) => (focused && !editing ? onKey(key) : undefined));
 
-  useKeys((k) => {
-    if (!focused) return;
-    if (edit) {
-      if (matchKey(k, "esc")) return setEdit(null), true;
-      if (matchKey(k, "enter")) {
-        const v = normalizeHex(edit.text);
-        if (!v) return nudge("hex inválido: use #rrggbb"), true;
-        set({ custom: { ...axes.custom, [cur]: v } });
-        return setEdit(null), true;
-      }
-      const e = editLine(edit, k);
-      return e ? (setEdit({ text: e.text, cursor: e.cursor }), true) : undefined;
-    }
-    const section = sectionOfKey(k.sequence);
-    if (section) return onSection(section), true;
-    if (k.name === "up" || k.name === "down") {
-      const i = ids.indexOf(cur) + (k.name === "up" ? -1 : 1);
-      if (i < 0) return tabs?.focusBar(), true;
-      return ids[i] ? setSel(ids[i]!) : nudge("fim da lista"), true;
-    }
-    if (matchKey(k, "esc")) return tabs?.focusBar(), true;
-    if (k.name === "left" || k.name === "right") return change(k.name === "left" ? -1 : 1), true;
-    if (matchKey(k, "enter")) {
-      if (axis) return change(1), true;
-      if (cur === FROM) return set({ custom: { ...hexTokensFor(from as "dark")! } }), true;
-      return setEdit(lineOf(hex[cur as TokenKey])), true;
-    }
-  }, { paste: true });
+  if (editing) return <ThemeEditor onClose={() => setEditing(false)} />;
 
-  /** A click on a row or one of its buttons selects it; a different row ends an open edit. */
-  const pickRow = (id: string) => (edit && id !== cur && setEdit(null), setSel(id));
-  const listW = Math.max(40, cols - 2 - PREVIEW_W);
-  const valueW = listW - 4 - 2 - LABEL_W;
-  /**
-   * A row. Hover always reacts: with the list active it moves the selection, otherwise it only tints (panel background and a dim ›).
-   * A click selects the row (the tab container takes the focus). `pick` makes it a `‹ value ›` row whose arrows step the value
-   * like ←/→; `tail` is the clickable value of a token row (a click edits it).
-   */
-  const row = (id: string, label: string, pick?: { name: string; step: (d: number) => void }, tail?: React.ReactNode) => {
-    const on = focused && id === cur;
-    const lit = !on && rows.over === id; // the mouse is on a row the list does not have selected: tint only
-    const mark = on ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{lit || id === cur ? `${g.query} ` : "  "}</span>; // inactive selection: a muted ›
-    const arrow = (d: number, glyph: string) => {
-      const k = `${id}:${d}`;
-      return (
-        <box flexShrink={0} onMouseOver={() => part.enter(k)} onMouseOut={() => part.leave(k)} onMouseDown={() => (pickRow(id), pick!.step(d))}>
-          <text wrapMode="none" fg={c.text}>{part.over === k ? <b><u>{glyph}</u></b> : glyph}</text>
-        </box>
-      );
-    };
-    return (
-      <box key={id} flexShrink={0} flexDirection="row" backgroundColor={on ? c.selected : lit ? c.panel : undefined}
-        onMouseOver={() => (rows.enter(id), !edit && focused && setSel(id))} onMouseOut={() => rows.leave(id)} onMouseDown={() => pickRow(id)}>
-        <text wrapMode="none" flexShrink={0}>
-          {mark}
-          <span fg={on || lit || id === cur ? c.text : c.dim}>{label.padEnd(LABEL_W)}</span>
-        </text>
-        {pick ? (
-          <>
-            {arrow(-1, g.moreLeft)}
-            <text wrapMode="none" fg={c.text} flexShrink={0}>{` ${pick.name.slice(0, valueW - 4)} `}</text>
-            {arrow(1, g.moreRight)}
-          </>
-        ) : tail}
-      </box>
-    );
-  };
-  const token = (k: TokenKey) => {
-    const h = hex[k];
-    const editing = edit && k === cur;
-    const ratio = TEXT_TOKENS.includes(k) ? contrast(h, hex.bg) : 21;
-    const shown = editing ? normalizeHex(edit.text) : h;
-    const vk = `${k}:val`;
-    return row(k, k, undefined, (
-      <>
-        <box flexShrink={0} onMouseOver={() => part.enter(vk)} onMouseOut={() => part.leave(vk)} onMouseDown={() => (pickRow(k), !editing && setEdit(lineOf(h)))}>
-          <text wrapMode="none">{editing ? <LineText line={edit} focused width={9} /> : <span fg={c.text}>{part.over === vk ? <u>{h}</u> : h}</span>}</text>
-        </box>
-        <text wrapMode="none" flexShrink={0}>
-          <span bg={shown ?? undefined}>{shown ? "   " : ""}</span>
-          {!editing && ratio < 4.5 ? <span fg={c.warn}>{` ${g.warn} ${ratio.toFixed(1)}:1`}</span> : null}
-        </text>
-      </>
-    ));
-  };
-  return (
-    <box flexGrow={1} minHeight={0} flexDirection="row">
-      <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden">
-        {AXES.map((a) => row(a.id, a.label, { name: a.opts[at(a.opts, axes[a.id])]![1], step: (d) => set({ [a.id]: cycle(a.opts, axes[a.id], d) }) }))}
-        {custom ? row(FROM, "começar de", { name: SOURCES[at(SOURCES, from)]![1], step: (d) => setFrom(cycle(SOURCES, from, d)) }) : null}
-        {custom ? TOKEN_KEYS.map(token) : null}
-      </box>
-      <Preview />
-    </box>
+  const pick = (id: string) => setRow(id as RowId);
+  const hover = (id: string) => (rows.enter(id), focused && pick(id));
+  const settingRow = (id: RowId, label: string, controls: React.ReactNode) => (
+    <SettingRow key={id} id={id} label={label} on={focused && row === id} current={row === id} lit={rows.over === id && row !== id} onOver={hover} onOut={rows.leave} onPress={pick}>
+      {controls}
+    </SettingRow>
   );
-}
-
-/** One entry of the section strip: `[1] aparência`. A click opens the section. */
-function SectionLabel({ section, active, focused, onPress }: { section: Section; active: boolean; focused: boolean; onPress: () => void }) {
-  const { c } = useTheme();
-  const over = useOver<Section>();
-  const label = `[${SECTIONS.indexOf(section) + 1}] ${SECTION_LABELS[section]}`;
-  const color = active && focused ? c.accent : active ? c.text : c.dim;
-  const hovered = over.over === section;
-  return (
-    <box flexShrink={0} paddingRight={2} onMouseOver={() => over.enter(section)} onMouseOut={() => over.leave(section)} onMouseDown={onPress}>
-      <text wrapMode="none" fg={color}>{active || hovered ? <b><u>{label}</u></b> : label}</text>
-    </box>
+  const sectionPanel = (section: Section, body: React.ReactNode) => (
+    <Panel key={section} title={`[${SECTIONS.indexOf(section) + 1}] ${SECTION_TITLES[section]}`} tone={focused && SECTION_OF_ROW[row] === section ? "accent" : undefined} onPress={() => setRow(firstRowOf(section))}>
+      {body}
+    </Panel>
   );
-}
 
-/** Sistema: Aparência (themes) and pvx (about, update, uninstall). `1` and `2` jump between the sections, like the numbered panels. */
-export function SistemaTab({ store, registry, version }: { store: SessionApi; registry: Registry; version: string }) {
-  const tabs = useTabs();
-  const [section, setSection] = useState<Section>("aparencia");
-  const focused = tabs?.focused ?? true;
-  return (
-    <box flexGrow={1} minHeight={0} flexDirection="column">
-      <box height={1} flexShrink={0} flexDirection="row" paddingX={1}>
-        {SECTIONS.map((id) => (
-          <SectionLabel key={id} section={id} active={id === section} focused={focused} onPress={() => setSection(id)} />
-        ))}
-      </box>
-      {section === "aparencia" ? <AparenciaSection onSection={setSection} /> : null}
-      {section === "pvx" ? <PvxSection store={store} registry={registry} version={version} onSection={setSection} /> : null}
+  const themeAccent = tokensFor(axes.theme, axes.custom).accent;
+  const swatches = { tema: themeAccent, ...Object.fromEntries(ACCENT_OPTIONS.flatMap(([value]) => presetColor(value) ? [[value, presetColor(value)!]] : [])) };
+  const infoWidth = width - GUTTER_W;
+  const choiceRoom = infoWidth - CURSOR_W - SETTING_LABEL_W;
+  const updateRow = settingRow("update", "atualização", (
+    <UpdateStatus state={state} current={focused && row === "update" ? button : undefined} onPress={(which) => (setRow("update"), press(which))} />
+  ));
+  const appearance = (
+    <>
+      {CHOICE_AXES.slice(0, 1).map((axis) => settingRow(axis.id, axis.label, <ChoiceCells options={axis.options} value={axes[axis.id]} on={focused && row === axis.id} room={choiceRoom} onChoose={(value) => choose(axis.id, value)} />))}
+      {settingRow("accent", "acento", <SwatchCells options={ACCENT_OPTIONS} value={axes.accent} colors={swatches} onChoose={(value) => choose("accent", value)} />)}
+      {CHOICE_AXES.slice(1).map((axis) => settingRow(axis.id, axis.label, <ChoiceCells options={axis.options} value={axes[axis.id]} on={focused && row === axis.id} room={choiceRoom} onChoose={(value) => choose(axis.id, value)} />))}
+      {settingRow("edit", "", <Button label="editar tema personalizado" focused={focused && row === "edit"} onPress={openEditor} />)}
+    </>
+  );
+  const advanced = settingRow("tasks", "aba Tarefas", (
+    <box flexDirection="row" flexShrink={0} onMouseDown={toggleTasks}>
+      <text wrapMode="none" flexShrink={0}>
+        <span fg={axes.showTasksTab ? c.accent : c.dim}>{axes.showTasksTab ? "[x]" : "[ ]"}</span>
+        <span fg={c.text}>{" mostrar"}</span>
+        <span fg={c.dim}>{`   ${TASKS_NOTE}`}</span>
+      </text>
     </box>
+  ));
+  return (
+    <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
+      <box flexDirection="column" paddingX={1} flexShrink={0}>
+        {sectionPanel("pvx", <PvxInfo facts={state.facts} width={infoWidth} update={updateRow} />)}
+        {sectionPanel("aparencia", appearance)}
+        {sectionPanel("avancado", advanced)}
+      </box>
+    </scrollbox>
   );
 }
