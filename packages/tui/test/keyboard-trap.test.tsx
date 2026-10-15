@@ -53,7 +53,7 @@ const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((line) => line.
 for (const [name, fields] of [["text fields", TEXT_FIELDS], ["a textarea", AREA_FIELDS]] as const) {
   test(`${name}: from inside an always-focused form, esc reaches the tab bar and an arrow switches the tab`, async () => {
     const t = await mount(fields);
-    expect(t.frame()).toContain(" salvar ");
+    expect(t.frame()).toContain("[ salvar ]");
     await expectNoKeyboardTrap(t);
     await t.press("ARROW_RIGHT");
     expect(t.frame()).toContain("corpo outra");

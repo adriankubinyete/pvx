@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
+import { RGBA } from "@opentui/core";
 import type { ReactNode } from "react";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { KeyRouter, ThemeProvider } from "../src/index.ts";
+import { KeyRouter, ThemeProvider, tokens } from "../src/index.ts";
 import { HostCtx, type HostPage } from "../src/sdk-ui/host.tsx";
 import { Fields } from "../src/sdk-ui/fields.tsx";
 
@@ -37,7 +38,7 @@ const at = (t: TuiHarness, text: string): [number, number] => {
 
 test("save and cancel always render; remover only with onDelete", async () => {
   const { t } = await mount();
-  expect(t.frame()).toContain(" salvar ");
+  expect(t.frame()).toContain("[ salvar ]");
   expect(t.frame()).toContain("[ cancelar ]");
   expect(t.frame()).not.toContain("remover");
   t.destroy();
@@ -137,7 +138,7 @@ test("mouse: click focuses a field, toggles a checkbox, presses buttons", async 
   const [bx, by] = at(t, "[ ] em vez");
   await t.click(bx, by);
   expect(t.frame()).toContain("[x] em vez de aceitar");
-  const [sx, sy] = at(t, " salvar ");
+  const [sx, sy] = at(t, "[ salvar ]");
   await t.click(sx, sy);
   expect(calls.submit).toEqual([{ ip: "", comment: "z", deny: true }]);
   const [kx, ky] = at(t, "[ cancelar ]");
@@ -226,7 +227,7 @@ test("choice and multi respond to the mouse", async () => {
 test("rich fields fit 80x24", async () => {
   const { t } = await mount({ fields: rich });
   expect(t.frame().trimEnd().split("\n").length).toBeLessThanOrEqual(24);
-  expect(t.frame()).toContain(" salvar ");
+  expect(t.frame()).toContain("[ salvar ]");
 });
 
 test("enter on a choice field submits the option it just picked, not the previous one", async () => {
@@ -240,7 +241,7 @@ test("enter on a choice field submits the option it just picked, not the previou
 test("buttons=false hides the button row; onEdge takes an arrow past the ends; active=false parks the form", async () => {
   const edges: string[] = [];
   const { t } = await mount({ buttons: false, onEdge: (d) => void edges.push(d) });
-  expect(t.frame()).not.toContain(" salvar ");
+  expect(t.frame()).not.toContain("[ salvar ]");
   await t.press("ARROW_UP");
   await t.press("ARROW_DOWN");
   await t.press("ARROW_DOWN");
@@ -250,4 +251,20 @@ test("buttons=false hides the button row; onEdge takes an arrow past the ends; a
   await m.t.type("zz");
   expect(m.t.frame()).not.toContain("zz");
   expect(m.calls.keys).toEqual([]); // a parked form adds no footer rows
+});
+
+test("buttons: only the focused one is filled (the focus on cancel leaves the primary unfilled)", async () => {
+  const { t } = await mount();
+  const filled = (label: string) => {
+    const span = t.spans().lines.flatMap((line) => line.spans).find((s) => s.text.includes(label))!;
+    return span.bg.equals(RGBA.fromHex(tokens.accent));
+  };
+  expect(filled("[ salvar ]")).toBe(false); // the focus is on a field
+  expect(filled("[ cancelar ]")).toBe(false);
+  for (let i = 0; i < fields.length; i++) await t.press("ARROW_DOWN"); // past the fields: save
+  expect(filled("[ salvar ]")).toBe(true);
+  expect(filled("[ cancelar ]")).toBe(false);
+  await t.press("ARROW_RIGHT");
+  expect(filled("[ salvar ]")).toBe(false);
+  expect(filled("[ cancelar ]")).toBe(true);
 });

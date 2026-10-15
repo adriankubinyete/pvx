@@ -162,7 +162,7 @@ Use `ui.Fields` (campos próprios) ou `ui.Form` (os argumentos de um comando do 
    Pasta no UOE  ░clientes/12-3-acme░░░░░░░░░░
    Ativa         [x] enviar também as de ontem
 
-    criar e entrar     [ cancelar ]                        ← primário: chip cheio (fundo de acento)
+   [ criar e entrar ]  [ cancelar ]                        ← em foco: só um botão cheio (aqui o primário)
 
  ↑↓ tab campo   enter avança   ctrl+s salva   ctrl+d ver o comando   esc voltar   ? ajuda
 ```
@@ -177,7 +177,8 @@ O desenho, sem exceção:
 - **Dica.** Dica só quando ajuda a preencher; nada de explicar o óbvio. Uma dica é uma restrição que o técnico precisa saber ("letras, números e hífen"), ou a descrição curta de uma opção que não se explica sozinha. Não explique o motivo de um desenho ("nunca as de hoje: o dia ainda não acabou", "sorteado entre 01h e 05h"), nem repita o rótulo. Ela fica apagada à direita do valor, curta (corta com `…` e some se não couber). Nada de `stdin`, `PVX_SECRET_*`, "prompt" ou "(segredo)".
 - **Erro.** Vermelho, na linha abaixo do valor, começando com `✗`. `required` vazio mostra "preencha este campo"; `validate` põe o resto.
 - **Segredo.** `secret` mostra `••••` (`g.mask`); `ctrl+r` mostra ou oculta; a tecla `generate` do campo gera e mostra.
-- **Botões.** O primário vem cheio (um chip com fundo de acento, sem colchetes): ` criar e entrar ` (`submitLabel`, padrão `salvar`); `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`) e pergunta no diálogo da seção 18. O botão em foco ganha sublinhado e o `›` da linha. Todos clicáveis.
+- **Colar funciona em todo campo.** O terminal manda o colado como um evento só (paste com colchetes), e o `KeyRouter` o entrega só a quem tem campo de texto (`useKeys(…, { paste: true })`). O campo em foco é dono do colado: `editLine` o insere no cursor, como digitado, e o campo rola na horizontal. Campo de uma linha: o colado perde escapes ANSI, caracteres de controle e quebras de linha (`\r`, `\n`, as de dentro também: o texto é juntado, não recusado), então uma senha colada com `\n` no fim fica inteira. Segredo continua mascarado (`•` por caractere) e o colado não vai a nenhum outro lugar (log, scrollback, histórico, aviso). Sem campo em foco (barra de abas, botão, caixa de marcar, lista) o colado não faz nada e nunca vira atalho. Vale para `Fields`/`Form`, respostas da conversa e do modal de segredo, a linha do Comando, a busca e os campos da palette, o `AddBox` e o editor de tema; a `area` (várias linhas) usa o colado do próprio `textarea`. Um campo novo usa `editLine` e registra `paste: true`.
+- **Botões.** Todos `[ rótulo ]`, na regra da seção 12: só o botão em foco vem cheio (acento; `error` no perigoso) e sublinhado. O primário (`submitLabel`, padrão `salvar`) sem foco é `[ salvar ]` em negrito no acento; `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`), no tom `error`, e pergunta no diálogo da seção 18. Uma linha em branco separa o conteúdo dos botões. Todos clicáveis.
 - **Comando.** O formulário de um comando não mostra a linha `$ pvx …` nem "segredo fora da linha". `ctrl+d` (e `?`, fora de campo de texto) mostra a linha, apagada, numa só linha.
 - **Campo derivado.** `derive(values)` faz o campo seguir os outros enquanto o técnico não o editou. Editar para de seguir e guarda o texto; apagar até ficar vazio volta a seguir. A tela não diz nada sobre isso: o campo só mostra o valor, e ele continua editável. Exemplo: `Pasta no UOE` vira `clientes/<id-cliente>-<id-contrato>-<empresa>` conforme se digita.
 - **Teclas.** `↑↓` e `Tab` andam entre campos e botões (as setas dão a volta; `tab` no último ponto e `shift+tab` no primeiro vão para o host, seção 1); `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` sai do campo: o módulo ouve `onCancel` e o formulário devolve o teclado à página (o segundo `esc` chega à barra; `enter` volta para dentro). Nas pontas de `choice` e `multi` em lista, `↑↓` passam ao campo vizinho; em `radio`, `buttons` e `row` (seção 19), `←→` movem a escolha e `↑↓` vão ao campo vizinho.
@@ -193,7 +194,7 @@ Exemplos no código:
 ## 8. Retorno de ações
 
 - Sucesso: volta para a lista com o item selecionado e mostra um aviso curto `✓` no rodapé (~4 s).
-- Erro: abre uma tela de resultado com o detalhe (saída e causa), sem voltar sozinha.
+- Erro: abre uma tela de resultado com o detalhe (saída e causa), sem voltar sozinha. Use `sdk.ui.CommandResult` (seção 12): título `Erro` ou `Concluído`, nunca `erro (saiu 1)`.
 - Nunca deixe o usuário sem retorno depois de uma ação: ou `✓`, ou a tela de erro.
 
 Exemplos no código:
@@ -249,9 +250,10 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `Panel`, `Row`, `Text`, `Chip`, `Meter`, `KeyHint`, `Table`, `Spacer` | tela comum | tons do tema; `Panel` é uma seção (linha de cabeçalho, sem borda; seção 15), na raiz é só o contêiner da página |
 | `List` | linhas navegáveis, com colunas | seção 4; seleção por id, hover, letreiro |
 | `Fields`, `Form` | qualquer formulário | seção 7 (o formulário padrão) |
+| `CommandResult` | o resultado de um comando que a página rodou | seção `Erro` ou `Concluído` (sem o código de saída no título), as linhas, os detalhes apagados (comando e fim da saída de um `StepError`; `código de saída N` só quando não é 0 nem 1), UMA linha em branco e `[ fechar ]` mais as ações da página; `esc` e `enter` fecham |
 | `useConfirm` | confirmar algo | diálogo centralizado, seção 18 |
 | `Conversation` | perguntas guiadas, uma por vez (instalador, assistente) | a respondida vira `✓ título   resumo`; a próxima aparece como `○ título`; `↑` no topo da pergunta sobe para as respondidas; `enter` ou clique reabre no lugar e volta ao ponto onde estava; depois da última vem a confirmação com todas as respostas (as puladas marcadas "(padrão)"), as notas "antes de instalar" e o botão principal; nada se aplica antes dele |
-| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável na cor de destaque, cheio com o mouse por cima ou em foco; `primary` é um chip cheio ` rótulo `; `danger` usa o tom `error`; `disabled="motivo"` apaga e mostra o motivo embaixo; `keys` põe a tecla no rodapé e no `?`; precisa de `keys` ou `focused` (seção 17) |
+| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável na cor de destaque, cheio só com o mouse por cima ou em foco; `primary` é negrito; `danger` usa o tom `error`; `disabled="motivo"` apaga e mostra o motivo embaixo; `keys` põe a tecla no rodapé e no `?`; precisa de `keys` ou `focused` (seção 17) |
 | `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo; com `useRun` o tempo da fase em curso avança sozinho, e a barra anda dentro de uma fase longa por `phase.progress`; mostre uma espera (`Loading`) enquanto `run.loading` |
 | `RunPanel` | a tela de uma execução em fases (backup, instalação) | a barra e a palavra do estado, `Steps`, a falha (`Notice`, comando, código, saída, causa) com `[ continuar daqui ]`, os `children` do módulo e o log; `x` para, `c` copia o erro, `esc` sai; espera (`Loading`) até haver execução |
 | `ProgressBar` | progresso global de uma tarefa | `█` e `░` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
@@ -414,11 +416,14 @@ Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui
  [i] lorem ipsum dolor sit amet, consectetur                  ← informação: azul (token `info`)
 ```
 
-**Botões em cinco estados.** Principal (chip cheio), secundário (`[ ]` no destaque), perigoso em foco (cheio no tom `error`), perigoso e desligado (apagado, com o motivo embaixo):
+**Botões: só o foco enche.** Um botão é sempre `[ rótulo ]` (a largura não muda entre estados). Só o botão em foco (ou com o mouse por cima) vem cheio: fundo de acento, ou `error` no perigoso, e sublinhado. Sem foco: o primário é `[ rótulo ]` em negrito no acento; o secundário, `[ rótulo ]` no acento; o perigoso, `[ rótulo ]` no tom `error`; o desligado, apagado, com o motivo embaixo. Exatamente um botão parece em foco de cada vez: o primário nunca vem cheio por ser primário.
+
+**Uma linha em branco entre o conteúdo e os botões.** Numa seção (formulário, resultado, painel de execução, confirmação de página), os botões de ação não colam no conteúdo: uma linha em branco os separa. Vale para `Fields`, `Form`, `CommandResult` e `RunPanel`; o `ConfirmDialog` já separa o texto dos botões por uma régua.
 
 ```text
-  principal    [ secundário ]    perigoso em foco    [ perigoso ]    [ desligado ]
-                                                                     falta o token
+  [ principal ]   [ secundário ]   [ perigoso ]   [ em foco ]   [ desligado ]
+  negrito, acento  acento           tom error      cheio         apagado
+                                                                 falta o token
 ```
 
 **Selos.** Um chip cheio, texto em negrito e maiúsculo, nos tons `ok`, `warn`, `error` e `info`:

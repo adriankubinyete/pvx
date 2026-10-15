@@ -101,7 +101,7 @@ function Keys({ on }: { on: (k: KeyEvent) => void | typeof RELEASE }) {
   useKeys((k) => {
     if (matchKey(k, "ctrl+k")) return; // the palette is the host's
     return on(k) !== RELEASE; // the form owns every other key; a focused textarea still gets its own
-  });
+  }, { paste: true });
   return null;
 }
 
@@ -312,7 +312,7 @@ export const Fields: Component<Props> = (props) => {
   );
   const focusMark = (on: boolean) => <box width={MARK_W} flexShrink={0}><text wrapMode="none" fg={c.accent}>{on ? g.query : " "}</text></box>;
   const labelColumn = (f: Field, on: boolean) => (stacked ? null : <box width={labelCol} flexShrink={0}>{labelOf(f, on)}</box>);
-  /** The buttons look like every `Button` (UI.md, section 12): the primary a filled chip, the others `[ label ]`, filled when focused. */
+  /** The buttons look like every `Button` (UI.md, section 12): all `[ label ]`, only the focused one filled. */
   const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(label, { primary: b === "save", danger: b === "remove", lit: button === b && engaged }, c)} />);
   const btnBox = (b: Button, content: React.ReactNode) => (
     <box key={b} flexShrink={0} onMouseDown={() => (go(fields.length + buttons.indexOf(b)), press(b))}>{content}</box>

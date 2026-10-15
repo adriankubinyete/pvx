@@ -5,7 +5,7 @@ import type { Sdk } from "@pvx/sdk";
 
 // One page per primitive of the stage-1 kit, for the frame tests (80x24 and 120x40).
 export default (sdk: Sdk) => {
-  const { h, Panel, Text, Notice, Badge, Details, Meter, Spark, Fields, CopyBlock, List, Row, Chip, Button, Scroll, useState } = sdk.ui;
+  const { h, Panel, Text, Notice, Badge, Details, Meter, Spark, Fields, CopyBlock, List, Row, Chip, Button, Scroll, CommandResult, useState } = sdk.ui;
 
   function Badges() {
     return (
@@ -138,6 +138,20 @@ export default (sdk: Sdk) => {
     );
   }
 
+  function Failed() {
+    const failure = sdk.errors.stepError("iptables falhou", "iptables-restore /etc/rules", 3, ["linha 1", "linha 2", "linha 3", "linha 4", "linha 5", "Bad argument"]);
+    const run = { exit: 3, lines: [{ kind: "error" as const, text: "não aplicou as regras" }] };
+    return <CommandResult run={run} failure={failure} actions={[{ label: "copiar erro", keys: "c", onPress: () => {} }]} onClose={() => {}} />;
+  }
+
+  function Done() {
+    return <CommandResult run={{ exit: 0, lines: [{ kind: "success", text: "regras reaplicadas" }] }} onClose={() => {}} />;
+  }
+
+  function Plain() {
+    return <CommandResult run={{ exit: 1, lines: [{ kind: "error", text: "arquivo não existe" }] }} onClose={() => {}} />;
+  }
+
   function Tall() {
     return (
       <Scroll>
@@ -158,6 +172,9 @@ export default (sdk: Sdk) => {
       copy: { title: "Copiar", render: () => <Copy /> },
       list: { title: "Lista", render: () => <Lists /> },
       chips: { title: "Chips", render: () => <Chips /> },
+      failed: { title: "Falhou", render: () => <Failed /> },
+      done: { title: "Pronto", render: () => <Done /> },
+      plain: { title: "Erro simples", render: () => <Plain /> },
       tall: { title: "Alta", render: () => <Tall /> },
     },
   };

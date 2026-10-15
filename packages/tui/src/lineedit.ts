@@ -13,12 +13,34 @@ export interface EditKey {
   sequence: string;
   ctrl?: boolean;
   meta?: boolean;
+  /** Set by the `KeyRouter` for a bracketed paste: the raw pasted text, not a key. */
+  paste?: string;
+}
+
+/** Terminal escape sequences: CSI (colors, cursor), OSC (up to BEL or ST), and a lone ESC plus one character. */
+const ESCAPES = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b./gs;
+/** Newlines and carriage returns: a one-line field drops them, so a pasted password with a trailing newline stays whole. */
+const LINE_BREAKS = /[\r\n]/g;
+/** Every other control character (tab included) and DEL. */
+const CONTROLS = /[\x00-\x1f\x7f]/g;
+
+/** What a one-line field keeps from a paste: no escapes, no line breaks (joined, not refused), no control characters. */
+export function pastedText(raw: string): string {
+  return raw.replace(ESCAPES, "").replace(LINE_BREAKS, "").replace(CONTROLS, "");
+}
+
+/** Inserts the paste at the cursor. A paste with nothing left after cleaning changes nothing. */
+function insertPaste({ text, cursor }: Line, raw: string): Edit {
+  const pasted = [...pastedText(raw)];
+  const cs = [...text];
+  return { text: [...cs.slice(0, cursor), ...pasted, ...cs.slice(cursor)].join(""), cursor: cursor + pasted.length };
 }
 
 export const lineOf = (text: string): Line => ({ text, cursor: [...text].length });
 
 /** Applies one key. Returns `undefined` when the key is not an editing key (the caller keeps routing it). */
 export function editLine({ text, cursor }: Line, k: EditKey): Edit | undefined {
+  if (k.paste !== undefined) return insertPaste({ text, cursor }, k.paste);
   const cs = [...text];
   const set = (c: string[], at: number): Edit => ({ text: c.join(""), cursor: at });
   if (k.ctrl && !k.meta) {

@@ -81,7 +81,7 @@ test("Conversation: asks one question at a time, collapses answers, then confirm
   expect(f).toMatch(/✓ Nome +pbx/);
   expect(f).toMatch(/✓ Pacotes extras +licenciados, blocklist +\(padrão\)/);
   expect(f).toContain("leva 20 min");
-  expect(f).toContain(" instalar ");
+  expect(f).toContain("[ instalar ]");
   expect(log.answers).toEqual([["ver", "18"], ["name", "pbx"]]);
   expect(log.confirmed).toEqual([]); // nothing commits before the button
   await t.press("RETURN"); // the cursor starts on the primary button
@@ -104,7 +104,7 @@ test("Conversation: up moves into the answered list, enter reopens in place, re-
   await t.type("c"); // focus is back on the open question, its text kept
   await t.press("RETURN");
   expect(log.answers.at(-1)).toEqual(["name", "abc"]);
-  expect(t.frame()).toContain(" instalar ");
+  expect(t.frame()).toContain("[ instalar ]");
 });
 
 test("Conversation: esc cancels a reopened question without changing the answer; down returns to the question", async () => {
@@ -156,7 +156,7 @@ test("Conversation: a click on an answered line reopens it; ctrl+enter confirms 
   expect(fh.rows.some((r) => r.keys === "ctrl+enter" && r.label === "instalar")).toBe(true); // the footer row of the button
   fh.rows.find((r) => r.keys === "ctrl+enter")!.run();
   expect(log.confirmed).toHaveLength(1);
-  const [bx, by] = at(t, " instalar ");
+  const [bx, by] = at(t, "[ instalar ]");
   await t.click(bx + 2, by);
   expect(log.confirmed).toHaveLength(2);
 });
@@ -182,14 +182,18 @@ test("Button: click and key press it; the key reaches the footer rows", async ()
   const fh = fakeHost();
   let n = 0;
   h = await renderTui(wrap(fh.host, <Btn label="instalar" primary keys="ctrl+enter" onPress={() => void n++} />), { cols: 80, rows: 24 });
-  expect(h.frame()).toContain(" instalar ");
+  expect(h.frame()).toContain("[ instalar ]");
   await h.click(3, 0);
   expect(n).toBe(1);
   expect(fh.rows).toHaveLength(1);
   fh.rows[0]!.run();
   expect(n).toBe(2);
   const accent = RGBA.fromHex(tokens.accent);
-  expect(h.spans().lines[0]!.spans.some((s) => s.text.includes(" instalar ") && s.bg.equals(accent))).toBe(true);
+  const filled = () => h!.spans().lines[0]!.spans.some((s) => s.text.includes("[ instalar ]") && s.bg.equals(accent));
+  await h.hover(40, 5);
+  expect(filled()).toBe(false); // not focused, not hovered: the primary is bold accent text
+  await h.hover(3, 0);
+  expect(filled()).toBe(true);
 });
 
 test("Button: without keys it registers nothing", async () => {

@@ -31,7 +31,7 @@ export function AddBox({ onSubmit, onBack }: { onSubmit: (ref: string) => Promis
     const r = editLine(line, k);
     if (r) setErr(""), setLine({ text: r.text, cursor: r.cursor });
     return true;
-  });
+  }, { paste: true });
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1}>
       <Crumb parts={["módulos", "adicionar"]} />

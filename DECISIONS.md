@@ -80,6 +80,9 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Sucesso e concluído usam o token `ok`, nunca o acento; rodando é o `info` → [Nenhuma página prende o teclado, cards, sucesso e largura fixa](#2026-10-15--nenhuma-página-prende-o-teclado-cards-sucesso-e-largura-fixa)
 - Valor ao vivo tem largura fixa (`fixedNumber`, `fixedRate`, `fixedPercent`, `fixedClock`) → [Nenhuma página prende o teclado, cards, sucesso e largura fixa](#2026-10-15--nenhuma-página-prende-o-teclado-cards-sucesso-e-largura-fixa)
 
+- Colar funciona em todo campo de texto: o `KeyRouter` entrega o paste com colchetes só a quem registra `paste: true`; uma linha, sem escapes, controles nem quebras (juntado, não recusado); segredo mascarado e nunca ecoado → [Colar em todo campo](#2026-10-15--colar-em-todo-campo)
+- Só o botão em foco vem cheio (acento, ou `error` no perigoso); `[ rótulo ]` sempre; uma linha em branco entre o conteúdo e os botões; `sdk.ui.CommandResult` (`Erro` ou `Concluído`) → [Botões: só o foco enche; CommandResult](#2026-10-15--botões-só-o-foco-enche-commandresult)
+
 ### SDK e módulos
 
 - `sdk.ui` injetado; o módulo nunca importa React → [Injeção de UI: `sdk.ui` injetado (opção b)](#2026-10-09--injeção-de-ui-sdkui-injetado-opção-b)
@@ -1422,3 +1425,34 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o dono ficou preso numa página, quis ver cards e o modal na folha, e viu "concluído" parecido com "rodando" com acento azul; números que mudam faziam a tela pular.
 
 **Limite:** `Card` numa folha desenha o estado que a página dá; só `CardGrid` tem teclado. Os módulos do repositório (`pvx-firewall`, `pvx-issabel`, `pvx-dummy`, `pvx-kitdemo`) só usam `accent` para foco e ação, nunca para sucesso (conferido por busca); um módulo de terceiros que use `tone="accent"` para sucesso continua com o acento.
+
+## 2026-10-15 — Colar em todo campo
+
+**Status:** vigente.
+
+**Decisão:** o paste com colchetes do terminal chega a todo campo de texto, pelo mesmo caminho do teclado.
+
+- **Causa.** O OpenTUI entrega o colado como um evento `paste` (e não como teclas). Os campos só liam `useKeyboard`/`useKeys`, então o colado nunca os alcançava (só o `textarea` o recebia, pelo próprio renderable).
+- **Caminho.** `KeyRouter` ouve `usePaste` e monta uma tecla `paste` (sem nome de atalho nem `sequence`, com o texto em `paste`). Ela vai na mesma ordem das teclas (mais novo primeiro, `base` por último), mas só aos handlers com `paste: true`; um handler `modal` sem `paste` a engole. `editLine` insere `paste` no cursor, então todo campo que já usa `editLine` ganha o colado.
+- **Uma linha.** O colado perde escapes ANSI, caracteres de controle e quebras de linha; as de dentro somem (texto juntado), as do fim também. Escolhido no lugar de recusar: uma senha colada com `\n` no fim tem de funcionar. 4 KB entram de uma vez; o campo rola como digitando.
+- **Segredo.** Mascarado (`•`), e o colado só vai para o valor do campo: nunca para log, scrollback, histórico ou aviso.
+- **Sem campo em foco** o colado é ignorado (barra de abas, botões, listas).
+
+**Motivo:** o dono não conseguia colar uma senha longa num campo secreto.
+
+**Limite:** `area` (várias linhas) usa o colado do `textarea`. Terminal sem paste com colchetes manda teclas: o que chegar como `enter` ainda envia.
+
+## 2026-10-15 — Botões: só o foco enche; CommandResult
+
+**Status:** vigente. Substitui "o primário é um chip cheio" (UI.md, seções 7 e 12).
+
+**Decisão:** três regras do dono.
+
+- **Só o foco enche.** Todo botão é `[ rótulo ]`; só o focado (ou com o mouse por cima) vem cheio, no acento ou no `error` do perigoso. Sem foco: primário em negrito no acento, secundário no acento, perigoso no `error`, desligado apagado. Um só botão parece em foco. Vale para `Button`, os botões de `Fields`/`Form`, `ConfirmDialog` e `ConfirmPreview` (esses já enchiam só o foco).
+- **Linha em branco antes dos botões.** O conteúdo de uma seção e os botões de ação ficam separados por uma linha em branco (`Fields`, `CommandResult`, `RunPanel` com `continuar daqui`).
+- **`sdk.ui.CommandResult({ run, failure?, actions?, onClose })`.** O resultado de um comando: `Erro` (tom `error`) ou `Concluído` (token `ok`), sem o código no título; as linhas; detalhes apagados (comando e fim da saída de um `StepError`; o código só como `código de saída N` e só fora de 0 e 1); uma linha em branco; `[ fechar ]` e as ações da página. Substitui as cópias de `ResultScreen`/`outcome.ts` dos módulos.
+
+**Motivo:** o dono via dois botões "selecionados" (o primário sempre cheio e o `[ cancelar ]` em foco), `erro (saiu 1)` confundia e o botão colava no texto.
+
+**Limite:** o mouse por cima também enche um botão; com o foco em outro, os dois podem parecer cheios enquanto o mouse está parado ali.
+

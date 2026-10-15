@@ -180,7 +180,7 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
       return to >= 0 && to < specs.length ? focusField(to) : nudge(d < 0 ? "início da lista" : "fim da lista"), true;
     }
     if (k.sequence === " " && !f && !query) return enqueue(); // once there is a query, space is part of it (ctrl+n enqueues)
-  }, { modal: true });
+  }, { modal: true, paste: true });
 
   const at = Math.max(0, lines.findIndex((l) => l.id === cur?.id));
   const start = Math.max(0, Math.min(at - Math.floor(VISIBLE / 2), lines.length - VISIBLE));

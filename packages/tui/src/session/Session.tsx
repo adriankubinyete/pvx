@@ -161,7 +161,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       if (matchKey(k, "enter")) return recall(store.lineOf(focus.id)), setFb(null), true;
       for (const key of ["r", "x", "l", "c"]) if (matchKey(k, key) && blockAct(focus, key)) return true;
       if (k.sequence === "?" || k.ctrl) return;
-      if (printable(k.sequence)) setFb(null); // any other letter goes back to the input and types
+      if (printable(k.sequence) || k.paste !== undefined) setFb(null); // any other letter, or a paste, goes back to the input and types
       else return;
     }
     if (k.name === "escape") return last ? setFb(last.id) : tabs?.focusBar(), true; // empty input: last block, else the tab bar
@@ -187,7 +187,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     const r = editLine({ text: buffer, cursor }, k);
     if (r) return r.exit === "left" ? nudge() : edit(r.text, r.cursor), true; // `→` at the end is just the end of the line
 
-  });
+  }, { paste: true });
 
   const hint = note ?? (input.startsWith("!") && !input.startsWith("!!") && !searching ? "host shell · enter roda" : searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
   const inputFocused = !barFocused && !focus;

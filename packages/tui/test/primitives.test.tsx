@@ -241,8 +241,9 @@ for (const [cols, rows] of SIZES) {
     expect(h.frame()).not.toMatch(/[╭╮╰╯│]/); // no border
     expect(spanOf(h, "acesso web").bg.equals(color(tokens.panel))).toBe(true); // the subtle fill
     expect(spanOf(h, "https://10.0.0.1").fg.equals(color(tokens.ip))).toBe(true);
-    expect(spanOf(h, " copiar acesso ").bg.equals(color(tokens.accent))).toBe(true);
-    await h.click(columnOf(h, " copiar acesso ") + 2, rowIndex(h, " copiar acesso "));
+    expect(spanOf(h, "[ copiar acesso ]").bg.equals(color(tokens.accent))).toBe(false); // not focused: not filled
+    expect(spanOf(h, "[ copiar acesso ]").fg.equals(color(tokens.accent))).toBe(true);
+    await h.click(columnOf(h, "[ copiar acesso ]") + 2, rowIndex(h, "[ copiar acesso ]"));
     await h.flush();
     expect(got).toEqual(["acesso web  https://10.0.0.1\nsenha web   xxxx-xxxx-xxxx"]);
   });
@@ -270,12 +271,13 @@ for (const [cols, rows] of SIZES) {
 // ---- Chips and Button states ----
 
 for (const [cols, rows] of SIZES) {
-  test(`filter chips (the chosen one filled) and the Button states: primary chip, secondary, danger, disabled with its reason (${cols}x${rows})`, async () => {
+  test(`filter chips (the chosen one filled) and the Button states: primary, secondary, danger, disabled with its reason (${cols}x${rows})`, async () => {
     h = await renderPage(MODULE, "chips", { cols, rows });
     expect(spanOf(h, " todos ").bg.equals(color(tokens.accent))).toBe(true);
     expect(spanOf(h, " lorem ").bg.equals(color(tokens.panel))).toBe(true);
     expect(h.frame()).toContain("● ao vivo");
-    expect(spanOf(h, " principal ").bg.equals(color(tokens.accent))).toBe(true);
+    expect(spanOf(h, "[ principal ]").bg.equals(color(tokens.accent))).toBe(false); // an unfocused primary is bold accent text
+    expect(spanOf(h, "[ principal ]").fg.equals(color(tokens.accent))).toBe(true);
     expect(h.frame()).toContain("[ secundário ]");
     expect(spanOf(h, "[ secundário ]").fg.equals(color(tokens.accent))).toBe(true);
     expect(spanOf(h, "[ perigoso ]").fg.equals(color(tokens.error))).toBe(true);
@@ -285,10 +287,12 @@ for (const [cols, rows] of SIZES) {
   });
 }
 
-test("buttonLook: primary is a filled chip, the others are [ label ] and fill when lit at the same width; disabled never fills", () => {
+test("buttonLook: every button is [ label ]; only a lit one fills; an unlit primary is bold accent text; disabled never fills", () => {
   const c = tokens;
-  expect(buttonLook("salvar", { primary: true }, c)).toMatchObject({ text: " salvar ", bg: c.accent, bold: true, underline: false });
-  expect(buttonLook("salvar", { primary: true, lit: true }, c).underline).toBe(true);
+  const idle = buttonLook("salvar", { primary: true }, c);
+  expect(idle).toMatchObject({ text: "[ salvar ]", fg: c.accent, bold: true, underline: false });
+  expect(idle.bg).toBeUndefined();
+  expect(buttonLook("salvar", { primary: true, lit: true }, c)).toMatchObject({ bg: c.accent, bold: true, underline: true });
   const quiet = buttonLook("voltar", {}, c);
   const lit = buttonLook("voltar", { lit: true }, c);
   expect(quiet).toMatchObject({ text: "[ voltar ]", fg: c.accent });
@@ -297,6 +301,42 @@ test("buttonLook: primary is a filled chip, the others are [ label ] and fill wh
   expect(buttonLook("remover", { danger: true }, c).fg).toBe(c.error);
   expect(buttonLook("remover", { danger: true, lit: true }, c).bg).toBe(c.error);
   expect(buttonLook("x", { disabled: "motivo", lit: true, primary: true }, c)).toMatchObject({ fg: c.dim, text: "[ x ]" });
+});
+
+// ---- CommandResult ----
+
+for (const [cols, rows] of SIZES) {
+  test(`CommandResult: the title is Erro (no exit code), the details are dim, one blank row, then the buttons (${cols}x${rows})`, async () => {
+    h = await renderPage(MODULE, "failed", { cols, rows });
+    expect(h.frame()).toContain("Erro");
+    expect(h.frame()).not.toContain("saiu");
+    expect(spanOf(h, "Erro").fg.equals(color(tokens.error))).toBe(true);
+    expect(h.frame()).toContain("não aplicou as regras");
+    expect(h.frame()).toContain("$ iptables-restore /etc/rules");
+    expect(h.frame()).toContain("Bad argument");
+    expect(h.frame()).not.toContain("linha 1"); // only the tail of the output
+    expect(spanOf(h, "$ iptables-restore").fg.equals(color(tokens.dim))).toBe(true);
+    expect(h.frame()).toContain("código de saída 3");
+    const last = rowIndex(h, "código de saída 3");
+    expect(rowsOf(h)[last + 1]!.trim()).toBe(""); // the one blank row
+    expect(rowsOf(h)[last + 2]).toContain("[ fechar ]");
+    expect(rowsOf(h)[last + 2]).toContain("[ copiar erro ]");
+    expect(spanOf(h, "[ fechar ]").bg.equals(color(tokens.accent))).toBe(false); // not focused: not filled
+    fits(h, cols);
+  });
+}
+
+test("CommandResult: exit 1 shows no code line; success is Concluído in the success token", async () => {
+  h = await renderPage(MODULE, "plain", { cols: 80, rows: 24 });
+  expect(h.frame()).toContain("Erro");
+  expect(h.frame()).not.toContain("código de saída");
+  expect(rowsOf(h)[rowIndex(h, "arquivo não existe") + 1]!.trim()).toBe("");
+  h.destroy();
+  h = await renderPage(MODULE, "done", { cols: 80, rows: 24 });
+  expect(h.frame()).toContain("Concluído");
+  expect(spanOf(h, "Concluído").fg.equals(color(tokens.ok))).toBe(true);
+  expect(rowsOf(h)[rowIndex(h, "regras reaplicadas") + 1]!.trim()).toBe("");
+  expect(h.frame()).toContain("[ fechar ]");
 });
 
 // ---- Scroll ----

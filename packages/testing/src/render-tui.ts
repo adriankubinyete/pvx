@@ -19,6 +19,8 @@ export interface TuiHarness {
   hover(x: number, y: number): Promise<void>;
   /** Types text char by char, each a `press`. */
   type(text: string): Promise<void>;
+  /** Pastes text as the terminal does: one bracketed paste, not a burst of keys. */
+  paste(text: string): Promise<void>;
   /** Waits for pending timers and renders (use after something async). */
   flush(): Promise<void>;
   /** Waits until `pred` is true (polls in frames, not ms). */
@@ -62,6 +64,10 @@ export async function renderTui(element: ReactNode, { cols = 120, rows = 40 }: {
     waitFor: (pred) => t.waitFor(pred),
     waitForFrame: (pred) => t.waitForFrame(pred),
     press,
+    async paste(text) {
+      await inAct(async () => t.mockInput.pasteBracketedText(text));
+      await flush();
+    },
     async click(x, y) {
       await inAct(async () => t.mockMouse.click(x, y));
       await flush();

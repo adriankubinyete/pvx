@@ -4,7 +4,7 @@ import { hooks, useKey } from "./host.tsx";
 import { fit } from "./columns.ts";
 import { Button } from "./button.tsx";
 import { Loading, ProgressBar } from "./flow.tsx";
-import { LogTail, Notice, Panel, Steps, Text } from "./kit.tsx";
+import { LogTail, Notice, Panel, Spacer, Steps, Text } from "./kit.tsx";
 import { useCopy } from "./copy.tsx";
 import { useNudge } from "../nudge.tsx";
 import { BAR_STATE, failureViewOf, VIEW_WORD, type FailureView } from "./run.ts";
@@ -40,6 +40,7 @@ function FailureBlock({ failure, cause, width, onResume }: FailureBlockProps) {
       {failure.details.map((line, index) => <Text key={index} tone="dim">{fit(line, width)}</Text>)}
       {cause ? <Text tone="dim">causa provável</Text> : null}
       {cause ? <Text>{fit(cause, width * 2)}</Text> : null}
+      {onResume ? <Spacer /> : null}
       {onResume ? <Button label="continuar daqui" primary keys="enter" onPress={onResume} /> : null}
     </>
   );

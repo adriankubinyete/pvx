@@ -116,7 +116,7 @@ function AparenciaSection({ onSection }: { onSection: (section: Section) => void
       if (cur === FROM) return set({ custom: { ...hexTokensFor(from as "dark")! } }), true;
       return setEdit(lineOf(hex[cur as TokenKey])), true;
     }
-  });
+  }, { paste: true });
 
   /** A click on a row or one of its buttons selects it; a different row ends an open edit. */
   const pickRow = (id: string) => (edit && id !== cur && setEdit(null), setSel(id));

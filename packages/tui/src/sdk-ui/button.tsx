@@ -27,16 +27,16 @@ export interface ButtonLook {
 }
 
 /**
- * The look of the four states of a button (UI.md, section 12). The primary is a filled chip ` label ` (underlined when focused);
- * the others are `[ label ]` in their tone, filled when lit (same width, so nothing moves); a disabled one is dim and never fills.
+ * The look of a button (UI.md, section 12). Every button is `[ label ]`, so nothing moves between states. Only a lit
+ * (focused or hovered) button is filled, in its tone (accent, or error for a danger), and underlined; an unlit one is the
+ * tone as text, bold for the primary. A disabled one is dim and never fills. So at most one button looks focused.
  */
 export function buttonLook(label: string, kind: ButtonKind, c: Tokens): ButtonLook {
-  const text = clean(label);
+  const text = `[ ${clean(label)} ]`;
   const tone = kind.danger ? c.error : c.accent;
-  if (kind.disabled !== undefined) return { text: `[ ${text} ]`, fg: c.dim, bold: false, underline: false };
-  if (kind.primary) return { text: ` ${text} `, fg: c.bg, bg: tone, bold: true, underline: Boolean(kind.lit) };
-  if (kind.lit) return { text: `[ ${text} ]`, fg: c.bg, bg: tone, bold: false, underline: true };
-  return { text: `[ ${text} ]`, fg: tone, bold: false, underline: false };
+  if (kind.disabled !== undefined) return { text, fg: c.dim, bold: false, underline: false };
+  if (kind.lit) return { text, fg: c.bg, bg: tone, bold: Boolean(kind.primary), underline: true };
+  return { text, fg: tone, bold: Boolean(kind.primary), underline: false };
 }
 
 /** The text of a button with its bold and underline, ready to put in a `<text>`. */

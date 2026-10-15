@@ -187,7 +187,10 @@ test("RunPanel: a failed run shows the notice, the command, the exit code, the c
   expect(failed).toContain("a fase database precisa de ajuda");
   expect(failed).toContain("filho do módulo");
   expect(failed).toContain("repos");
-  expect(failed).toContain(" continuar daqui ");
+  expect(failed).toContain("[ continuar daqui ]");
+  const rows = failed.split("\n");
+  const button = rows.findIndex((row) => row.includes("[ continuar daqui ]"));
+  expect(rows[button - 1]!.trim()).toBe(""); // a blank row between the failure and its button
   expect(failed).toContain("enter continuar daqui"); // the button registered its key
   await h.press("RETURN");
   expect(h.frame()).toContain("resumed=1");

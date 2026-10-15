@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { editLine, lineOf, windowLine, type EditKey } from "../src/lineedit.ts";
+import { editLine, lineOf, pastedText, windowLine, type EditKey } from "../src/lineedit.ts";
 
 const key = (name: string, extra: Partial<EditKey> = {}): EditKey => ({ name, sequence: "", ...extra });
 const ch = (c: string): EditKey => ({ name: c, sequence: c });
@@ -52,4 +52,11 @@ test("windowLine keeps the cursor inside the width", () => {
   const [b, u, a] = windowLine({ text: "abcdefghij", cursor: 5 }, 5);
   expect(`${b}${u}${a}`).toContain("f");
   expect([...b + u + a].length).toBeLessThanOrEqual(5);
+});
+
+test("paste inserts at the cursor and a one-line field drops escapes, line breaks and control characters", () => {
+  expect(editLine({ text: "ab", cursor: 1 }, { name: "paste", sequence: "", paste: "XY" })).toEqual({ text: "aXYb", cursor: 3 });
+  expect(pastedText("pass\r\nword\n")).toBe("password");
+  expect(pastedText("\x1b[31mred\x1b[0m\x1b]0;title\x07\ttab\x00")).toBe("redtab");
+  expect(editLine(lineOf("x"), { name: "paste", sequence: "", paste: "\n" })).toEqual({ text: "x", cursor: 1 });
 });

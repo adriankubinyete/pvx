@@ -48,7 +48,7 @@ function SecretModal({ store, p }: { store: Pick<SessionApi, "answer">; p: Extra
     if (matchKey(k, "enter")) return store.answer(p.id, secret.text || undefined);
     const r = editLine(secret, k);
     if (r) setSecret({ text: r.text, cursor: r.cursor });
-  }, { modal: true });
+  }, { modal: true, paste: true });
   return (
     <box position="absolute" top={2} left={4} zIndex={10} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.warn)} title={`${g.warn} segredo`}>
       <text fg={c.text}>{`${p.name}:`}</text>

@@ -1073,7 +1073,7 @@ export interface SdkUi {
     onCancel?: () => void;
   }>;
   /**
-   * `[ label ]` in the accent color, clickable; hover and `focused` fill it. `primary` is a filled accent chip ` label `; `danger` uses the error color (`[ remover ]`, filled when focused).
+   * `[ label ]` in the accent color, clickable; hover and `focused` fill it. `primary` is bold; `danger` uses the error color (`[ remover ]`). Only the focused (or hovered) button is filled.
    * `disabled` takes the reason (`disabled="falta o token"`): the button is dim, ignores the mouse and the key, and the reason shows under it. `keys` (`enter`, `ctrl+enter`, `a`) registers the key
    * for the page, so the footer and `?` show it. `focused` draws it selected (for a button the page navigates to by keyboard).
    */
@@ -1118,6 +1118,13 @@ export interface SdkUi {
    * when a run exists. Needs a page.
    */
   RunPanel: Component<Kids & { run: RunState; etaMs?: number; onResume?: () => void; onStop?: () => void; onExit?: () => void; cause?: (failure: PhaseFailure) => string | undefined; loadingLabel?: string }>;
+  /**
+   * The result of a command the page ran (`useCommand().run()`), as a section titled `Erro` (error tone) or `Concluído` (success tone), never with the exit code in the title.
+   * Under the title: the message lines in their tones, then dim details: with `failure` (a `StepError`) the command and the last lines of its output; the exit code only
+   * as `código de saída N`, and only when it is not 0 or 1. Then ONE blank row and the buttons: `[ fechar ]` (`enter`, calls `onClose`) and the page's own `actions`.
+   * `esc` calls `onClose`. Needs a page.
+   */
+  CommandResult: Component<{ run: CommandRun; failure?: StepError; actions?: { label: string; onPress: () => void; keys: string; danger?: boolean }[]; onClose: () => void }>;
   /** A spinner and `label`, for any wait longer than ~300 ms. The spinner ticks only while it is mounted. */
   Loading: Component<{ label: string }>;
   /**
