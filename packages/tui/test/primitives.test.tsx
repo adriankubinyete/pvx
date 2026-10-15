@@ -55,10 +55,10 @@ test("every theme has the blue info token (and the ip token), also the terminal 
 // ---- Notice: four tones and an inline button ----
 
 for (const [cols, rows] of SIZES) {
-  test(`Notice: [✓] accent, [!] warn, [✗] error, [i] blue; the button sits at the end of the line and acts (${cols}x${rows})`, async () => {
+  test(`Notice: [✓] success, [!] warn, [✗] error, [i] blue; the button sits at the end of the line and acts (${cols}x${rows})`, async () => {
     h = await renderPage(MODULE, "notices", { cols, rows });
     for (const marker of ["[✓]", "[!]", "[✗]", "[i]"]) expect(h.frame()).toContain(marker);
-    expect(spanOf(h, "[✓]").fg.equals(color(tokens.accent))).toBe(true);
+    expect(spanOf(h, "[✓]").fg.equals(color(tokens.ok))).toBe(true);
     expect(spanOf(h, "[!]").fg.equals(color(tokens.warn))).toBe(true);
     expect(spanOf(h, "[✗]").fg.equals(color(tokens.error))).toBe(true);
     expect(spanOf(h, "[i]").fg.equals(color(tokens.info))).toBe(true);
@@ -153,7 +153,7 @@ for (const [cols, rows] of SIZES) {
     const exactSpan = h.spans().lines[exactRow]!.spans.find((span) => span.text.includes("━"))!;
     expect(exactSpan.fg.equals(color(tokens.accent))).toBe(true); // exactly 80%: not above
     const sparkRow = rowsOf(h)[rowIndex(h, "cpu")]!;
-    expect(sparkRow).toMatch(/cpu {6}[▁▂▃▄▅▆▇█]{14} {2}12%/);
+    expect(sparkRow).toMatch(/cpu {6}[▁▂▃▄▅▆▇█]{14} {3}12%/);
     expect(spanOf(h, "12%").fg.equals(color(tokens.text))).toBe(true);
     fits(h, cols);
   });

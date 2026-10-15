@@ -55,7 +55,7 @@ export const BlockView = memo(function BlockView({ b, focused, tick, onPick, onA
   const blockActions = allActions.filter((s) => s.keys !== "x" || (b.status === "running" && b.cancellable));
   const host = b.line.startsWith("!"); // ran on the host shell
   const frames = [...g.spinner];
-  const st = { running: [frames[tick % frames.length]!, c.info], ok: [g.ok, c.accent], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
+  const st = { running: [frames[tick % frames.length]!, c.info], ok: [g.ok, c.ok], warn: [g.warn, c.warn], error: [g.error, c.error] }[b.status]!;
   return (
     <box id={`b${b.id}`} flexDirection="column" flexShrink={0} backgroundColor={focused ? c.selected : c.panel} paddingX={1}
       onMouseOver={() => enter("x")} onMouseOut={() => leave("x")} onMouseDown={() => onPick(b)}>

@@ -7,7 +7,7 @@ import { appendJsonl, readJsonl } from "../../src/journal/jsonl.ts";
 
 const noop = () => {};
 const makeLogger = (): Logger => ({ debug: noop, info: noop, warn: noop, error: noop });
-const theme = { text: "#fff", accent: "#0f0", warn: "#ff0", error: "#f00", info: "#00f" };
+const theme = { text: "#fff", accent: "#0f0", ok: "#0f0", warn: "#ff0", error: "#f00", info: "#00f" };
 const lines = (file: string) => (existsSync(join(pvxHome(), file)) ? readFileSync(join(pvxHome(), file), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 
 let level: "ok" | "warn" | "error" = "ok";

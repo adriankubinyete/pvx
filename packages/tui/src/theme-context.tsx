@@ -46,7 +46,7 @@ export function ThemeProvider({ statePath, children }: { statePath?: string; chi
   const api = useMemo<ThemeApi>(() => {
     const c = applyAccent(axes.theme, tokensFor(axes.theme, axes.custom), axes.accent);
     const g = glyphs[axes.symbols];
-    const level = { ok: c.accent, warn: c.warn, error: c.error, info: c.info };
+    const level = { ok: c.ok, warn: c.warn, error: c.error, info: c.info };
     return {
       c, g, axes, set, flush: writer.flush,
       box: (color = c.border) => ({ border: axes.border !== "none", borderStyle: axes.border === "single" ? "single" : "rounded", borderColor: color }),

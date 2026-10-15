@@ -11,7 +11,7 @@ import { toneColor as tone } from "./tones.ts";
 import { Fields } from "./fields.tsx";
 import { FocusCtx, useHost } from "./host.tsx";
 import { Button } from "./button.tsx";
-import { clock } from "./kit.tsx";
+import { CLOCK_W, clock, fixedClock } from "./kit.tsx";
 
 export { Button, unreachableButtons } from "./button.tsx";
 
@@ -94,13 +94,16 @@ interface TimesInput {
   total?: number;
 }
 
+/** The color of the percentage and times of a bar: running is plain text, failed is the error color, done is the success color (never the accent). */
+const PROGRESS_COLOR: Record<TimesInput["state"], (c: Tokens) => string> = { running: (c) => c.text, failed: (c) => c.error, done: (c) => c.ok };
+
 /** The words after the percentage: times when `startedAt` is known, else just the state word for failed and done. */
 function timesText({ state, elapsed, total }: TimesInput): string {
   if (elapsed === undefined) return { running: "", failed: "falhou", done: "concluído" }[state];
-  if (state === "failed") return `falhou em ${clock(elapsed)}`;
+  if (state === "failed") return `falhou em ${clock(elapsed)}`; // a final time does not change: no padding
   if (state === "done") return `concluído em ${clock(elapsed)}`;
-  if (total === undefined) return clock(elapsed);
-  return `${clock(elapsed)} · faltam ~${clock(Math.max(0, total - elapsed))}`;
+  if (total === undefined) return fixedClock(elapsed);
+  return `${fixedClock(elapsed)} · faltam ~${clock(Math.max(0, total - elapsed)).padEnd(CLOCK_W)}`; // the time left is the last thing on the line: it pads on the right
 }
 
 export function ProgressBar({ value, startedAt, etaMs, state = "running", label }: Props<"ProgressBar">) {
@@ -128,15 +131,15 @@ export function ProgressBar({ value, startedAt, etaMs, state = "running", label 
   // A failure paints the cells at the stop point red, right after the filled part: one bar, no gap.
   const bad = state === "failed" ? Math.min(w - Math.min(filled, w - 1), Math.max(1, Math.round(w * 0.04))) : 0;
   const lit = state === "failed" ? Math.min(filled, w - bad) : filled;
-  const color = state === "failed" ? c.error : c.accent;
+  const color = PROGRESS_COLOR[state](c);
   return (
     <box width="100%" flexShrink={0} {...(measure as object)}>
       <text wrapMode="none" flexShrink={0}>
         {head ? <span fg={c.dim}>{head}</span> : null}
-        <span fg={c.accent}>{g.progressFull.repeat(lit)}</span>
+        <span fg={state === "done" ? c.ok : c.accent}>{g.progressFull.repeat(lit)}</span>
         {bad ? <span fg={c.error}>{g.progressFull.repeat(bad)}</span> : null}
         <span fg={c.dim}>{g.progressEmpty.repeat(Math.max(0, w - lit - bad))}</span>
-        <span fg={state === "running" ? c.text : color}>{` ${tail}`}</span>
+        <span fg={color}>{` ${tail}`}</span>
       </text>
     </box>
   );
@@ -153,7 +156,7 @@ const cellColor = (c: Tokens, state: keyof typeof CELL_WORD): string => (state =
 export function CellGrid({ cells, onPress, legend = true, focused }: Props<"CellGrid">) {
   const { c, g } = useTheme();
   const { cols } = useLayout();
-  const inPage = useContext(FocusCtx);
+  const inPage = useContext(FocusCtx) ?? false;
   const on = focused ?? inPage;
   const [measure, width] = useWidth();
   const [sel, setSel] = useState<string | undefined>(undefined);
@@ -334,7 +337,7 @@ export function Conversation({ questions, answers, onAnswer, onConfirm, header, 
         onMouseOver={() => (setOver(q.id), listFocus && setCursor(q.id))} onMouseOut={() => setOver((o) => (o === q.id ? undefined : o))}
         onMouseDown={() => (setCursor(undefined), setEditing(q.id))}>
         <text wrapMode="none">
-          <span fg={sel ? c.accent : hot ? c.dim : c.accent}>{`   ${sel ? g.cursor : g.ok} `}</span>
+          <span fg={sel ? c.accent : hot ? c.dim : c.ok}>{`   ${sel ? g.cursor : g.ok} `}</span>
           <span fg={c.dim}>{clean(q.title).padEnd(tw)}</span>
           <span fg={c.text}>{summaryOf(q, answers[q.id], g.active)}</span>
           <span fg={c.dim}>{dflt ? "  (padrão)" : ""}</span>

@@ -41,7 +41,8 @@ export const activeBack = (backs: readonly BackEntry[]) => backs.findLast((b) =>
 export const BackCtx = createContext<BackEntry[] | null>(null);
 export const HostCtx = createContext<HostPage | null>(null);
 /** Whether the page receives keys now (`usePageFocused`). Separate from `HostCtx` so a focus change does not re-register keys. */
-export const FocusCtx = createContext(false);
+/** Null outside a page frame (a test double, the Módulos tab): nothing there says the keyboard is elsewhere. */
+export const FocusCtx = createContext<boolean | null>(null);
 export function useHost(): HostPage {
   const h = useContext(HostCtx);
   if (!h) throw new Error("hook de sdk.ui usado fora de uma página");
@@ -283,7 +284,7 @@ function useConfirm() {
 /** True while the page receives keys: its tab is active with the bar not focused, or it is the top pushed screen. */
 function usePageFocused() {
   useHost();
-  return useContext(FocusCtx);
+  return useContext(FocusCtx) ?? false;
 }
 
 function useViewport() {

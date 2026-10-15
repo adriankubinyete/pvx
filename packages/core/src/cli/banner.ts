@@ -50,7 +50,7 @@ export async function bannerLines(io: CliIO, now = Date.now()): Promise<string[]
   const cols = Math.max(20, Number(io.env.COLUMNS) || DEFAULT_COLS);
   const accent = (s: string) => fg(io.theme.accent, s);
   const dim = (s: string) => fg(io.theme.info, s);
-  const level = { ok: ["✓", io.theme.accent], warn: ["!", io.theme.warn], error: ["✗", io.theme.error] } as const;
+  const level = { ok: ["✓", io.theme.ok], warn: ["!", io.theme.warn], error: ["✗", io.theme.error] } as const;
   const me = currentUser(io.env);
   const rule = accent("═".repeat(Math.min(cols, 78)));
   const body: string[] = [];

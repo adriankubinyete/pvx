@@ -41,8 +41,8 @@ test("the 54-wide card has the mockup's sections, two columns up to 16 cores and
   expect(t[9]).toMatch(/^swap {2}▱+ +0% +0\/2\.0G$/);
   expect(t[10]).toMatch(/^disco ▰+▱+ +70% +38\/54G$/);
   expect(t[11]).toMatch(/^─ rede · processos ─+$/);
-  expect(t[12]).toMatch(/^eth0 {2}↓ 1\.2 MB\/s {2}↑ 340 KB\/s {2}212 proc +$/);
-  expect(t[13]).toMatch(/^asterisk 68% {2}mysqld 12% {2}httpd 4% +$/);
+  expect(t[12]).toMatch(/^eth0 {2}↓ {3}1\.2 MB\/s {2}↑ {3}340 KB\/s {4}212 proc +$/);
+  expect(t[13]).toMatch(/^asterisk {3}68% {2}mysqld {5}12% {2}httpd {7}4% +$/);
   expect(t[14]).toMatch(/ {2}atualizado 14:32:07$/);
 
   const many = machineCard(snap(32), 54, 99, glyphs.unicode).map(text);
@@ -81,5 +81,23 @@ test("rows drop by priority: processes, network, second graph row, swap; cores, 
   expect(planCard(8, 96, 14)).toMatchObject({ graph2: true, net: false, swap: true });
   expect(planCard(8, 96, 12)).toMatchObject({ graph2: false, swap: true });
   expect(planCard(8, 96, 11)).toMatchObject({ graph2: false, swap: false });
-  expect(rows(8, 96, 99).filter((x) => x.includes("asterisk"))[0]).toContain("cron 1%"); // five processes when wide
+  expect(rows(8, 96, 99).filter((x) => x.includes("asterisk"))[0]).toMatch(/cron {8}1%/); // five processes when wide
+});
+
+/** The column where `needle` starts in the first row that has it. */
+const columnOf = (lines: string[], needle: string): number => lines.find((line) => line.includes(needle))!.indexOf(needle);
+
+test("a live value keeps its width: what follows the network, the processes and the load does not move when they change", () => {
+  const quiet = machineCard(snap(8, { net: { iface: "eth0", rx: 5, tx: 900 }, procs: 9 }), 96, 99, glyphs.unicode).map(text);
+  const busy = machineCard(snap(8, { net: { iface: "eth0", rx: 88.5 * 1048576, tx: 1000 * 1024 }, procs: 1234 }), 96, 99, glyphs.unicode).map(text);
+  expect(columnOf(quiet, "↑")).toBe(columnOf(busy, "↑"));
+  expect(columnOf(quiet, "proc")).toBe(columnOf(busy, "proc"));
+  const netRows = [quiet, busy].map((lines) => lines.find((line) => line.startsWith("eth0"))!);
+  expect(netRows[0]).toHaveLength(netRows[1]!.length);
+});
+
+test("the used memory is padded to the width of the total, so the column after it stays put", () => {
+  const rows = (used: number) => machineCard(snap(2, { mem: { used: used * 2 ** 30, total: 16 * 2 ** 30 } }), 54, 99, glyphs.unicode).map(text).find((line) => line.startsWith("mem"))!;
+  expect(rows(9)).toHaveLength(rows(10).length);
+  expect(rows(9).indexOf("/")).toBe(rows(10).indexOf("/"));
 });

@@ -114,7 +114,7 @@ export function HomeTab({ store, nav, profile, registry, sampler }: { store: Ses
   }, [slots]);
   const favorites = useMemo(() => loadFavorites(), []);
 
-  const color = { ok: c.accent, warn: c.warn, error: c.error };
+  const color = { ok: c.ok, warn: c.warn, error: c.error };
   const conf = conformityOf(store); // the cache module pages read too
   const snap = useSyncExternalStore(conf.subscribe, conf.getSnapshot);
   const checked = snap.conformidade;
@@ -137,7 +137,7 @@ export function HomeTab({ store, nav, profile, registry, sampler }: { store: Ses
     notas: slotItems<string>(slots, "home.notes", hidden).map((t, i): Row => ({ id: `note:${i}`, mark: [" ", c.dim], text: clean(t) })),
     atividade: activity(history, blocks, favorites).map((a) => ({
       id: a.id,
-      mark: a.favorite ? [g.favorite, c.warn] : a.status === "error" ? [g.error, c.error] : a.status === "warn" ? [g.warn, c.warn] : a.status === "ok" ? [g.ok, c.accent] : [" ", c.dim],
+      mark: a.favorite ? [g.favorite, c.warn] : a.status === "error" ? [g.error, c.error] : a.status === "warn" ? [g.warn, c.warn] : a.status === "ok" ? [g.ok, c.ok] : [" ", c.dim],
       text: clean(a.line),
       note: a.at ? relTime(a.at, now) : undefined,
       use: a.line,
@@ -233,7 +233,7 @@ export function HomeTab({ store, nav, profile, registry, sampler }: { store: Ses
           <>
             <text wrapMode="none" flexShrink={0}>
               <span fg={c.text}>{`${slots.read("home.summary", hidden)}  `}</span>
-              <span fg={attention.length ? worst : c.accent}>{cf}</span>
+              <span fg={attention.length ? worst : c.ok}>{cf}</span>
               <span fg={c.dim}>{ce}</span>
             </text>
             <box flexDirection="row" flexShrink={0}><text fg={c.dim} wrapMode="none" flexShrink={0}>{`verificado às ${hhmm(checked!.at)} · `}</text>{act(hintText("home", "r"))}</box>

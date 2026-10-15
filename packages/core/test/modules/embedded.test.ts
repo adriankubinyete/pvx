@@ -9,7 +9,7 @@ import {
 
 const noop = () => {};
 const makeLogger = (): Logger => ({ debug: noop, info: noop, warn: noop, error: noop });
-const theme = { text: "#fff", accent: "#0f0", warn: "#ff0", error: "#f00", info: "#00f" };
+const theme = { text: "#fff", accent: "#0f0", ok: "#0f0", warn: "#ff0", error: "#f00", info: "#00f" };
 const FIXTURES = join(import.meta.dir, "../fixtures/usermodules");
 
 beforeEach(() => {

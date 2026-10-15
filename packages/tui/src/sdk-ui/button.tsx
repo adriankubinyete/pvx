@@ -50,11 +50,11 @@ export function LookText({ look }: { look: ButtonLook }) {
 }
 
 /** The key of a `Button`: its own component, so the hook runs only when there is one. */
-function ButtonKey({ keys, label, onPress }: { keys: string; label: string; onPress: () => void }) {
+function ButtonKey({ keys, label, help, onPress }: { keys: string; label: string; help?: boolean; onPress: () => void }) {
   const host = useHost();
   const latest = useRef(onPress);
   latest.current = onPress;
-  useEffect(() => host.addKey({ keys, label, run: () => latest.current() }), [host, keys, label]);
+  useEffect(() => host.addKey({ keys, label, help, run: () => latest.current() }), [host, keys, label, help]);
   return null;
 }
 
@@ -80,7 +80,7 @@ function useReachabilityCheck(label: string, reachable: boolean) {
   }, [label, reachable]);
 }
 
-export function Button({ label, onPress, primary, danger, disabled, keys, focused }: Props<"Button">) {
+export function Button({ label, onPress, primary, danger, disabled, keys, help, focused }: Props<"Button">) {
   const { c } = useTheme();
   const [hot, setHot] = useState(false);
   const off = disabled !== undefined;
@@ -91,7 +91,7 @@ export function Button({ label, onPress, primary, danger, disabled, keys, focuse
   };
   return (
     <box flexShrink={0} flexDirection="column" onMouseDown={press} onMouseOver={() => setHot(true)} onMouseOut={() => setHot(false)}>
-      {keys && !off ? <ButtonKey keys={keys} label={label} onPress={onPress} /> : null}
+      {keys && !off ? <ButtonKey keys={keys} label={label} help={help} onPress={onPress} /> : null}
       <LookText look={look} />
       {off && disabled ? <text wrapMode="none" fg={c.dim}>{clean(disabled)}</text> : null}
     </box>

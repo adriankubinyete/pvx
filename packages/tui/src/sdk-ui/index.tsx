@@ -9,6 +9,8 @@ import { Form } from "./pages.tsx";
 import { CellGrid, Conversation, Loading, ProgressBar, useAsync } from "./flow.tsx";
 import { CopyBlock, useCopy } from "./copy.tsx";
 import { RunPanel } from "./run-panel.tsx";
+import { Card, SdkCardGrid } from "./card.tsx";
+import { ConfirmPreview } from "../session/ConfirmDialog.tsx";
 
 /** `sdk.ui`: the one React copy of the process, handed to modules so they never import it. */
 export const ui: SdkUi = {
@@ -16,7 +18,7 @@ export const ui: SdkUi = {
   Fragment,
   useState, useEffect, useMemo, useRef,
   Panel, Row, Text, Chip, Meter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
-  Conversation, Button, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel,
+  Conversation, Button, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel, Card, CardGrid: SdkCardGrid, ConfirmPreview,
   ...hooks,
 };
 export { PageHost, PagePane, pageScope, pageScreen } from "./pages.tsx";

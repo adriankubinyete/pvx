@@ -211,3 +211,16 @@ test("every card fits inside the frame: the right border is drawn within the col
     t.destroy();
   }
 });
+
+/** Every run of cells as `text|fg|bg`, line by line: pins the colors as well as the characters. */
+const paint = (t: TuiHarness) => t.spans().lines.map((line) => line.spans.map((s) => `${s.text}|${s.fg.toString()}|${s.bg.toString()}`).join("¦")).join("\n");
+
+// Pins the look of the Módulos grid (module, official, catalog and dashed cards; focused and not) so the shared Card primitive cannot change it.
+for (const focused of [true, false]) {
+  test(`the Módulos grid keeps its exact look (${focused ? "focused" : "inactive selection"})`, async () => {
+    const cards = [...fixture(), ...many(2), ...actionCards(4)];
+    const t = await render(cards, 120, [], focused);
+    expect(t.frame()).toMatchSnapshot();
+    expect(paint(t)).toMatchSnapshot();
+  });
+}

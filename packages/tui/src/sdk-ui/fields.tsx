@@ -10,7 +10,7 @@ import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
 import { END_OF_TEXT, withDerived } from "./derive.ts";
 import { buttonLook, LookText } from "./button.tsx";
-import { HostCtx } from "./host.tsx";
+import { FocusCtx, HostCtx } from "./host.tsx";
 
 type Props = Parameters<SdkUi["Fields"]>[0];
 type Value = string | boolean;
@@ -93,12 +93,14 @@ const picks0 = (f: { id: string; options?: { value: string }[] }, initial: Recor
 
 type KeyEvent = Parameters<Parameters<typeof useKeys>[0]>[0];
 
+/** What `onKey` answers when the form does not want the key: the host (the tab bar, the page) gets it. */
+const RELEASE = false;
+
 /** The keyboard of the form. Mounted one commit after the form: handlers run newest first, so it outranks the page and the tab bar. */
-function Keys({ on }: { on: (k: KeyEvent) => void }) {
+function Keys({ on }: { on: (k: KeyEvent) => void | typeof RELEASE }) {
   useKeys((k) => {
     if (matchKey(k, "ctrl+k")) return; // the palette is the host's
-    on(k);
-    return true; // the form owns every other key; a focused textarea still gets its own
+    return on(k) !== RELEASE; // the form owns every other key; a focused textarea still gets its own
   });
   return null;
 }
@@ -108,6 +110,10 @@ export const Fields: Component<Props> = (props) => {
   const { c, g } = useTheme();
   const { cols } = useLayout();
   const host = useContext(HostCtx); // a form outside a page (the Módulos tab) has no page footer: its screen sets the scope
+  // A form in a page owns the keyboard only while the page has it: with the tab bar focused, or in a tab kept mounted behind another, every key goes to the host.
+  const keyboardOwner = useContext(FocusCtx) ?? true;
+  const [inside, setInside] = useState(true); // false after `esc`: the form is on screen but the page has the keyboard (`enter` goes back in)
+  const engaged = active && keyboardOwner && inside;
   const [focus, setFocus] = useState(() => Math.max(0, fields.findIndex((f) => f.id === initialFocus)));
   const [ready, setReady] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -124,6 +130,9 @@ export const Fields: Component<Props> = (props) => {
   const scroll = useRef<ScrollBoxRenderable>(null);
   useEffect(() => setReady(true), []);
   useEffect(() => {
+    if (active && keyboardOwner) setInside(true); // entering the form again (the page got the keyboard back, the parent turned it on) puts the focus in a field
+  }, [active, keyboardOwner]);
+  useEffect(() => {
     const at = fields[focus];
     if (at) scroll.current?.scrollChildIntoView(fieldId(at));
   }, [focus]);
@@ -138,7 +147,7 @@ export const Fields: Component<Props> = (props) => {
   const rowy = here !== undefined && isRowStyle(here);
   const enterHint = button ? "ativa" : here?.kind === "toggle" ? "marca" : here?.kind === "choice" ? "escolhe" : here?.kind === "area" ? "" : focus === fields.length - 1 ? "salva" : "avança";
   const marks_ = fields.some((f) => f.kind === "toggle" || f.kind === "multi" || f.kind === "choice");
-  const hints = [
+  const hints = !inside ? "enter|edita" : [
     here?.kind === "area" ? "tab|campo" : listy ? "↑↓|opção\ntab|campo" : rowy ? "←→|opção\n↑↓ tab|campo" : "↑↓ tab|campo",
     marks_ ? `space|${here?.kind === "choice" ? "escolhe" : "marca"}` : "",
     here?.kind === "secret" && here.generate ? `${here.generate}|gera` : "",
@@ -148,13 +157,13 @@ export const Fields: Component<Props> = (props) => {
     details ? "ctrl+d|ver o comando" : "",
   ].filter(Boolean).join("\n");
   useEffect(() => {
-    if (!active || !host) return;
+    if (!active || !keyboardOwner || !host) return;
     const offs = hints.split("\n").map((hint) => {
       const [keys, label, help] = hint.split("|");
       return host.addKey({ keys: keys!, label: label!, help: help === "help", run() {} });
     });
     return () => offs.forEach((off) => off());
-  }, [host, hints, active]);
+  }, [host, hints, active, keyboardOwner]);
 
   /** The values of the form, the lines as given (`from`; the derived fields are filled in by `shownLines`). */
   const valuesOf = (from: Record<string, Line>, over: Record<string, Value> = {}): Record<string, Value> => ({
@@ -167,7 +176,7 @@ export const Fields: Component<Props> = (props) => {
   });
   const shownLines = withDerived(fields, lines, touched, (from) => valuesOf(from));
   const read = (over: Record<string, Value> = {}): Record<string, Value> => valuesOf(shownLines, over);
-  const go = (n: number) => (setFocus(n), setConfirm(false), setShown(undefined));
+  const go = (n: number) => (setFocus(n), setConfirm(false), setShown(undefined), setInside(true));
   /** `over`: values the state has not caught up with yet (a choice picked by the same enter). */
   const submit = (over?: Record<string, Value>) => {
     const values = read(over);
@@ -218,19 +227,25 @@ export const Fields: Component<Props> = (props) => {
     const picked = field.kind === "choice" && field.options?.[at] ? { [field.id]: field.options[at]!.value } : undefined;
     return focus === fields.length - 1 ? submit(picked) : step(1);
   };
-  const onKey = (k: KeyEvent) => {
+  /** `esc` leaves the field: the module hears `onCancel`, and the form hands the keyboard back to the page (a second `esc` reaches the tab bar). */
+  const leave = () => {
+    onCancel();
+    setInside(false);
+  };
+  const onKey = (k: KeyEvent): void | typeof RELEASE => {
     if (confirm) {
       if (k.name === "escape") setConfirm(false);
       else if (matchKey(k, "enter")) remove();
       return;
     }
-    if (k.name === "escape") return onCancel();
+    if (!inside) return matchKey(k, "enter") ? setInside(true) : RELEASE;
+    if (k.name === "escape") return leave();
     if (matchKey(k, "ctrl+s")) return submit();
     const typing = here !== undefined && TEXT_KINDS.includes(here.kind); // `?` is a character there
     if (details && (matchKey(k, "ctrl+d") || (k.sequence === "?" && !typing))) return setDetailsOpen(!detailsOpen);
     if (here?.kind === "secret" && matchKey(k, "ctrl+r")) return setShown(shown === here.id ? undefined : here.id);
-    if (matchKey(k, "tab")) return step(1);
-    if (matchKey(k, "shift+tab")) return step(-1);
+    if (matchKey(k, "tab")) return focus === total - 1 ? RELEASE : step(1);
+    if (matchKey(k, "shift+tab")) return focus === 0 ? RELEASE : step(-1);
     if (here?.kind === "area") return; // the textarea owns arrows and enter
     if (here && isRowStyle(here)) return onRowKey(here, k);
     if (here && (here.kind === "choice" || here.kind === "multi")) {
@@ -264,7 +279,8 @@ export const Fields: Component<Props> = (props) => {
         const text = generateSecret();
         setLines({ ...lines, [here.id]: lineOf(text) });
         setShown(here.id);
-        return clear(here.id);
+        clear(here.id);
+        return;
       }
       const e = editLine(shownLines[here.id]!, k);
       if (!e) return;
@@ -297,7 +313,7 @@ export const Fields: Component<Props> = (props) => {
   const focusMark = (on: boolean) => <box width={MARK_W} flexShrink={0}><text wrapMode="none" fg={c.accent}>{on ? g.query : " "}</text></box>;
   const labelColumn = (f: Field, on: boolean) => (stacked ? null : <box width={labelCol} flexShrink={0}>{labelOf(f, on)}</box>);
   /** The buttons look like every `Button` (UI.md, section 12): the primary a filled chip, the others `[ label ]`, filled when focused. */
-  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(label, { primary: b === "save", danger: b === "remove", lit: button === b }, c)} />);
+  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(label, { primary: b === "save", danger: b === "remove", lit: button === b && engaged }, c)} />);
   const btnBox = (b: Button, content: React.ReactNode) => (
     <box key={b} flexShrink={0} onMouseDown={() => (go(fields.length + buttons.indexOf(b)), press(b))}>{content}</box>
   );
@@ -390,11 +406,11 @@ export const Fields: Component<Props> = (props) => {
   );
   const areaField = (f: Field, i: number, on: boolean) => (
     <box key={f.id} flexShrink={0} height={(f.rows ?? 5) + 2} border borderStyle="rounded" borderColor={on ? c.accent : c.border} title={clean(f.label)} onMouseDown={() => go(i)}>
-      <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && active} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
+      <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && engaged} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
     </box>
   );
   const fieldView = (f: Field, i: number) => {
-    const on = i === focus && !confirm && active;
+    const on = i === focus && !confirm && engaged;
     if (f.kind === "area") return areaField(f, i, on);
     if (f.kind === "toggle") return toggleField(f, i, on);
     if (isRowStyle(f)) return rowField(f, i, on);
@@ -419,7 +435,7 @@ export const Fields: Component<Props> = (props) => {
 
   return (
     <box flexDirection="column" flexShrink={1} minHeight={0}>
-      {ready && active ? <Keys on={onKey} /> : null}
+      {ready && active && keyboardOwner ? <Keys on={onKey} /> : null}
       {title ? <text wrapMode="none" flexShrink={0} fg={c.text}><b>{clean(title)}</b></text> : null}
       {description ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(description)}</text> : null}
       {title ? <text flexShrink={0}> </text> : null}
@@ -430,7 +446,7 @@ export const Fields: Component<Props> = (props) => {
       {showButtons ? <text flexShrink={0}> </text> : null}
       {showButtons ? <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <box flexDirection="row" flexShrink={0} gap={2}>
-          {focusMark(button !== undefined)}
+          {focusMark(button !== undefined && engaged)}
           {btn("save", clean(submitLabel))}
           {btn("cancel", "cancelar")}
         </box>

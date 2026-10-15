@@ -861,6 +861,8 @@ export interface NoticeAction {
   label: string;
   onPress: () => void;
   keys?: string;
+  /** With `keys`: the key shows in the `?` help and not in the footer. */
+  help?: boolean;
   focused?: boolean;
 }
 
@@ -886,6 +888,31 @@ export interface ConfirmOptions {
   cancelLabel?: string;
   /** The confirm button takes the error style. */
   destructive?: boolean;
+}
+
+/** A chip at the bottom left of a `Card`: colored text, or a solid chip when it needs attention. */
+export interface CardChip {
+  text: string;
+  tone: Tone;
+  solid?: boolean;
+}
+
+/** What a `Card` shows (`CardGrid` takes a list of them). */
+export interface CardSpec {
+  /** Selection key; unique in the grid. */
+  id: string;
+  /** The bold first line. */
+  name: string;
+  /** Right of the name: a dot and a word, in the tone (`ok` and `dim` keep the word dim, the others color it). */
+  state?: { text: string; tone?: Tone; dot?: "●" | "○" };
+  /** The dim second line (colored when it has a `tone`). */
+  line2?: { text: string; tone?: Tone };
+  /** Left of the bottom line; the ones that do not fit are dropped. */
+  chips?: CardChip[];
+  /** Bottom right: a version or a footnote. */
+  footnote?: string;
+  /** An action card: dashed border, the key in bold and the label centered, `sub` dim under it. It has no state, line or chips. */
+  action?: { key: string; sub?: string };
 }
 
 export interface SdkUi {
@@ -1008,7 +1035,7 @@ export interface SdkUi {
     active?: boolean;
     /** `false` hides [ salvar ], [ cancelar ] and [ remover ]: enter on the last field or ctrl+s submits, esc cancels. Default true. */
     buttons?: boolean;
-    /** With it, an up/down arrow past the first/last field calls it instead of wrapping (tab still wraps). */
+    /** With it, an up/down arrow past the first/last field calls it instead of wrapping. `tab` on the last stop and `shift+tab` on the first never wrap: they go to the host (the next or previous tab). */
     onEdge?: (dir: "up" | "down") => void;
     /** Header line of the form (bold), written once (no box). */
     title?: string;
@@ -1050,7 +1077,24 @@ export interface SdkUi {
    * `disabled` takes the reason (`disabled="falta o token"`): the button is dim, ignores the mouse and the key, and the reason shows under it. `keys` (`enter`, `ctrl+enter`, `a`) registers the key
    * for the page, so the footer and `?` show it. `focused` draws it selected (for a button the page navigates to by keyboard).
    */
-  Button: Component<{ label: string; onPress: () => void; primary?: boolean; danger?: boolean; disabled?: string; keys?: string; focused?: boolean }>;
+  Button: Component<{ label: string; onPress: () => void; primary?: boolean; danger?: boolean; disabled?: string; keys?: string; /** With `keys`: the key shows in the `?` help and not in the footer (a page with many buttons keeps its footer to ~5 rows). */ help?: boolean; focused?: boolean }>;
+  /**
+   * One card (a box with a name, a state, a dim line, chips and a footnote). `state` is how the page draws it: `selected` has the accent border,
+   * `inactive` a muted border and a `›` (the selection while the keyboard is elsewhere), `normal` a faint border. An `action` card is dashed.
+   * `width` defaults to one cell of the grid at the current terminal width. A page that navigates among cards uses `CardGrid`.
+   */
+  Card: Component<{ card: CardSpec; state?: "normal" | "selected" | "inactive"; width?: number; onPress?: () => void }>;
+  /**
+   * Cards in a grid: 3 columns from 120 terminal columns, 2 from 80, else 1. `focused` is "the grid owns the keyboard": arrows move `selected`
+   * (by id, the first card when unknown), `enter` and a click call `onActivate`, up on the first row calls `onTop`. Without `focused` the grid takes no key
+   * and the selected card keeps a muted border. The grid grows to fill its parent and scrolls to the selected card.
+   */
+  CardGrid: Component<{ cards: CardSpec[]; selected?: string; onSelect: (id: string) => void; onActivate: (id: string) => void; focused: boolean; onTop?: () => void; /** Shown when there are no cards. */ empty?: unknown }>;
+  /**
+   * The confirm dialog (`useConfirm`) drawn in place, as a preview: no backdrop, no key, no answer. For a sheet or a help page that shows what the question will look like;
+   * the real one is `useConfirm`. The buttons are drawn as the dialog draws them (`focused` is the one that looks selected: default the cancel, the safe one).
+   */
+  ConfirmPreview: Component<ConfirmOptions & { focused?: "confirm" | "cancel" }>;
   /**
    * One full-width line: a `━` bar, the percentage and the times. `value` is 0..1. With `startedAt` (ms since epoch) it shows the elapsed
    * time and, while running, `faltam ~` the rest (from `etaMs`, the expected TOTAL duration; without it from the pace so far); it ticks each second.

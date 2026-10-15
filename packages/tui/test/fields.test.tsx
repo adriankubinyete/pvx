@@ -47,7 +47,7 @@ test("save and cancel always render; remover only with onDelete", async () => {
   expect(m2.t.frame()).toContain("[ excluir ]");
 });
 
-test("down and tab reach the 2nd and 3rd fields, then the buttons, and wrap", async () => {
+test("down and tab reach the 2nd and 3rd fields, then the buttons; tab does not wrap, an arrow does", async () => {
   const { t, calls } = await mount();
   await t.type("a");
   await t.press("ARROW_DOWN");
@@ -60,12 +60,15 @@ test("down and tab reach the 2nd and 3rd fields, then the buttons, and wrap", as
   await t.press("ARROW_RIGHT"); // cancelar
   await t.press("RETURN");
   expect(calls.cancel).toBe(1);
-  await t.press("TAB"); // wraps to the first field
-  await t.type("c");
-  expect(t.frame()).toContain("ac");
-  await t.press("TAB", { shift: true }); // back across the wrap to cancelar
+  await t.press("TAB"); // the last stop: tab is the host's (the next tab), the focus stays on cancelar
   await t.press(" ");
   expect(calls.cancel).toBe(2);
+  await t.press("ARROW_DOWN"); // an arrow wraps to the first field
+  await t.type("c");
+  expect(t.frame()).toContain("ac");
+  await t.press("TAB", { shift: true }); // the first stop: shift+tab is the host's too, the focus stays
+  await t.type("d");
+  expect(t.frame()).toContain("acd");
 });
 
 test("enter walks the text fields, toggles a checkbox and submits on the last field", async () => {
@@ -99,7 +102,7 @@ test("ctrl+s submits and esc cancels from any field", async () => {
 test("onDelete asks for confirmation first; esc backs out, enter confirms", async () => {
   let del = 0;
   const { t, calls } = await mount({ onDelete: () => void del++ });
-  await t.press("TAB", { shift: true }); // remover
+  await t.press("ARROW_UP"); // wraps to remover
   await t.press("RETURN");
   expect(t.frame()).toContain("remover? enter confirma · esc volta");
   expect(del).toBe(0);

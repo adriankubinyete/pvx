@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { PhaseFailure, RunState, SdkUi } from "@pvx/sdk";
+import type { PhaseFailure, RunState, RunView, SdkUi, Tone } from "@pvx/sdk";
 import { hooks, useKey } from "./host.tsx";
 import { fit } from "./columns.ts";
 import { Button } from "./button.tsx";
@@ -58,6 +58,9 @@ function useStopper(run: RunState, onStop: (() => void) | undefined): () => void
   return () => void run.stop().catch((error: unknown) => nudge(error instanceof Error ? error.message : String(error), "error"));
 }
 
+/** The tone of the state word: done is the success color (never the accent), failed is the error color. */
+const VIEW_TONE: Record<RunView, Tone> = { idle: "dim", running: "dim", stale: "dim", failed: "error", done: "ok" };
+
 /**
  * A phased run while it goes and after it ends: the bar and the state word, the phases, the failure (with the way to continue), the
  * module's own `children`, and the job log. It only draws what `run` says: the module still owns `useRun`, the start flow and what `done` means.
@@ -77,7 +80,7 @@ export function RunPanel({ run, etaMs, onResume, onStop, onExit, cause, loadingL
       {running ? <StopKey onStop={stop} /> : null}
       {copyText ? <CopyKey onCopy={() => void copy(copyText, { title: "erro" })} /> : null}
       <ProgressBar value={run.progress} startedAt={run.state?.startedAt} etaMs={etaMs} state={BAR_STATE[run.view]} />
-      <Text tone={run.view === "failed" ? "error" : "dim"}>{VIEW_WORD[run.view]}</Text>
+      <Text tone={VIEW_TONE[run.view]}>{VIEW_WORD[run.view]}</Text>
       <Panel title="fases">
         <Steps items={run.steps} />
       </Panel>

@@ -4,11 +4,7 @@ import type { TabId } from "../tabs/context.ts";
 import { tabOf } from "../tabs/pageTabs.ts";
 import { STATE_TEXT, type Item, type Origin, type Tone } from "./tree.ts";
 
-/** Columns of the card grid: 3 from 120 terminal columns, 2 from 80, else 1. */
-export const gridCols = (cols: number) => (cols >= 120 ? 3 : cols >= 80 ? 2 : 1);
-/** Total card height: border, name, what it delivers, a gap, the chips. */
-export const CARD_H = 6;
-export const CARD_GAP = 1;
+export { CARD_GAP, CARD_H, gridCols } from "../sdk-ui/card-layout.ts";
 
 export interface Chip {
   text: string;

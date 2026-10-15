@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createLogger, createRegistry, execute, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import type { OutLine } from "@pvx/sdk";
-import { App, createSessionStore, theme, ui } from "@pvx/tui";
+import { App, createSessionStore, createTabsNav, Tabs, theme, ui } from "@pvx/tui";
 import { pageScreen } from "../../tui/src/sdk-ui/index.tsx";
 import { renderTui, type TuiHarness } from "./render-tui.ts";
 
@@ -61,16 +61,41 @@ export async function runCommand(moduleDir: string, line: string, opts: RunComma
   return { ok, exit, lines };
 }
 
-const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30, isRoot = true, sshClient }: { cols?: number; rows?: number; isRoot?: boolean; sshClient?: string } = {}): Promise<TuiHarness> => {
-  const page = registry.pages.get(`${id}.${pageName}`);
-  if (!page) throw new Error(`página "${pageName}" não existe em "${id}" (tem: ${[...registry.pages.keys()].join(", ") || "nenhuma"})`);
+const sessionOf = (registry: Registry, isRoot: boolean, sshClient: string | undefined) => {
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const session = createSessionStore({
     registry, makeLogger, isRoot, session: { sshClient }, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: HOST_VERSION, theme }, argv),
   });
+  return { makeLogger, session };
+};
+
+interface MountSize { cols?: number; rows?: number; isRoot?: boolean; sshClient?: string }
+
+const registeredPage = (registry: Registry, id: string, pageName: string) => {
+  const page = registry.pages.get(`${id}.${pageName}`);
+  if (!page) throw new Error(`página "${pageName}" não existe em "${id}" (tem: ${[...registry.pages.keys()].join(", ") || "nenhuma"})`);
+  return page;
+};
+
+const mount = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30, isRoot = true, sshClient }: MountSize = {}): Promise<TuiHarness> => {
+  const page = registeredPage(registry, id, pageName);
+  const { makeLogger, session } = sessionOf(registry, isRoot, sshClient);
   return renderTui(
     <App root={pageScreen(page)} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger, isRoot }} />,
+    { cols, rows },
+  );
+};
+
+/** The real shell (tab bar, footer) with the page open as its tab and the keyboard inside it: what a technician sees after entering the tab. */
+const mountTab = async (registry: Registry, id: string, pageName: string, { cols = 100, rows = 30, isRoot = true, sshClient }: MountSize = {}): Promise<TuiHarness> => {
+  registeredPage(registry, id, pageName);
+  const { makeLogger, session } = sessionOf(registry, isRoot, sshClient);
+  const nav = createTabsNav();
+  nav.active = `page:${id}.${pageName}`;
+  const root = { id: "menu", scope: "menu" as const, element: <Tabs store={session} registry={registry} nav={nav} version={HOST_VERSION} /> };
+  return renderTui(
+    <App root={root} logger={makeLogger(id)} onExit={() => {}} statePath={join(pvxHome(), "tui-state.json")} pages={{ session, registry, makeLogger, isRoot }} />,
     { cols, rows },
   );
 };
@@ -81,6 +106,12 @@ export async function renderPage(moduleDir: string, pageName: string, size: { co
   return mount(registry, id, pageName, size);
 }
 
+/** Like `renderPage`, but the page is a tab of the real shell and the keyboard is inside it (the page needs `tab`). Use it for `expectNoKeyboardTrap`. */
+export async function renderTab(moduleDir: string, pageName: string, size: MountSize = {}): Promise<TuiHarness> {
+  const { registry, id } = await loadOne(moduleDir, size.sshClient, size.isRoot);
+  return mountTab(registry, id, pageName, size);
+}
+
 export interface Session {
   /** The temp `PVX_HOME` every call of this session shares. */
   home: string;
@@ -88,10 +119,12 @@ export interface Session {
   run(line: string, opts?: RunCommandOpts): Promise<{ ok: boolean; exit: number; lines: OutLine[]; text: string }>;
   /** Mounts a page of the module on the same home (the same state the `run` calls left). Call `destroy()` at the end. */
   renderPage(pageName: string, size?: { cols?: number; rows?: number }): Promise<TuiHarness>;
+  /** Mounts a page of the module as a tab of the real shell, the keyboard inside it (see `renderTab`). */
+  renderTab(pageName: string, size?: { cols?: number; rows?: number }): Promise<TuiHarness>;
 }
 
 /** Like `runCommand` and `renderPage`, but ONE temp `PVX_HOME` for several calls, so a test can run a sequence ("add", then "list") and then look at the page. */
 export async function runSession(moduleDir: string, { sshClient, isRoot }: { sshClient?: string; isRoot?: boolean } = {}): Promise<Session> {
   const { registry, id, home } = await loadOne(moduleDir, sshClient, isRoot);
-  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, isRoot, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, { isRoot, sshClient, ...size }) };
+  return { home, run: (line, opts = {}) => runOn(registry, line, { sshClient, isRoot, ...opts }), renderPage: (pageName, size) => mount(registry, id, pageName, { isRoot, sshClient, ...size }), renderTab: (pageName, size) => mountTab(registry, id, pageName, { isRoot, sshClient, ...size }) };
 }

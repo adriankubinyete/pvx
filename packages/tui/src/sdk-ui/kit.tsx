@@ -235,6 +235,11 @@ export const clock = (ms: number) => {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m${p(s % 60)}s` : `${Math.floor(s / 3600)}h${p(Math.floor((s % 3600) / 60))}m`;
 };
 
+/** Cells of a clock (`42s`, `3m05s`, `59m59s`, `1h02m`; six at most): live times are padded to it so what follows does not move. */
+export const CLOCK_W = 6;
+/** `clock`, right-aligned in `CLOCK_W` cells. */
+export const fixedClock = (ms: number) => clock(ms).padStart(CLOCK_W);
+
 export function Steps({ items }: Props<"Steps">) {
   const { c, g } = useTheme();
   const [tick, setTick] = useState(0);
@@ -257,7 +262,7 @@ export function Steps({ items }: Props<"Steps">) {
             <span fg={tone(c, t)}>{`${glyph[it.state]} `}</span>
             <span fg={it.state === "pending" || it.state === "skipped" ? c.dim : c.text}>{clean(it.label).padEnd(w)}</span>
             <span fg={tone(c, t)}>{`  ${STEP_WORD[it.state].padEnd(ww)}`}</span>
-            <span fg={c.dim}>{`  ${it.elapsedMs === undefined ? "" : clock(it.elapsedMs)}`}</span>
+            <span fg={c.dim}>{`  ${it.elapsedMs === undefined ? " ".repeat(CLOCK_W) : fixedClock(it.elapsedMs)}`}</span>
             <span fg={c.dim}>{it.detail ? `  ${clean(it.detail)}` : ""}</span>
           </text>
         );
@@ -312,7 +317,7 @@ export function Notice({ level, action, children }: Props<"Notice">) {
           <span fg={c.text}>{text}</span>
         </text>
       </box>
-      {action ? <Button label={action.label} onPress={action.onPress} keys={action.keys} focused={action.focused} /> : null}
+      {action ? <Button label={action.label} onPress={action.onPress} keys={action.keys} help={action.help} focused={action.focused} /> : null}
     </box>
   );
 }

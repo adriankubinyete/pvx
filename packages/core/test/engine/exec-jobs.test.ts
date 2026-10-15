@@ -150,7 +150,7 @@ describe("jobs", () => {
     await until(async () => (await jobs.log("c")).includes("i blocking"));
     const cli = async (...argv: string[]) => {
       const out: string[] = [];
-      const exit = await runCli({ argv, env: {}, isTTY: false, isRoot: true, registry, makeLogger: () => log, profilesDir: "", version: "t", theme: { text: "", accent: "", warn: "", error: "", info: "" }, out: (l) => void out.push(l) });
+      const exit = await runCli({ argv, env: {}, isTTY: false, isRoot: true, registry, makeLogger: () => log, profilesDir: "", version: "t", theme: { text: "", accent: "", ok: "", warn: "", error: "", info: "" }, out: (l) => void out.push(l) });
       return { exit, text: out.join("\n") };
     };
     expect((await cli("jobs")).text).toMatch(/jobber\/c {2}running/);

@@ -156,7 +156,7 @@ function Strip({ r }: { r: Review }) {
   const tone = { text: c.text, info: c.info, dim: c.dim } as const;
   const chip = (ok: boolean, text: string, key: string) => (
     <span key={key}>
-      <span fg={ok ? c.accent : c.error}>{ok ? g.ok : g.error}</span>
+      <span fg={ok ? c.ok : c.error}>{ok ? g.ok : g.error}</span>
       <span fg={ok ? c.text : c.error}>{` ${text}   `}</span>
     </span>
   );
@@ -225,7 +225,7 @@ function Files({ rows, sel, total, grow }: { rows: FileRow[]; sel?: string; tota
               <text wrapMode="none"><span fg={c.dim}>▾ </span><span fg={c.text}><b>{clean(r.group === "." ? "(raiz)" : r.group)}</b></span><span fg={c.dim}>{`  ${r.count} ${g.sep} ${r.lines} linhas`}</span></text>
             </box>
             <box flexShrink={0} paddingLeft={1}>
-              <text wrapMode="none" fg={r.hits ? c.warn : c.accent}>{r.hits ? `${g.warn} ${r.hits} ${r.hits === 1 ? "aviso" : "avisos"}` : `${g.ok} limpo`}</text>
+              <text wrapMode="none" fg={r.hits ? c.warn : c.ok}>{r.hits ? `${g.warn} ${r.hits} ${r.hits === 1 ? "aviso" : "avisos"}` : `${g.ok} limpo`}</text>
             </box>
           </box>
         ) : (

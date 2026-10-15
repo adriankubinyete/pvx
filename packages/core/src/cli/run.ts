@@ -12,6 +12,8 @@ import { catalogOf, pathHelp, rootHelp } from "./help.ts";
 export interface Palette {
   text: string;
   accent: string;
+  /** Success and done: never the accent. */
+  ok: string;
   warn: string;
   error: string;
   info: string;
@@ -64,7 +66,7 @@ export interface Output {
   finish(exit: number): number;
 }
 
-const GLYPH = { success: ["✓", "accent"], warning: ["!", "warn"], error: ["✗", "error"], info: ["i", "info"] } as const;
+const GLYPH = { success: ["✓", "ok"], warning: ["!", "warn"], error: ["✗", "error"], info: ["i", "info"] } as const;
 
 /** `[✓] text`: brackets and symbol in the level color, text in the main color; plain lines are bare. */
 export function formatLine(l: OutLine, theme: Palette): string {

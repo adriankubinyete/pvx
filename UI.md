@@ -22,6 +22,14 @@ barra de abas  ──↓/enter──▶  página  ──enter──▶  painel  
 - Desenhe o foco só quando `usePageFocused()` for `true`: com o foco na barra, nenhum painel parece ativo.
 - Use `Panel onPress` para focar o painel clicado.
 
+**Nenhuma página prende o teclado.** Seja o que a página desenhar (um `Fields` sempre montado, um `textarea`, uma lista), o host sempre consegue tirar o usuário dela com as suas teclas:
+
+- `esc` sobe um nível por vez: de dentro de um campo para a página, da página para a barra. Três `esc` no máximo levam à barra.
+- Com o foco na barra (ou numa aba montada atrás de outra), a página não recebe tecla nenhuma: `tab`, `shift+tab` e `←→` trocam de aba, mesmo com um formulário montado.
+- Num formulário, `tab` anda entre os campos e botões; no último ponto `tab` e no primeiro `shift+tab` não dão a volta: vão para o host (a próxima ou a anterior aba). As setas dão a volta.
+- Um formulário só pega o teclado enquanto o técnico está nele. Numa página com vários blocos, o formulário não nasce "ativo": o técnico entra (`enter` ou clique) e `esc` devolve à página (`Fields active`, `onCancel`).
+- Teste: `expectNoKeyboardTrap(page)` (`@pvx/testing`; monte a página com `renderTab`) falha se até três `esc` não levam à barra de abas. Chame-o em todo teste de página que tenha formulário, `textarea` ou captura de teclas.
+
 Exemplos no código:
 
 - `packages/tui/src/panelnav.ts` (`pickPanel`, `panelStep`).
@@ -126,12 +134,15 @@ Exemplos no código:
 - Nada de texto explicativo fixo na tela: a explicação vai para o `?`.
 - Rótulo de regra no infinitivo ou estado desejado ("aceitar", "bloquear"), não no particípio ("aceito"), que parece já aplicado.
 - Cores só por tokens do tema (`useTheme().c`); nunca um literal hexadecimal fora de `packages/tui/src/theme.ts`.
+- **Sucesso/concluído = token de sucesso (`ok`), nunca o acento.** O verde do `[✓]`, do `✓` de `Steps` e listas, das células e da palavra "concluído" de `CellGrid`, de `Badge ok`, do `tone="ok"`, da barra concluída e do resultado de conformidade vem de `c.ok`. O acento é só de foco, seleção, teclas, botão principal e elemento ativo; "rodando" é o `info` (azul), que não se confunde nem com o sucesso nem com o acento. Assim, com acento azul, um item concluído não parece um em execução. Todo tema tem o token `ok` (verde no escuro e no claro; no Terminal, o verde da paleta ANSI).
+- **Valor ao vivo tem largura fixa.** Número que se atualiza sozinho (rede, processos, carga, porcentagem, tempo decorrido, taxa, contador) ocupa sempre as mesmas células, para a tela não pular a cada leitura: alinhe à direita numa largura que cabe o maior valor. Use `fixedNumber`, `fixedRate`, `fixedPercent` e `fixedClock` (`packages/tui/src/fixed.ts`); o total que não muda dá a largura do que muda (`3.1/6.0G`, `38/54G`). Tempo final (`concluído em 5s`) não muda mais e fica sem preenchimento.
 - Cada glifo novo ocupa uma célula: confira num teste de frame.
 - Termos fixos, sem sinônimos (lista no `CLAUDE.md`).
 
 Exemplos no código:
 
-- `packages/tui/src/theme.ts` (tokens: `accent`, `warn`, `error`, `info`, `thirdParty`, `dim`).
+- `packages/tui/src/theme.ts` (tokens: `accent`, `ok`, `warn`, `error`, `info`, `thirdParty`, `dim`).
+- `packages/tui/src/fixed.ts` (`fixedNumber`, `fixedRate`, `fixedPercent`) e `packages/tui/src/sdk-ui/kit.tsx` (`fixedClock`).
 - `packages/tui/src/menu/cards.ts` (símbolos e tons dos cartões).
 - `packages/tui/src/tabs/conformity.ts`.
 
@@ -169,7 +180,7 @@ O desenho, sem exceção:
 - **Botões.** O primário vem cheio (um chip com fundo de acento, sem colchetes): ` criar e entrar ` (`submitLabel`, padrão `salvar`); `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`) e pergunta no diálogo da seção 18. O botão em foco ganha sublinhado e o `›` da linha. Todos clicáveis.
 - **Comando.** O formulário de um comando não mostra a linha `$ pvx …` nem "segredo fora da linha". `ctrl+d` (e `?`, fora de campo de texto) mostra a linha, apagada, numa só linha.
 - **Campo derivado.** `derive(values)` faz o campo seguir os outros enquanto o técnico não o editou. Editar para de seguir e guarda o texto; apagar até ficar vazio volta a seguir. A tela não diz nada sobre isso: o campo só mostra o valor, e ele continua editável. Exemplo: `Pasta no UOE` vira `clientes/<id-cliente>-<id-contrato>-<empresa>` conforme se digita.
-- **Teclas.** `↑↓` e `Tab` andam entre campos e botões; `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` cancela. Nas pontas de `choice` e `multi` em lista, `↑↓` passam ao campo vizinho; em `radio`, `buttons` e `row` (seção 19), `←→` movem a escolha e `↑↓` vão ao campo vizinho.
+- **Teclas.** `↑↓` e `Tab` andam entre campos e botões (as setas dão a volta; `tab` no último ponto e `shift+tab` no primeiro vão para o host, seção 1); `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` sai do campo: o módulo ouve `onCancel` e o formulário devolve o teclado à página (o segundo `esc` chega à barra; `enter` volta para dentro). Nas pontas de `choice` e `multi` em lista, `↑↓` passam ao campo vizinho; em `radio`, `buttons` e `row` (seção 19), `←→` movem a escolha e `↑↓` vão ao campo vizinho.
 - **Erro do módulo.** `FieldSpec.error` mostra uma mensagem sob o campo agora (um valor que só o módulo sabe recusar); ela some quando o campo é editado. `initialFocus` abre o formulário com o foco num campo.
 - **Erro e envio.** O primeiro campo com erro recebe o foco e bloqueia o envio. Na edição, o valor enviado é gravado como está: campo vazio limpa o valor.
 
@@ -247,6 +258,8 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `CellGrid` | um quadrado por item (pacotes, hosts, arquivos) | `■` feito/rodando/falhou em tons, pendente na cor fraca da borda; quebra na largura, legenda com contagens; hover realça, clique ou `enter` age |
 | `LogTail` | saída ao vivo | acompanha o fim; a roda do mouse sobe e solta; com `focused`, `↑↓`, `pgup`/`pgdn`, `home` e `end` rolam |
 | `Notice` | aviso que fica na tela ("precisa aplicar") | bloco em linha `[✓]`/`[!]`/`[✗]`/`[i]` na cor do nível (`[i]` é azul); `action` põe um botão no fim da linha; só tokens do tema |
+| `Card`, `CardGrid` | blocos que representam coisas (módulos, hosts, serviços) | seção 20 |
+| `ConfirmPreview` | mostrar numa folha ou ajuda como é a pergunta | o diálogo da seção 18 desenhado no lugar, sem fundo escurecido nem teclas |
 | `Badge`, `Details`, `Meter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `Row fit` | leitura de estado e valores | seção 19 |
 | `Loading`, `useAsync` | toda espera visível | spinner e texto |
 | `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
@@ -348,7 +361,8 @@ Todo botão, ação ou linha clicável tem um caminho pelo teclado. "Só com o m
 - Ação de página (`[ rodar agora ]`): é uma linha na seção a que pertence, alcançável por `↑↓` (a "linha de ações" no fim da lista, como `+ adicionar rotina…`), e/ou tem uma tecla (`keys`) que aparece no rodapé. Use as duas quando fizer sentido.
 - `Button` precisa de `keys` (tecla no rodapé) ou de `focused` (a página navega até ele e o desenha em foco). Um botão sem nenhum dos dois só responde ao mouse e é erro.
 - Botões de um formulário (`Fields`) andam por `Tab` e `↑↓` junto com os campos.
-- Teste: `expectButtonsReachable()` (`@pvx/testing`) falha se um botão montado não tem teclado. Chame-o depois de montar a tela, em todo teste de página.
+- `Button help` (com `keys`) põe a tecla no `?` e não no rodapé: uma página com muitos botões mantém o rodapé em ~5 atalhos.
+- Teste: `expectButtonsReachable()` (`@pvx/testing`) falha se um botão montado não tem teclado. Chame-o depois de montar a tela, em todo teste de página. `expectNoKeyboardTrap(page)` falha se a página prende o teclado (seção 1).
 
 ```text
  1 Rotinas
@@ -371,6 +385,7 @@ Toda confirmação (comando destrutivo, `remover` de um formulário, uma ação 
 - Ação destrutiva: o botão de confirmar usa o token `error`.
 - O foco começa na opção segura (a de cancelar). `←` `→` e `Tab` andam entre os botões, `enter` ativa, `esc` cancela, os dois botões são clicáveis.
 - Uma borda só (o diálogo flutua). O fundo e o diálogo são irmãos, porque `opacity` vale para a subárvore.
+- `ConfirmPreview` desenha o mesmo diálogo no lugar, em modo "prévia": só a caixa, sem fundo escurecido, sem tecla e sem resposta. É para folha de referência e ajuda; o diálogo de verdade continua sendo `useConfirm`, aberto por um botão com tecla.
 - No módulo: `useConfirm()({ title, description?, confirmLabel?, cancelLabel?, destructive? })` devolve `Promise<boolean>`. A CLI mantém o prompt de texto.
 
 ```text
@@ -474,9 +489,32 @@ Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui
 
 Exemplos no código: `packages/tui/src/sdk-ui/display.tsx` (`Badge`, `Details`, `Meter`, `Spark`), `packages/tui/src/sdk-ui/button.tsx` (`Button`, `buttonLook`), `packages/tui/src/sdk-ui/copy.tsx` (`CopyBlock`), `packages/tui/src/sdk-ui/kit.tsx` (`Notice`, `Chip`, `Row`, `Scroll`, `List`), `packages/tui/src/sdk-ui/fields.tsx` (`radio`, `buttons`, `row`), `packages/tui/src/session/Blocks.tsx` (o scrollback).
 
+## 20. Cards
+
+`Card` e `CardGrid` (`sdk.ui`) são o bloco que representa uma coisa: um módulo, um host, um serviço. A aba Módulos usa a mesma peça.
+
+```text
+╭────────────────────────────────────╮ ╭────────────────────────────────────╮ ╭╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╮
+│  lorem-ipsum           ● carregado │ │  dolor-sit            ● aguardando │ ╎                                    ╎
+│ 2 comandos · aba Lorem             │ │ 1 comando                          │ ╎         a  adicionar ipsum         ╎
+│                                    │ │                                    │ ╎       lorem ipsum dolor sit        ╎
+│  ⚠ só linux                  0.1.0 │ │ aba oculta                   1.0.0 │ ╎                                    ╎
+╰────────────────────────────────────╯ ╰────────────────────────────────────╯ ╰╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╯
+   selecionado (borda de destaque)         normal (borda apagada)               ação (tracejado, com tecla)
+```
+
+- **Quatro linhas.** O nome em negrito com o estado à direita (ponto e palavra, no tom: `ok` e `dim` deixam a palavra apagada, os outros a colorem); uma segunda linha apagada; uma linha em branco; e embaixo os chips à esquerda (cheios quando pedem atenção; os que não cabem somem) e a versão ou nota à direita.
+- **Três aparências.** Selecionado: borda de destaque. Normal: borda fraca. Ação: borda tracejada, a tecla em negrito e o rótulo centralizados, com a linha `sub` apagada embaixo; não tem estado, linha nem chips. Com a grade sem foco o selecionado guarda a borda apagada e um `›` (seleção inativa, seção 2).
+- **Grade.** 3 colunas a partir de 120 colunas do terminal, 2 a partir de 80, senão 1. `CardGrid` rola até o selecionado. A seleção é por `id`.
+- **Teclado e mouse.** Com `focused`, as setas movem a seleção (`↑` na primeira linha chama `onTop`), `enter` e o clique chamam `onActivate`; sem `focused` a grade não pega tecla. O hover move a seleção só com a grade focada.
+- **Em página de módulo.** Uma folha que mostra estados desenha `Card state="selected" | "inactive" | "normal"`; uma página que navega entre cards usa `CardGrid` e a regra da seção 17 (o foco entra por `enter` ou clique).
+
+Exemplos no código: `packages/tui/src/sdk-ui/card.tsx` (`CardFace`, `CardGrid`, `Card`), `packages/tui/src/sdk-ui/card-layout.ts` (`gridCols`, `cardWidth`), `packages/tui/src/menu/CardGrid.tsx` (os módulos da aba Módulos), `pvx-kitdemo` (a folha).
+
 ## Checklist antes de entregar uma tela
 
-- [ ] Setas, `enter`, `esc` e `↑` para a barra seguem os quatro níveis de foco.
+- [ ] Setas, `enter`, `esc` e `↑` para a barra seguem os quatro níveis de foco, e a página não prende o teclado (`expectNoKeyboardTrap`).
+- [ ] Sucesso e concluído usam o token `ok`, nunca o acento; número ao vivo tem largura fixa (seção 6).
 - [ ] Seleção ativa, inativa e hover são visualmente distintas; hover fora de lista ativa não muda a seleção.
 - [ ] Tudo que parece clicável responde ao clique, e o hover dá retorno.
 - [ ] A lista dá a volta nas pontas, alinha colunas e rola só a linha selecionada; a seleção é por id.

@@ -26,7 +26,7 @@ interface RowProps { item: Item; selected: boolean; helpW: number; onHover: (id:
 /** Memoized: moving the selection repaints two rows, not the list. */
 const Row = memo(function Row({ item, selected, helpW, onHover, onPick }: RowProps) {
   const { c, g } = useTheme();
-  const tone: Record<Tone, string> = { ok: c.accent, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
+  const tone: Record<Tone, string> = { ok: c.ok, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
   const origin = item.origin === "official" ? [g.official, c.accent] : item.origin === "dev" || item.origin === "embedded" ? [g.dev, c.warn] : item.origin ? [g.thirdParty, c.thirdParty] : null;
   return (
     <box id={item.id} flexDirection="row" flexShrink={0} paddingX={1} backgroundColor={selected ? c.selected : undefined}

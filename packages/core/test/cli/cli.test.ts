@@ -6,7 +6,7 @@ import { createRegistry, loadModules, runCli, type CliIO } from "../../src/index
 
 process.env.PVX_USERMODULES = join(import.meta.dir, "../fixtures/usermodules");
 const profilesDir = join(import.meta.dir, "../fixtures/profiles");
-const theme = { text: "#ffffff", accent: "#00ff00", warn: "#ffff00", error: "#ff0000", info: "#0000ff" };
+const theme = { text: "#ffffff", accent: "#00ff00", ok: "#00ff00", warn: "#ffff00", error: "#ff0000", info: "#0000ff" };
 
 const noop = () => {};
 const makeLogger = (): Logger => ({ debug: noop, info: noop, warn: noop, error: noop });

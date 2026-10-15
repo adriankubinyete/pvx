@@ -35,7 +35,7 @@ async function mount(opts: { cols?: number; rows?: number; profile?: string; cor
 test("Início renders the four zones at 120x40 and stays one column at 80x24", async () => {
   const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
   const f = t.frame();
-  for (const s of ["central-sp-01", "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "─ cpu", "carga 2.14", "mem ", "disco ", "asterisk 68%", "› [1] conformidade", "› [2] atividade", "▰", "▱"]) expect(f).toContain(s);
+  for (const s of ["central-sp-01", "perfil Principal", "pvx 0.1.0", "atualizado", "› máquina", "─ cpu", "carga 2.14", "mem ", "disco ", "asterisk   68%", "› [1] conformidade", "› [2] atividade", "▰", "▱"]) expect(f).toContain(s);
   const row = f.split("\n").find((l) => l.includes("› máquina"))!;
   expect(row).toContain("› [1] conformidade"); // two columns
   t.destroy();
@@ -193,7 +193,7 @@ test("priority dropping at 80x24, the full card at 120x40, the second graph row 
   for (const s of ["─ cpu", "mem ", "disco ", "› [1] conformidade", "› [2] atividade"]) expect(f).toContain(s);
   h?.destroy();
   f = (await mount({ cols: 120, rows: 40 })).t.frame();
-  for (const s of ["asterisk 68%", "eth0", "swap", "↓ 1.2 MB/s"]) expect(f).toContain(s);
+  for (const s of ["asterisk   68%", "eth0", "swap", "↓   1.2 MB/s"]) expect(f).toContain(s);
   h?.destroy();
   const wide = (await mount({ cols: 230, rows: 25 })).t.frame().split("\n");
   const cpu = wide.findIndex((l) => l.includes("─ cpu"));

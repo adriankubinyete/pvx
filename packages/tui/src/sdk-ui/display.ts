@@ -1,6 +1,7 @@
 // What the value primitives draw (Badge, Details, Meter, Spark), as pure functions: no UI, so they test without rendering.
 import type { DetailItem } from "@pvx/sdk";
 import { WIDE_COLS } from "../layout.ts";
+import { fixedPercent } from "../fixed.ts";
 import { graph } from "../tabs/machine-card.ts";
 import type { Glyphs } from "../theme.ts";
 
@@ -32,7 +33,7 @@ export function sparkText(values: readonly number[], width: number, max: number,
 export function sparkSuffix(values: readonly number[], max: number): string {
   const last = values.at(-1);
   if (last === undefined || max !== 100) return "";
-  return `${Math.round(last)}%`;
+  return fixedPercent(last);
 }
 
 /** Columns between the two columns of `Details`. */

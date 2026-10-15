@@ -1,5 +1,6 @@
 import type { MachineSnap } from "@pvx/core";
 import type { Glyphs } from "../theme.ts";
+import { fixedNumber, fixedPercent, fixedRate } from "../fixed.ts";
 import { fmtUptime, levelOf, meter } from "./home.ts";
 
 export type Tone = "dim" | "text" | "accent" | "warn" | "error" | "info";
@@ -55,13 +56,19 @@ export function graph(values: readonly number[], cells: number, rows: number, g:
   return out;
 }
 
-const rate = (b: number) => (b < 1024 ? `${Math.round(b)} B/s` : b < 1048576 ? `${Math.round(b / 1024)} KB/s` : `${(b / 1048576).toFixed(1)} MB/s`);
 const gib = (b: number) => b / 2 ** 30;
 const num = (x: number, big: boolean) => (x === 0 ? "0" : big ? String(Math.round(x)) : x.toFixed(1));
+/** `used/total G`, the used part padded to the width of the total (which does not change), so the text keeps its width as the use grows. */
 const size = (u: { used: number; total: number }) => {
   const big = gib(u.total) >= 10;
-  return `${num(gib(u.used), big)}/${num(gib(u.total), big)}G`;
+  const total = num(gib(u.total), big);
+  return `${num(gib(u.used), big).padStart(total.length)}/${total}G`;
 };
+/** Cells of the process count (`96`, `1234`) and of one process name in the top list. */
+const PROCS_W = 5;
+const TOP_NAME_W = 10;
+/** Cells of one load average (`2.14`, `12.34`). */
+const LOAD_W = 5;
 
 const coreCols = (n: number) => (n > 16 ? 4 : 2);
 const coreRows = (n: number) => Math.ceil(n / coreCols(n));
@@ -95,8 +102,8 @@ export function machineCard(m: MachineSnap, w: number, max: number, g: Glyphs): 
   out.push(fit([[host, "text", true], [cut(`  ${where}`, w - host.length), "dim"]], w));
 
   out.push(fit(sep("cpu"), w));
-  const [l1, l5, l15] = m.cpu.load.map((x) => x.toFixed(2));
-  const right = `${pct(m.cpu.total).padStart(4)} ${g.sep} carga ${l1} ${l5} ${l15}`;
+  const [l1, l5, l15] = m.cpu.load.map((load) => fixedNumber(load, { width: LOAD_W, decimals: 2 }));
+  const right = `${pct(m.cpu.total).padStart(4)} ${g.sep} carga${l1}${l5}${l15}`;
   const gw = Math.max(4, w - right.length - 1);
   graph(m.cpu.history, gw, plan.graph2 ? 2 : 1, g).forEach((row, i) =>
     out.push(fit([[row, tone(m.cpu.total)], ...(i === 0 ? ([[` ${right}`, "text"]] as Line) : [])], w)));
@@ -138,13 +145,13 @@ export function machineCard(m: MachineSnap, w: number, max: number, g: Glyphs): 
   if (plan.net) {
     out.push(fit(sep(`rede ${g.sep} processos`), w));
     const nl: Line = m.net
-      ? [[m.net.iface, "dim"], [`  ${g.down} ${rate(m.net.rx)}  ${g.up} ${rate(m.net.tx)}`, "info"]]
+      ? [[m.net.iface, "dim"], [`  ${g.down} ${fixedRate(m.net.rx)}  ${g.up} ${fixedRate(m.net.tx)}`, "info"]]
       : [["rede n/d", "dim"]];
-    if (m.procs !== undefined) nl.push([`  ${m.procs} proc`, "text"]);
+    if (m.procs !== undefined) nl.push([`  ${fixedNumber(m.procs, { width: PROCS_W, unit: " proc" })}`, "text"]);
     out.push(fit(nl, w));
     if (plan.procs) {
       const top = (m.top ?? []).slice(0, w >= WIDE_CARD ? 5 : 3);
-      out.push(fit(m.top ? (top.length ? top.flatMap((t, i): Line => [[`${i ? "  " : ""}${cut(t.name, 15)} `, "dim"], [pct(t.pct), tone(t.pct)]]) : [["ocioso", "dim"]]) : [["processos n/d", "dim"]], w));
+      out.push(fit(m.top ? (top.length ? top.flatMap((t, i): Line => [[`${i ? "  " : ""}${cut(t.name, TOP_NAME_W).padEnd(TOP_NAME_W)}`, "dim"], [fixedPercent(t.pct), tone(t.pct)]]) : [["ocioso", "dim"]]) : [["processos n/d", "dim"]], w));
     }
   }
   const at = `atualizado ${new Date(m.at).toTimeString().slice(0, 8)}`;

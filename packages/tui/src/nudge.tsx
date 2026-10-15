@@ -10,7 +10,7 @@ const TONED_MS = 4000;
 export type NudgeTone = "ok" | "warn" | "error";
 type Nudge = (msg?: string, tone?: NudgeTone) => void;
 interface Notice { text: string; tone?: NudgeTone }
-const COLOR_BY_TONE: Record<NudgeTone, TokenKey> = { ok: "accent", warn: "warn", error: "error" };
+const COLOR_BY_TONE: Record<NudgeTone, TokenKey> = { ok: "ok", warn: "warn", error: "error" };
 const Ctx = createContext<Nudge>(() => {});
 const Msg = createContext<Notice | null>(null);
 

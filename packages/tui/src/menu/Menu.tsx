@@ -266,7 +266,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const back = () => setView({ kind: "list" });
   const helpW = cols - 2 - 4 - LABEL_W - 2;
   const empty = !catalog ? undefined : !cat ? <Loading label="carregando o catálogo…" /> : cat.modules.length ? `todos os módulos do catálogo já estão instalados · ${source(cat)}` : `catálogo vazio · ${source(cat)}`;
-  const tone: Record<Tone, string> = { ok: c.accent, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
+  const tone: Record<Tone, string> = { ok: c.ok, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
   const open = actions ? cards.find((x) => x.id === actions) : undefined;
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
