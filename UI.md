@@ -224,6 +224,7 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `Conversation` | perguntas guiadas, uma por vez (instalador, assistente) | a respondida vira `✓ título   resumo`; a próxima aparece como `○ título`; `↑` no topo da pergunta sobe para as respondidas; `enter` ou clique reabre no lugar e volta ao ponto onde estava; depois da última vem a confirmação com todas as respostas (as puladas marcadas "(padrão)"), as notas "antes de instalar" e o botão principal; nada se aplica antes dele |
 | `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável; `primary` em acento e negrito; `keys` põe a tecla no rodapé e no `?` |
 | `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo; com `useRun` o tempo da fase em curso avança sozinho, e a barra anda dentro de uma fase longa por `phase.progress`; mostre uma espera (`Loading`) enquanto `run.loading` |
+| `RunPanel` | a tela de uma execução em fases (backup, instalação) | a barra e a palavra do estado, `Steps`, a falha (`Notice`, comando, código, saída, causa) com `[ continuar daqui ]`, os `children` do módulo e o log; `x` para, `c` copia o erro, `esc` sai; espera (`Loading`) até haver execução |
 | `ProgressBar` | progresso global de uma tarefa | `━` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
 | `CellGrid` | um quadrado por item (pacotes, hosts, arquivos) | `▪` feito/rodando/falhou em tons, `▫` pendente; quebra na largura, legenda com contagens; hover realça, clique ou `enter` age |
 | `LogTail` | saída ao vivo | acompanha o fim; a roda do mouse sobe e solta; com `focused`, `↑↓`, `pgup`/`pgdn`, `home` e `end` rolam |
@@ -238,6 +239,7 @@ Exemplos no código:
 - `packages/tui/src/sdk-ui/flow.tsx` (`Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading`, `useAsync`).
 - `packages/tui/src/sdk-ui/copy.tsx` (`useCopy`, painel de cópia).
 - `packages/tui/src/sdk-ui/kit.tsx` (`Steps`, `LogTail`) e `packages/tui/src/sdk-ui/fields.tsx`.
+- `packages/tui/src/sdk-ui/run-panel.tsx` e `packages/tui/src/sdk-ui/run.ts` (`RunPanel`, `failureViewOf`).
 
 ## 13. Precisa aplicar
 

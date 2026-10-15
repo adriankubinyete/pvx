@@ -100,6 +100,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `ctx.net.fetch` com `body` binário, `bodyFile`, `signal` e `timeoutMs` (30 s); `ctx.net.upload` (multipart em fluxo, sem carregar o arquivo); `ctx.fs` com `entries`, `stat`, `du`, `free`, `mkdir` e `remove` recursivo (as leituras também no `ReadCtx`); `@pvx/testing` com `buffer: false` honrado, `fs` e `net` falsos completos → [SDK: envio binário em `ctx.net`, mais operações em `ctx.fs` e fakes completos](#2026-10-14--sdk-envio-binário-em-ctx-net-mais-operações-em-ctx-fs-e-fakes-completos)
 - `useCommand(linha).run({ args, stdin, secrets })`: o segredo vai ao comando pelo ambiente da execução (como o `Form`), nunca por argv nem pela linha do scrollback → [useCommand().run aceita secrets](#2026-10-14--usecommand-run-aceita-secrets)
 - `sdk.cron` (`validate`, `describe`, `normalize`), `sdk.crontab.block(id)` (leitura com "no crontab for", fusão do bloco marcado, escrita conferida e volta) e `sdk.validate.firstProblem` → [SDK: sdk.cron, sdk.crontab e sdk.validate](#2026-10-14--sdk-sdk-cron-sdk-crontab-e-sdk-validate)
+- `sdk.ui.RunPanel` (barra e palavra do estado, `Steps`, falha com comando, código, saída, causa e `continuar daqui`, `children` do módulo, log, `x` para, `c` copia o erro) desenhado a partir do `run` do `useRun` → [RunPanel: a tela de uma execução em fases no framework](#2026-10-14--runpanel-a-tela-de-uma-execução-em-fases-no-framework)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1316,3 +1317,18 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o autobackup tinha cópias próprias de tudo isso, com testes; outro módulo com agenda as reescreveria.
 
 **Limite:** `describe` só conhece os ritmos acima (dia da semana único, dia do mês único; faixas e listas voltam como escritas). `block` mexe no crontab do usuário que roda o pvx e não trata `/etc/cron.d`.
+
+## 2026-10-14 — RunPanel: a tela de uma execução em fases no framework
+
+**Status:** vigente.
+
+**Decisão:** o que as páginas Live do issabel e do autobackup repetiam vira o componente `RunPanel`, com o nome diferente de `RunView` (que já é o tipo do estado da execução).
+
+- **Recebe `run`, não o nome.** O módulo continua dono do `useRun` (ele decide o fluxo de início, o que `done` significa e quando montar a tela); duas leituras do mesmo job a cada segundo seriam desperdício. `RunPanel` só desenha.
+- **Falha.** `failureViewOf` (puro, em `run.ts`) monta o texto: `<fase> falhou` mais comando, código e as últimas 4 linhas de um `StepError`, ou só a mensagem de qualquer outra falha; job parado sem falha gravada é aviso (`execução parada`); job que acabou sem motivo é erro. `cause(falha)` deixa o módulo dizer a causa provável. Com `onResume`, o botão `continuar daqui` (`enter`).
+- **Teclas.** `x` para o job (por padrão `run.stop()`; uma recusa vai ao rodapé como erro), `c` copia o erro, `esc` chama `onExit`.
+- **`children`.** O módulo põe o que é só dele entre as fases e o log (o muro de pacotes do issabel).
+
+**Motivo:** os dois módulos tinham a mesma pilha (barra, `Steps`, `Notice` de falha, botão, `LogTail`) e os mesmos mapas `BAR_STATE` e de palavras.
+
+**Limite:** o layout é uma coluna. A tela lado a lado do issabel (fases à esquerda, pacotes à direita, alternância com o log completo) não cabe no componente: o issabel pode usar `RunPanel` com os pacotes em `children` e perder a segunda coluna, ou manter a sua tela. `RunPanel` não decide o `done`: depois dele a página mostra o que quiser.

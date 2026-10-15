@@ -233,7 +233,7 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja List em colunas) e `Conversation`, `Button`, `ProgressBar`, `CellGrid` e `Loading` (veja Componentes de fluxo).
+- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`; na raiz da página não desenha borda nem título, veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (formulário gerado do `ArgSpec` de um comando do módulo), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja List em colunas) e `Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading` e `RunPanel` (veja Componentes de fluxo).
 - **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
 
@@ -967,6 +967,7 @@ Um instalador guiado, uma operação longa ou qualquer tela de várias etapas us
 - **`ProgressBar`**: uma linha de `━` na largura toda, com `%` e tempos. `value` de 0 a 1; `startedAt` (ms) liga o tempo decorrido (atualiza a cada segundo) e, rodando, o `faltam ~` (de `etaMs`, a duração total esperada; sem ele, pelo ritmo até agora). `state="failed"` pinta de vermelho o trecho do ponto de parada, colado ao preenchido, e diz `falhou em`; `state="done"` enche a barra e diz `concluído em`.
 - **`CellGrid`**: uma célula por item (`▪` feito, rodando e falhou, cada um no seu tom; `▫` pendente), quebrada na largura, com legenda das contagens. O mouse passa por cima (realça), clica (seleciona e chama `onPress(id)`); o teclado (setas, `enter`) vale enquanto a página tem o foco, ou com `focused`; na borda a seta fica com a página. O rótulo da célula selecionada ou sob o mouse aparece embaixo.
 - **`Loading`** e **`useAsync(fn, deps)`**: toda leitura ou ação que passe de ~300 ms mostra `Loading` (spinner e texto). `useAsync` roda `fn` ao montar e quando `deps` mudam (ou em `run()`), e devolve `{ loading, data, error, run }`; o último `data` fica enquanto roda de novo, e só a chamada mais nova vale.
+- **`RunPanel`**: a tela de uma execução em fases, desenhada a partir do `run` que o `useRun` devolveu (o módulo continua dono do `useRun`, do fluxo de início e do que `done` significa). De cima para baixo: a `ProgressBar` (`etaMs` é a duração total esperada) e a palavra do estado (`rodando`, `sem notícias do job`, `falhou`, `concluído`), as fases (`Steps`), a falha, os `children` do módulo (um `CellGrid` de pacotes, por exemplo) e o log do job (`LogTail`). A falha é um `Notice` (`<fase> falhou`, ou `execução parada` como aviso quando o técnico parou o job); sob ele, o comando, o código de saída e as últimas linhas de saída de um `StepError` (outra falha mostra a própria mensagem), o texto de `cause(falha)` sob `causa provável` quando o módulo o dá, e, com `onResume`, o botão `[ continuar daqui ]` (`enter`). Teclas: `x` para o job enquanto roda (`onStop`; por padrão `run.stop()`, e uma recusa, como a falta de root, aparece no rodapé), `c` copia o comando e a saída da falha, e `esc` chama `onExit`. Com `run.loading` ou `run.view` `idle` mostra um `Loading` (`loadingLabel`): monte-o quando existe uma execução. Precisa de uma página.
 - **`useCopy()`**: `copy(texto, { title? })` copia pelo clipboard do host e do terminal (OSC 52), mostra por alguns segundos um painel com exatamente o que foi copiado e o aviso `✓ copiado`. Sem clipboard, diz `não copiou: <causa>`, mantém o painel (dá para selecionar com o mouse) e resolve `false`.
 
 <!-- test -->
@@ -1003,6 +1004,44 @@ export default (sdk: Sdk) => {
   }
 
   return { pages: { instalar: { title: "Instalar", render: () => <Instalar /> } } };
+};
+```
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { CommandCtx, Sdk } from "@pvx/sdk";
+
+// pvx-module.json: "permissions": { "exec": ["tar"] }
+export default (sdk: Sdk) => {
+  const { h, Panel, Text, RunPanel, useRun, useRouter } = sdk.ui;
+
+  function Execucao() {
+    const run = useRun("backup");
+    const { pop } = useRouter();
+    // `continuar daqui` roda o mesmo comando: as fases prontas são puladas
+    return (
+      <RunPanel run={run} etaMs={10 * 60_000} onResume={() => void run.start("rodar").catch(() => {})} onExit={pop} cause={(falha) => (falha.code === 28 ? "o servidor não respondeu a tempo" : undefined)}>
+        <Text tone="dim">os arquivos vão para /var/backups</Text>
+      </RunPanel>
+    );
+  }
+
+  return {
+    commands: {
+      rodar: {
+        help: "Faz o backup em fases",
+        async run(ctx: CommandCtx) {
+          await ctx.phases.run("backup", [
+            { id: "arquivar", label: "arquivar", run: () => ctx.shell.echoing({ timeoutMs: 60 * 60_000 }).must("tar", ["czf", "/var/backups/a.tgz", "/etc"]).then(() => {}) },
+          ]);
+        },
+      },
+    },
+    pages: { execucao: { title: "Execução", render: () => <Execucao /> } },
+  };
 };
 ```
 

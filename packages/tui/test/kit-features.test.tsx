@@ -7,7 +7,7 @@ import type { JobStatus, PhasesState } from "@pvx/sdk";
 import { renderPage, renderTui, runSession, type TuiHarness } from "../../testing/src/index.ts";
 import { ThemeProvider } from "../src/index.ts";
 import { LogTail, Notice, Panel } from "../src/sdk-ui/kit.tsx";
-import { isCurrentRun, jobViewOf, runViewOf, stepsOf } from "../src/sdk-ui/run.ts";
+import { failureViewOf, isCurrentRun, jobViewOf, runViewOf, stepsOf } from "../src/sdk-ui/run.ts";
 import { windowStart } from "../src/sdk-ui/window.ts";
 
 const KIT = join(import.meta.dir, "../../core/test/fixtures/jobmodules/kit-demo");
@@ -170,6 +170,54 @@ test("a run that failed shows its phases, then done after the fix resumes it", a
   h = await session.renderPage("run", { cols: 80, rows: 24 });
   expect(h.frame()).toContain("view=done");
   expect(h.frame()).toContain("progress=100");
+});
+
+test("RunPanel: a failed run shows the notice, the command, the exit code, the cause and the way to continue; done shows the bar and no failure", async () => {
+  const session = await runSession(KIT);
+  await session.run("kit-demo break");
+  await session.run("kit-demo install");
+  h = await session.renderPage("live", { cols: 100, rows: 40 });
+  await until("[✗] banco falhou");
+  const failed = h.frame();
+  expect(failed).toContain("falhou"); // the state word beside the bar
+  expect(failed).toMatch(/comando +sh -c echo erro/);
+  expect(failed).toMatch(/saída +código 2/);
+  expect(failed).toContain("│ erro");
+  expect(failed).toContain("causa provável");
+  expect(failed).toContain("a fase database precisa de ajuda");
+  expect(failed).toContain("filho do módulo");
+  expect(failed).toContain("repos");
+  expect(failed).toContain("[ continuar daqui ]");
+  expect(failed).toContain("enter continuar daqui"); // the button registered its key
+  await h.press("RETURN");
+  expect(h.frame()).toContain("resumed=1");
+  h.destroy();
+  await session.run("kit-demo fix");
+  await session.run("kit-demo install");
+  h = await session.renderPage("live", { cols: 100, rows: 40 });
+  await until("concluído");
+  expect(h.frame()).not.toContain("[✗]");
+  expect(h.frame()).not.toContain("continuar daqui");
+});
+
+test("RunPanel: with no run yet it waits with a Loading, never a failure", async () => {
+  const session = await runSession(KIT);
+  h = await session.renderPage("live", { cols: 100, rows: 40 });
+  expect(h.frame()).toContain("esperando a execução…");
+  expect(h.frame()).not.toContain("falhou");
+});
+
+test("failureViewOf: a step error lists command, code and the last output; another error shows its message; a stop is a warning", () => {
+  const phases = [{ id: "db", label: "banco", weight: 1, state: "failed" as const }];
+  const step = { phases, startedAt: 1, runStartedAt: 1, failure: { phase: "db", message: "x saiu com código 2", command: "mysql -e x", code: 2, output: ["a", "b", "c", "d", "e"] } };
+  const view = failureViewOf(step, "failed", false)!;
+  expect(view).toMatchObject({ level: "error", headline: "banco falhou", copyText: "mysql -e x\na\nb\nc\nd\ne" });
+  expect(view.details).toEqual(["comando  mysql -e x", "saída    código 2", "│ b", "│ c", "│ d", "│ e"]);
+  const plain = { ...step, failure: { phase: "db", message: "sem espaço livre" } };
+  expect(failureViewOf(plain, "failed", false)).toMatchObject({ details: ["sem espaço livre"], copyText: "sem espaço livre" });
+  expect(failureViewOf({ ...step, failure: undefined }, "failed", true)).toMatchObject({ level: "warn", headline: "execução parada" });
+  expect(failureViewOf({ ...step, failure: undefined }, "failed", false)).toMatchObject({ level: "error" });
+  expect(failureViewOf({ ...step, failure: undefined }, "running", false)).toBeUndefined();
 });
 
 const status = (state: JobStatus["state"], startedAt?: number): JobStatus => ({ state, startedAt });

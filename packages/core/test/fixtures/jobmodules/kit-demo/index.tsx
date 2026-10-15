@@ -5,7 +5,7 @@ import type { CommandCtx, Sdk } from "@pvx/sdk";
 
 // Pages that exercise the newer SDK pieces: List window and row action, Panel shrink, Notice, useNudge tones, refetch, useRun.
 export default (sdk: Sdk) => {
-  const { h, Panel, Text, List, Notice, useState, useCommand, useKey, useNudge, useQuery, useRun } = sdk.ui;
+  const { h, Panel, Text, List, Notice, RunPanel, useState, useCommand, useKey, useNudge, useQuery, useRun } = sdk.ui;
   const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
   let reads = 0;
 
@@ -55,6 +55,20 @@ export default (sdk: Sdk) => {
     return <Panel><Text>{`resultado=${login.lastResult?.lines.map((line) => line.text).join("|") ?? "-"}`}</Text></Panel>;
   }
 
+  /** `RunPanel` over the `setup` run: the module owns `useRun`; "continuar daqui" counts the resumes. */
+  function Live() {
+    const run = useRun("setup");
+    const [resumed, setResumed] = useState(0);
+    return (
+      <Panel>
+        <Text>{`resumed=${resumed}`}</Text>
+        <RunPanel run={run} etaMs={60_000} onResume={() => setResumed((count) => count + 1)} cause={(failure) => `a fase ${failure.phase} precisa de ajuda`} loadingLabel="esperando a execução…">
+          <Text>filho do módulo</Text>
+        </RunPanel>
+      </Panel>
+    );
+  }
+
   function Refetch() {
     const count = useQuery<number>("kit-demo.count");
     useKey("r", "lê", () => void count.refetch());
@@ -101,6 +115,7 @@ export default (sdk: Sdk) => {
       "rows-select": { title: "Linhas (clique seleciona)", render: () => <Rows clickOpens={false} /> },
       "two-lists": { title: "Duas listas", render: () => <TwoLists /> },
       "secret-run": { title: "Segredo", render: () => <SecretRun /> },
+      live: { title: "Execução", render: () => <Live /> },
       refetch: { title: "Refetch", render: () => <Refetch /> },
       run: { title: "Run", render: () => <Run /> },
       "run-trailing": { title: "Run (database trailing)", render: () => <Run trailing={["database"]} /> },

@@ -1,6 +1,6 @@
 // What a page shows of a job and of a phased run. Pure: the hooks feed it, the tests read it.
 import { allPhasesFinished, phasesProgress } from "@pvx/core";
-import type { JobStatus, JobView, PhaseRecord, PhasesState, RunView, StepItem } from "@pvx/sdk";
+import type { JobStatus, JobView, PhaseFailure, PhaseRecord, PhasesState, RunView, StepItem } from "@pvx/sdk";
 
 export const DEFAULT_STALE_MS = 30_000;
 
@@ -45,3 +45,46 @@ export function stepsOf(state: PhasesState | undefined, now: number = Date.now()
 }
 
 export const progressOf = (state: PhasesState | undefined): number => (state ? phasesProgress(state) : 0);
+
+// ---- the failure block of `RunPanel` ----
+
+const OUTPUT_LINES_SHOWN = 4;
+
+/** What a failed or stopped run says, as plain text: a level, a headline and the lines under it. The component only draws it. */
+export interface FailureView {
+  level: "error" | "warn";
+  headline: string;
+  details: string[];
+  /** The text to copy for "copiar erro" (the command and its output, or the message); empty when there is nothing to copy. */
+  copyText: string;
+}
+
+const labelOfPhase = (state: PhasesState, id: string): string => state.phases.find((record) => record.id === id)?.label ?? id;
+
+/** A step error has the command, the exit code and the useful output: its message only repeats them. Any other failure has just the message. */
+function failureDetails(failure: PhaseFailure): string[] {
+  if (failure.command === undefined) return [failure.message];
+  const lines = [`comando  ${failure.command}`];
+  if (failure.code !== undefined) lines.push(`saída    código ${failure.code}`);
+  const output = (failure.output ?? []).slice(-OUTPUT_LINES_SHOWN).map((line) => `│ ${line}`);
+  return [...lines, ...output];
+}
+
+function copyTextOf(failure: PhaseFailure): string {
+  if (failure.command === undefined) return failure.message;
+  return [failure.command, ...(failure.output ?? [])].join("\n");
+}
+
+/** `undefined` when the run did not fail. A stopped job with no recorded failure is a warning, not an error. */
+export function failureViewOf(state: PhasesState | undefined, view: RunView, stopped: boolean): FailureView | undefined {
+  const failure = state?.failure;
+  if (failure && state) return { level: "error", headline: `${labelOfPhase(state, failure.phase)} falhou`, details: failureDetails(failure), copyText: copyTextOf(failure) };
+  if (view !== "failed") return undefined;
+  if (stopped) return { level: "warn", headline: "execução parada", details: ["as fases concluídas não se repetem"], copyText: "" };
+  return { level: "error", headline: "o job terminou sem dizer o motivo: veja o log", details: [], copyText: "" };
+}
+
+/** The word next to the bar: a state is a word and a tone, never only a color. */
+export const VIEW_WORD: Record<RunView, string> = { idle: "iniciando", running: "rodando", stale: "sem notícias do job", failed: "falhou", done: "concluído" };
+
+export const BAR_STATE: Record<RunView, "running" | "failed" | "done"> = { idle: "running", running: "running", stale: "running", failed: "failed", done: "done" };

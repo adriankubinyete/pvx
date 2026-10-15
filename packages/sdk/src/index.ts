@@ -948,6 +948,16 @@ export interface SdkUi {
    * arrow is left to the page. The label of the selected or hovered cell shows under the grid.
    */
   CellGrid: Component<{ cells: CellItem[]; onPress?: (id: string) => void; legend?: boolean; focused?: boolean }>;
+  /**
+   * A phased run while it goes and after it ends, drawn from the `run` that `useRun` returned (the module keeps `useRun`, the start flow and what `done` means):
+   * the bar (`ProgressBar`, with `etaMs` the expected total) and the state word, the phases (`Steps`), the failure, the module's `children`, and the job log (`LogTail`).
+   * The failure is a `Notice` (`<phase> falhou`, or `execução parada` as a warning when the technician stopped the job), then the command, the exit code and the last
+   * lines of output of a `StepError` (any other failure shows its message), the module's `cause(failure)` text under `causa provável` when it has one, and, with `onResume`,
+   * the button `[ continuar daqui ]` (`enter`). Keys: `x` stops the job while it runs (`onStop`, default `run.stop()`; a refusal such as missing root shows in the footer),
+   * `c` copies the failure's command and output. `esc` calls `onExit`. While `run.loading` or `run.view` is `idle` it shows a `Loading` with `loadingLabel`: mount it
+   * when a run exists. Needs a page.
+   */
+  RunPanel: Component<Kids & { run: RunState; etaMs?: number; onResume?: () => void; onStop?: () => void; onExit?: () => void; cause?: (failure: PhaseFailure) => string | undefined; loadingLabel?: string }>;
   /** A spinner and `label`, for any wait longer than ~300 ms. The spinner ticks only while it is mounted. */
   Loading: Component<{ label: string }>;
   /**
