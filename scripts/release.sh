@@ -25,9 +25,9 @@ done
 echo "Perfis embutidos (revise antes de publicar):"
 if [ -n "${PVX_PROFILES_SRC:-}" ]; then ls "$PVX_PROFILES_SRC"/*.json 2>/dev/null; else git ls-files 'profiles/*.json'; fi | sed 's/^/  /'
 
-# The mark never reaches a release artifact (spec: release is never "nightly").
+# Neither the nightly mark nor a dev build's modules may reach a release artifact (spec: release is never "nightly").
 for t in $targets; do
-  tar -xzOf "$dist/pvx-$t.tar.gz" pvx | grep -qa 'nightly, ' && { echo "release: pvx-$t contém a marca de desenvolvimento" >&2; exit 1; }
+  sh scripts/check-artifact.sh "$dist/pvx-$t.tar.gz"
 done
 
 (cd "$dist" && sum pvx-*.tar.gz > checksums-sha256.txt && sum -c checksums-sha256.txt)

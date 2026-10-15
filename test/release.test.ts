@@ -20,6 +20,9 @@ function build(release: boolean, profilesSrc?: string) {
 test("a release-mode artifact has no dev mark and prints the plain version; a dev build has both", () => {
   const rel = build(true);
   expect(readFileSync(rel).includes("nightly, ")).toBe(false);
+  // The guard release.sh runs on every artifact: a real release binary carries none of the dev marks.
+  expect(Bun.spawnSync(["sh", join(root, "scripts/check-artifact.sh"), join(rel, "..", "pvx-host.tar.gz")]).exitCode).toBe(0);
+  for (const mark of ["dev-build:", "pvx-embedded-module:"]) expect(readFileSync(rel).includes(mark)).toBe(false);
   expect(Bun.spawnSync([rel, "--version"]).stdout.toString().trim()).toBe(`pvx ${version}`);
   expect(Bun.spawnSync([rel, "version"]).stdout.toString().trim()).toBe(`pvx ${version}`);
 

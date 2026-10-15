@@ -17,6 +17,7 @@
     "build:linux-arm64": "sh scripts/build.sh linux-arm64",
     "build:darwin-arm64": "sh scripts/build.sh darwin-arm64",
     "build:windows-amd64": "sh scripts/build.sh windows-amd64",
+    "build:dev": "PVX_DEV_BUILD=1 sh scripts/build.sh",
     "build:all": "bun run build:linux-amd64 && bun run build:linux-arm64 && bun run build:darwin-arm64 && bun run build:windows-amd64",
     "build:deps": "bun install --os='*' --cpu='*'",
     "dev:link": "bun scripts/dev-link.ts link",

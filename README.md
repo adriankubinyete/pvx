@@ -43,7 +43,7 @@ bun dev                      # TUI com reload; usa PVX_HOME=.dev/pvx (ignorado p
 bun run build:linux-amd64    # ou build:linux-arm64, build:darwin-arm64; gera dist/pvx-<os>-<arch>.tar.gz
 ```
 
-Builds locais mostram `X.Y.Z (nightly, <commit>)`. Para gerar os artefatos de uma release (modo release, com `dist/checksums-sha256.txt` verificado), rode `bun run release`; o script só imprime o comando `gh release create`, quem publica é uma pessoa.
+Builds locais mostram `X.Y.Z (nightly, <commit>)`. Quem escreve módulo gera um binário de teste com `bun run build:dev <alvo> --with ../meu-modulo` (veja "Desenvolvimento" no guia do SDK); esse binário mostra `X.Y.Z (dev, +meu-modulo)` e nunca vai para uma release. Para gerar os artefatos de uma release (modo release, com `dist/checksums-sha256.txt` verificado), rode `bun run release`; o script só imprime o comando `gh release create`, quem publica é uma pessoa.
 
 ## Escrever módulos
 
