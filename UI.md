@@ -151,7 +151,7 @@ Use `ui.Fields` (campos próprios) ou `ui.Form` (os argumentos de um comando do 
    Pasta no UOE  ░clientes/12-3-acme░░░░░░░░░░
    Ativa         [x] enviar também as de ontem
 
-   [ criar e entrar ]  [ cancelar ]                        ← primário cheio (fundo de acento)
+    criar e entrar     [ cancelar ]                        ← primário: chip cheio (fundo de acento)
 
  ↑↓ tab campo   enter avança   ctrl+s salva   ctrl+d ver o comando   esc voltar   ? ajuda
 ```
@@ -166,10 +166,11 @@ O desenho, sem exceção:
 - **Dica.** Dica só quando ajuda a preencher; nada de explicar o óbvio. Uma dica é uma restrição que o técnico precisa saber ("letras, números e hífen"), ou a descrição curta de uma opção que não se explica sozinha. Não explique o motivo de um desenho ("nunca as de hoje: o dia ainda não acabou", "sorteado entre 01h e 05h"), nem repita o rótulo. Ela fica apagada à direita do valor, curta (corta com `…` e some se não couber). Nada de `stdin`, `PVX_SECRET_*`, "prompt" ou "(segredo)".
 - **Erro.** Vermelho, na linha abaixo do valor, começando com `✗`. `required` vazio mostra "preencha este campo"; `validate` põe o resto.
 - **Segredo.** `secret` mostra `••••` (`g.mask`); `ctrl+r` mostra ou oculta; a tecla `generate` do campo gera e mostra.
-- **Botões.** O primário vem cheio (fundo de acento): `[ criar e entrar ]` (`submitLabel`, padrão `salvar`); `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`) e pergunta no diálogo da seção 18. O botão em foco ganha sublinhado e o `›` da linha. Todos clicáveis.
+- **Botões.** O primário vem cheio (um chip com fundo de acento, sem colchetes): ` criar e entrar ` (`submitLabel`, padrão `salvar`); `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`) e pergunta no diálogo da seção 18. O botão em foco ganha sublinhado e o `›` da linha. Todos clicáveis.
 - **Comando.** O formulário de um comando não mostra a linha `$ pvx …` nem "segredo fora da linha". `ctrl+d` (e `?`, fora de campo de texto) mostra a linha, apagada, numa só linha.
 - **Campo derivado.** `derive(values)` faz o campo seguir os outros enquanto o técnico não o editou. Editar para de seguir e guarda o texto; apagar até ficar vazio volta a seguir. A tela não diz nada sobre isso: o campo só mostra o valor, e ele continua editável. Exemplo: `Pasta no UOE` vira `clientes/<id-cliente>-<id-contrato>-<empresa>` conforme se digita.
-- **Teclas.** `↑↓` e `Tab` andam entre campos e botões; `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` cancela. Nas pontas de `choice` e `multi`, `↑↓` passam ao campo vizinho.
+- **Teclas.** `↑↓` e `Tab` andam entre campos e botões; `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` cancela. Nas pontas de `choice` e `multi` em lista, `↑↓` passam ao campo vizinho; em `radio`, `buttons` e `row` (seção 19), `←→` movem a escolha e `↑↓` vão ao campo vizinho.
+- **Erro do módulo.** `FieldSpec.error` mostra uma mensagem sob o campo agora (um valor que só o módulo sabe recusar); ela some quando o campo é editado. `initialFocus` abre o formulário com o foco num campo.
 - **Erro e envio.** O primeiro campo com erro recebe o foco e bloqueia o envio. Na edição, o valor enviado é gravado como está: campo vazio limpa o valor.
 
 Exemplos no código:
@@ -239,13 +240,14 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `Fields`, `Form` | qualquer formulário | seção 7 (o formulário padrão) |
 | `useConfirm` | confirmar algo | diálogo centralizado, seção 18 |
 | `Conversation` | perguntas guiadas, uma por vez (instalador, assistente) | a respondida vira `✓ título   resumo`; a próxima aparece como `○ título`; `↑` no topo da pergunta sobe para as respondidas; `enter` ou clique reabre no lugar e volta ao ponto onde estava; depois da última vem a confirmação com todas as respostas (as puladas marcadas "(padrão)"), as notas "antes de instalar" e o botão principal; nada se aplica antes dele |
-| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável; `primary` em acento e negrito; `keys` põe a tecla no rodapé e no `?`; precisa de `keys` ou `focused` (seção 17) |
+| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável na cor de destaque, cheio com o mouse por cima ou em foco; `primary` é um chip cheio ` rótulo `; `danger` usa o tom `error`; `disabled="motivo"` apaga e mostra o motivo embaixo; `keys` põe a tecla no rodapé e no `?`; precisa de `keys` ou `focused` (seção 17) |
 | `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo; com `useRun` o tempo da fase em curso avança sozinho, e a barra anda dentro de uma fase longa por `phase.progress`; mostre uma espera (`Loading`) enquanto `run.loading` |
 | `RunPanel` | a tela de uma execução em fases (backup, instalação) | a barra e a palavra do estado, `Steps`, a falha (`Notice`, comando, código, saída, causa) com `[ continuar daqui ]`, os `children` do módulo e o log; `x` para, `c` copia o erro, `esc` sai; espera (`Loading`) até haver execução |
-| `ProgressBar` | progresso global de uma tarefa | `━` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
-| `CellGrid` | um quadrado por item (pacotes, hosts, arquivos) | `▪` feito/rodando/falhou em tons, `▫` pendente; quebra na largura, legenda com contagens; hover realça, clique ou `enter` age |
+| `ProgressBar` | progresso global de uma tarefa | `█` e `░` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
+| `CellGrid` | um quadrado por item (pacotes, hosts, arquivos) | `■` feito/rodando/falhou em tons, pendente na cor fraca da borda; quebra na largura, legenda com contagens; hover realça, clique ou `enter` age |
 | `LogTail` | saída ao vivo | acompanha o fim; a roda do mouse sobe e solta; com `focused`, `↑↓`, `pgup`/`pgdn`, `home` e `end` rolam |
-| `Notice` | aviso que fica na tela ("precisa aplicar") | bloco em linha `[✓]`/`[!]`/`[✗]` na cor do nível; só tokens do tema |
+| `Notice` | aviso que fica na tela ("precisa aplicar") | bloco em linha `[✓]`/`[!]`/`[✗]`/`[i]` na cor do nível (`[i]` é azul); `action` põe um botão no fim da linha; só tokens do tema |
+| `Badge`, `Details`, `Meter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `Row fit` | leitura de estado e valores | seção 19 |
 | `Loading`, `useAsync` | toda espera visível | spinner e texto |
 | `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
 
@@ -297,6 +299,13 @@ A barra de abas diz onde o técnico está. A página não repete o nome numa mol
  ...
 ```
 
+A barra de abas tem, à direita, o relógio e a versão, separados da última aba por um `│` apagado, e uma linha `─` fina embaixo a separa da página. A marca de um binário dev é curta (`pvx 0.1.2 dev +3`, o `+N` conta os módulos embutidos; a lista inteira está na aba Sistema). Nada se sobrepõe: com pouca largura o relógio perde primeiro a data, depois os segundos e por fim a hora.
+
+```text
+ Início  Módulos  Issabel  Logs  Comando  Sistema     │ qui 15/10 13:39:04 · pvx 0.1.2 dev +3
+ ─────────────────────────────────────────────────────────────────────────────────────────────
+```
+
 Exemplos no código: `packages/tui/src/sdk-ui/pages.tsx` (`PageContent`, `Breadcrumb`), `packages/tui/src/menu/Crumb.tsx`.
 
 ## 15. No máximo uma borda
@@ -330,7 +339,7 @@ Exemplos no código: `packages/tui/src/sdk-ui/kit.tsx` (`Panel`, `headerParts`).
 - A dica descreve o valor, não o CLI. O framework corta parênteses sobre `stdin`, `PVX_SECRET_*`, prompt e "(segredo)", mas o `help` do argumento já deve estar escrito para o técnico.
 - Nunca mostre o nome cru do argumento (`admin-password`), a linha do comando nem a explicação de como o segredo chega ao comando.
 - O título do formulário vem do título do comando (`title`), escrito uma vez.
-- O botão primário diz o que acontece (`[ criar e entrar ]`), não `[ executar ]`, quando o módulo sabe.
+- O botão primário diz o que acontece (` criar e entrar `), não `[ executar ]`, quando o módulo sabe.
 
 ## 17. Todo controle alcançável pelo teclado
 
@@ -376,6 +385,94 @@ Toda confirmação (comando destrutivo, `remover` de um formulário, uma ação 
 ```
 
 Exemplos no código: `packages/tui/src/session/ConfirmDialog.tsx`, `packages/tui/src/session/Modals.tsx`, `packages/sdk/src/index.ts` (`useConfirm`).
+
+## 19. Primitivos de leitura
+
+Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui` (`packages/sdk/README.md`, "Primitivos de apresentação") e nunca desenha o seu. Cores só por tokens; todas cabem em 80x24.
+
+**Avisos em quatro tons**, com botão opcional no fim da linha (o botão segue a regra da seção 17):
+
+```text
+ [✓] lorem ipsum dolor sit amet aplicado                      ← ok: destaque (verde)
+ [!] lorem ipsum dolor: sit amet                [ resolver ]  ← aviso, com botão
+ [✗] lorem ipsum falhou: dolor sit amet                       ← erro
+ [i] lorem ipsum dolor sit amet, consectetur                  ← informação: azul (token `info`)
+```
+
+**Botões em cinco estados.** Principal (chip cheio), secundário (`[ ]` no destaque), perigoso em foco (cheio no tom `error`), perigoso e desligado (apagado, com o motivo embaixo):
+
+```text
+  principal    [ secundário ]    perigoso em foco    [ perigoso ]    [ desligado ]
+                                                                     falta o token
+```
+
+**Selos.** Um chip cheio, texto em negrito e maiúsculo, nos tons `ok`, `warn`, `error` e `info`:
+
+```text
+  ATIVO   DESATUALIZADO   PARADO   NOVO
+```
+
+**Detalhes.** Rótulo apagado e alinhado, valor no seu tom, até duas colunas (uma abaixo de 100 colunas):
+
+```text
+  motor         nftables (automático)    regras   39 de 40 carregadas
+  último apply  ontem 03:31              IP       10.0.0.1
+```
+
+**Medidores.** A série no tempo em blocos e a barra fina de uso, que vira cor de aviso acima de 80%:
+
+```text
+  cpu      ▁▁▃▂▁▁▂▃▅▃▂▁▂▁  12%
+  disco    ━━━━━━━━────────────   41%  18 de 44 GB
+  memória  ━━━━━━━━━━━━━━━━━───   86%
+```
+
+**Escolha única, várias e caixa** num formulário (seção 7): rádio e fileira de botões para uma opção, fileira de caixas para várias. `←` `→` movem a escolha, o mouse escolhe:
+
+```text
+    Opção     ( ) 16   (•) 18   ( ) 20
+    Modo       16   18   20
+    Extras    [x] 16   [ ] 18   [ ] 20
+    Ativo     [x] lorem ipsum dolor
+```
+
+**Bloco para copiar.** Linhas de rótulo e valor num fundo discreto (sem borda), e o botão que as copia como texto alinhado (`useCopy`):
+
+```text
+   acesso web   https://10.0.0.1
+   senha web    xxxx-xxxx-xxxx
+
+   copiar acesso
+```
+
+**Listas.** O marcador da linha selecionada (`»`), o `›` apagado do mouse por cima e o vazio das outras linhas ocupam as mesmas 2 colunas, então as colunas nunca andam. A linha sob o mouse tem um fundo sutil (`panel`):
+
+```text
+    nome      estado
+    ● alfa    ok
+  » beta      ok          ← selecionada: » em destaque, fundo `selected`
+    ★ gama    ok          ← mouse por cima: só o fundo
+```
+
+**Chips de filtro.** O escolhido cheio no destaque, os outros no fundo `panel`; o módulo guarda o filtro:
+
+```text
+   todos   lorem   ipsum   dolor      ● ao vivo   / buscar
+```
+
+**Scrollback do Comando.** A hora vem na linha do comando e as linhas de resultado têm um recuo fixo e pequeno, sem se alinhar à coluna da hora:
+
+```text
+  13:31:02  ❯ firewall apply                                              ✓ 41ms
+      [✓] regras aplicadas: 40 · failsafe 203.0.113.5
+      [i] confirme o acesso em 60 s: firewall confirm
+```
+
+**Página mais alta que a tela.** `Scroll` rola com `↑` `↓`, `pgup` `pgdn`, `home`, `end` e a roda do mouse.
+
+**Fora do SDK.** A grade de cartões é a da aba Módulos (`packages/tui/src/menu/CardGrid.tsx`), presa ao cartão de módulo; não é um primitivo do SDK.
+
+Exemplos no código: `packages/tui/src/sdk-ui/display.tsx` (`Badge`, `Details`, `Meter`, `Spark`), `packages/tui/src/sdk-ui/button.tsx` (`Button`, `buttonLook`), `packages/tui/src/sdk-ui/copy.tsx` (`CopyBlock`), `packages/tui/src/sdk-ui/kit.tsx` (`Notice`, `Chip`, `Row`, `Scroll`, `List`), `packages/tui/src/sdk-ui/fields.tsx` (`radio`, `buttons`, `row`), `packages/tui/src/session/Blocks.tsx` (o scrollback).
 
 ## Checklist antes de entregar uma tela
 

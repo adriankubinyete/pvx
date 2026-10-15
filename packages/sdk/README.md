@@ -234,9 +234,9 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda; veja Páginas), `Text` (`tone`, `bold`), `Chip`, `Meter` (`value` de 0 a 1), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja List em colunas) e `Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading` e `RunPanel` (veja Componentes de fluxo).
+- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda; veja Páginas), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`), `Chip`, `Badge`, `Details`, `Meter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading` e `RunPanel` (veja Componentes de fluxo).
 - **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useConfirm()` (diálogo de confirmação, abaixo); `useTheme()` (cores `c` e glifos `g`).
-- **Tons:** `ok`, `warn`, `error`, `info`, `accent`, `dim`, `text`. Nunca escreva cor hex: use os tons.
+- **Tons:** `ok`, `warn`, `error`, `info` (azul), `accent`, `dim`, `text`, `ip` (rosa, para endereços IP). Nunca escreva cor hex: use os tons.
 
 **List em colunas.** Com `columns` a `List` alinha as células de cada item em colunas, mesmo com textos de tamanhos diferentes. Cada coluna é `{ id, title?, width?, grow?, align? }`: `width` é fixa e nunca encolhe; `grow` divide o que sobra (peso relativo); sem nenhuma das duas a coluna ocupa o tamanho do conteúdo e é a primeira a encolher se faltar espaço. `align` é `"left"` (padrão) ou `"right"`. Se alguma coluna tem `title`, aparece uma linha de cabeçalho (dim). O item traz `cells: { [idDaColuna]: texto | { text, tone? } }` (`label` e `detail` são ignorados nesse modo; `tone` e `mark` valem). Célula que não cabe é cortada com `…`. A largura vem da própria lista, então acompanha o redimensionamento.
 
@@ -333,7 +333,7 @@ export default (sdk: Sdk) => {
 };
 ```
 
-**`Notice`.** `Notice({ level, children })` é um bloco de resultado em linha, no formato do tema (`[✓]`, `[!]`, `[✗]`) e na cor do nível (`ok`, `warn`, `error`); o texto pode ter várias linhas. Só tokens do tema. Use-o para avisos que ficam na tela ("precisa aplicar", "a última aplicação foi revertida"); o `useNudge` é para o aviso que passa.
+**`Notice`.** `Notice({ level, action?, children })` é um bloco de resultado em linha, no formato do tema (`[✓]`, `[!]`, `[✗]`, `[i]`) e na cor do nível (`ok`, `warn`, `error` e `info`, que é azul); o texto pode ter várias linhas. `action` (`{ label, onPress, keys?, focused? }`) põe um botão no fim da linha (`[ resolver ]`) e vale a regra do `Button`: precisa de `keys` ou de `focused`. Só tokens do tema. Use-o para avisos que ficam na tela ("precisa aplicar", "a última aplicação foi revertida"); o `useNudge` é para o aviso que passa.
 
 **`useConfirm()`.** Devolve `confirm({ title, description?, confirmLabel?, cancelLabel?, destructive? }): Promise<boolean>`. A TUI abre um diálogo centralizado na tela, com a página ao fundo escurecida: o título em negrito, uma linha `─`, a descrição apagada (uma ou mais linhas, opcional), outra linha `─` e os botões `[ confirmLabel ]  [ cancelLabel ]` (padrão `confirmar` e `cancelar`), tudo centralizado e sem linha de teclas. O foco começa em cancelar (a opção segura); `←` `→` e `tab` andam entre os botões, `enter` ativa, `esc` cancela e os dois botões respondem ao clique. `destructive` pinta o botão de confirmar com o token de erro. Resolve `true` só no botão de confirmar. O diálogo tem uma borda só (flutua). O `destructive: true` de um comando e o `onDelete` de um `Fields` usam esse mesmo diálogo; a CLI continua com o prompt de texto. Exemplo: `if (await confirm({ title: "Remover o IP 10.0.0.1?", description: "A regra deixa de valer agora.", confirmLabel: "remover IP", cancelLabel: "manter", destructive: true })) remove();`.
 
@@ -589,14 +589,15 @@ Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgS
 
 `ui.Form` é o mesmo formulário para os argumentos de um comando do módulo: `<Form command="autobackup auth register" title="Criar o usuário no UOE" submitLabel="criar e entrar" onRun={...} onCancel={...} />`. Cada `ArgSpec` vira um campo (`label`, `required` e `secret` valem; `flag` vira caixa; o `help` vira a dica sem os parênteses sobre `stdin`, `PVX_SECRET_*` e prompt). `title` e `description` vêm da prop, senão do `title` e do `help` do comando. `derive` (por nome de argumento) faz um campo seguir os outros, como o `derive` de `Fields`: `derive={{ "root-path": (v) => `clientes/${v["id-cliente"]}-${v.empresa}` }}`. O formulário não mostra a linha do comando (`ctrl+d` mostra) e o segredo chega ao comando pelo ambiente, nunca pela linha. Não ponha um `Panel` com título em volta dele: o título já é do formulário.
 
-`ui.Fields` desenha **o** formulário do pvx (UI.md, seção 7), sem caixa: um `title` em negrito e um `description` apagado, uma linha por campo com o rótulo alinhado e uma célula de valor de fundo preenchido e largura fixa, uma linha em branco entre campos (a área dos campos rola se o terminal for baixo, os botões ficam fixos), a dica apagada à direita do valor, o erro vermelho `✗` abaixo dele e, no fim, `[ salvar ]` (cheio, o rótulo vem de `submitLabel`) e `[ cancelar ]`, sempre presentes. Os campos são `area`, `line`, `toggle` (caixa de marcar; `text` é o texto ao lado dela), `secret`, `choice` e `multi` (veja abaixo). Cada `FieldSpec` aceita `label` (humano, pt-BR), `required` (um `*` vermelho depois do rótulo; vazio no envio mostra "preencha este campo"), `help` (a dica à direita; só quando ajuda a preencher, como uma restrição, e nunca para explicar o óbvio) e, em `line`, `derive`. `details(valores)` mostra, atrás de `ctrl+d` (e de `?` fora de campo de texto), uma linha apagada (o comando equivalente). Todo o teclado é do formulário:
+`ui.Fields` desenha **o** formulário do pvx (UI.md, seção 7), sem caixa: um `title` em negrito e um `description` apagado, uma linha por campo com o rótulo alinhado e uma célula de valor de fundo preenchido e largura fixa, uma linha em branco entre campos (a área dos campos rola se o terminal for baixo, os botões ficam fixos), a dica apagada à direita do valor, o erro vermelho `✗` abaixo dele e, no fim, o botão principal (um chip cheio ` salvar `, o rótulo vem de `submitLabel`) e `[ cancelar ]`, sempre presentes. Os campos são `area`, `line`, `toggle` (caixa de marcar; `text` é o texto ao lado dela), `secret`, `choice` e `multi` (veja abaixo). Cada `FieldSpec` aceita `label` (humano, pt-BR), `required` (um `*` vermelho depois do rótulo; vazio no envio mostra "preencha este campo"), `help` (a dica à direita; só quando ajuda a preencher, como uma restrição, e nunca para explicar o óbvio) e, em `line`, `derive`. `details(valores)` mostra, atrás de `ctrl+d` (e de `?` fora de campo de texto), uma linha apagada (o comando equivalente). Todo o teclado é do formulário:
 
 - `↑`/`↓` e `tab`/`shift+tab` andam por campos e botões, dando a volta (dentro de uma `area` só o `tab` anda).
 - `←`/`→` movem o cursor no texto e, num botão, passam para o botão vizinho.
 - `enter` num texto vai ao próximo campo e, no último, envia; numa caixa marca; num botão ativa. `espaço` também marca.
 - `secret`: uma linha mascarada (`••••`), editada como `line`; `ctrl+r` mostra ou oculta o valor; o valor chega em `onSubmit` e não vai para histórico nem log. Com `generate: "ctrl+g"` (a tecla que o campo documenta no rodapé e no `?`) a tecla preenche 24 letras e dígitos aleatórios, legíveis enquanto o foco fica no campo.
-- `choice`: escolha única com `options: { value, label, detail? }[]`, desenhada `(●)`/`( )`. `↑`/`↓` andam pelas opções (nas pontas passam ao campo vizinho), `espaço` escolhe, `enter` escolhe e avança. O valor é o `value` escolhido (a primeira opção, se `initial` não diz).
-- `multi`: lista de caixas `[x]`/`[ ]` com as mesmas `options`; `espaço` marca, `enter` avança. O valor é a lista dos `value` marcados, em ordem das opções, **separada por vírgula** (`initial` no mesmo formato).
+- `choice`: escolha única com `options: { value, label, detail? }[]`. O `style` decide o desenho: `list` (padrão) uma opção por linha, `(●)`/`( )`, com o `detail`; `radio` uma linha só, `( ) 16   (•) 18`; `buttons` uma linha de botões, o escolhido cheio. Em `list`, `↑`/`↓` andam pelas opções (nas pontas passam ao campo vizinho), `espaço` escolhe e `enter` escolhe e avança. Em `radio` e `buttons` o rótulo fica na coluna dos rótulos, `←`/`→` movem a escolha, o mouse escolhe, `↑`/`↓` vão ao campo vizinho e `enter` avança. O valor é o `value` escolhido (a primeira opção, se `initial` não diz). Um `ArgSpec` com `values` e `style: "radio"` (ou `"buttons"`) vira esse campo no `Form`.
+- `multi`: caixas `[x]`/`[ ]` com as mesmas `options`; `espaço` marca, `enter` avança. Com `style: "row"` ficam numa linha, `[x] lorem   [ ] ipsum`, e `←`/`→` andam entre elas; o padrão (`list`) é uma por linha. O valor é a lista dos `value` marcados, em ordem das opções, **separada por vírgula** (`initial` no mesmo formato).
+- `error` (no campo) mostra uma mensagem sob ele agora, como a recusa de um valor que só o módulo sabe checar; ela some quando o campo é editado. `initialFocus` (no `Fields`) diz o campo que abre com o foco.
 - `ctrl+s` sempre envia e `esc` cancela. O mouse foca o campo, marca a caixa e ativa o botão.
 - `validate(valores)` roda antes de `onSubmit`: devolva `{ idDoCampo: "mensagem" }` para mostrar o erro sob o campo e bloquear o envio.
 - `buttons={false}` esconde `[ salvar ]`, `[ cancelar ]` e `[ remover ]` (enter no último campo e `ctrl+s` enviam); `onEdge(dir)` recebe a seta `↑`/`↓` que passaria da ponta, em vez de dar a volta; `active={false}` estaciona o formulário (sem cursor, sem teclas, sem linhas no rodapé). `Conversation` usa os três; use-os para um formulário que faz parte de um fluxo maior.
@@ -972,9 +973,9 @@ export default (sdk: Sdk) => {
 Um instalador guiado, uma operação longa ou qualquer tela de várias etapas usa estes componentes em vez de desenhar o seu (`UI.md`, "Componentes do framework"). Todos respondem a teclado e a mouse e usam só tokens do tema.
 
 - **`Conversation`**: perguntas uma de cada vez. `questions` é `{ id, title, field, summary?, skip? }[]`, e `field` é qualquer `FieldSpec` de `Fields` (`line`, `secret`, `choice`, `multi`, `toggle`, `area`; o `id` e o `label` do campo são ignorados: valem o `id` e o `title` da pergunta). `answers` é o estado do módulo (controlado): o fluxo chama `onAnswer(id, valor)` a cada resposta e lê os valores de volta, inclusive como valor inicial. A pergunta respondida vira `✓ título   resumo` (`summary(valor)`; sem ele: o rótulo da opção, `sim`/`não`, `●●●●●●●●` para `secret`); a próxima aparece como `○ título`. `↑` no topo da pergunta atual sobe para a lista de respondidas; `enter` (ou clique) numa linha a reabre no lugar, e depois de confirmar o fluxo volta para onde estava; `esc` cancela a reabertura. Depois da última pergunta vem a etapa de **confirmação**: todas as perguntas (as de `skip: true` entram aqui, marcadas "(padrão)" até serem editadas; o valor vem de `answers`), os seus `footerSummary` ("antes de instalar") e o botão principal (`confirmLabel`, padrão "confirmar"; `ctrl+enter` também confirma). `onConfirm(answers)` só roda daí: nada se aplica antes. `header` desenha algo acima das linhas; `onCancel` acrescenta `[ cancelar ]` e roda no `esc` do topo (sem ele, o `pop` da página). Precisa de uma página (acrescenta linhas ao rodapé).
-- **`Button`**: `[ rótulo ]` clicável. `primary` usa o acento em negrito; `keys` (`enter`, `ctrl+enter`, `a`) registra a tecla na página, então o rodapé e o `?` a mostram; `focused` o desenha selecionado (para quem o alcança por teclado). Um botão precisa de `keys` ou de `focused` (UI.md, seção 17): sem os dois só o mouse o alcança, e `expectButtonsReachable()` (`@pvx/testing`, chame-o depois de montar a página) falha. Uma ação de página cabe melhor como uma linha da lista da seção (`↑↓` chegam nela) do que como botão solto no topo.
-- **`ProgressBar`**: uma linha de `━` na largura toda, com `%` e tempos. `value` de 0 a 1; `startedAt` (ms) liga o tempo decorrido (atualiza a cada segundo) e, rodando, o `faltam ~` (de `etaMs`, a duração total esperada; sem ele, pelo ritmo até agora). `state="failed"` pinta de vermelho o trecho do ponto de parada, colado ao preenchido, e diz `falhou em`; `state="done"` enche a barra e diz `concluído em`.
-- **`CellGrid`**: uma célula por item (`▪` feito, rodando e falhou, cada um no seu tom; `▫` pendente), quebrada na largura, com legenda das contagens. O mouse passa por cima (realça), clica (seleciona e chama `onPress(id)`); o teclado (setas, `enter`) vale enquanto a página tem o foco, ou com `focused`; na borda a seta fica com a página. O rótulo da célula selecionada ou sob o mouse aparece embaixo.
+- **`Button`**: `[ rótulo ]` clicável, na cor de destaque; o mouse por cima e `focused` o enchem. `primary` é um chip cheio ` rótulo `; `danger` usa a cor de erro (`[ remover ]`); `disabled="motivo"` o apaga, ignora o mouse e a tecla e mostra o motivo embaixo. `keys` (`enter`, `ctrl+enter`, `a`) registra a tecla na página, então o rodapé e o `?` a mostram; `focused` o desenha selecionado (para quem o alcança por teclado). Um botão precisa de `keys` ou de `focused` (UI.md, seção 17): sem os dois só o mouse o alcança, e `expectButtonsReachable()` (`@pvx/testing`, chame-o depois de montar a página) falha. Uma ação de página cabe melhor como uma linha da lista da seção (`↑↓` chegam nela) do que como botão solto no topo.
+- **`ProgressBar`**: uma linha de `█` e `░` na largura toda, com `%` e tempos. `value` de 0 a 1; `startedAt` (ms) liga o tempo decorrido (atualiza a cada segundo) e, rodando, o `faltam ~` (de `etaMs`, a duração total esperada; sem ele, pelo ritmo até agora). `state="failed"` pinta de vermelho o trecho do ponto de parada, colado ao preenchido, e diz `falhou em`; `state="done"` enche a barra e diz `concluído em`.
+- **`CellGrid`**: uma célula `■` por item (feito, rodando e falhou, cada um no seu tom; pendente na cor fraca da borda), quebrada na largura, com legenda das contagens. O mouse passa por cima (realça), clica (seleciona e chama `onPress(id)`); o teclado (setas, `enter`) vale enquanto a página tem o foco, ou com `focused`; na borda a seta fica com a página. O rótulo da célula selecionada ou sob o mouse aparece embaixo.
 - **`Loading`** e **`useAsync(fn, deps)`**: toda leitura ou ação que passe de ~300 ms mostra `Loading` (spinner e texto). `useAsync` roda `fn` ao montar e quando `deps` mudam (ou em `run()`), e devolve `{ loading, data, error, run }`; o último `data` fica enquanto roda de novo, e só a chamada mais nova vale.
 - **`RunPanel`**: a tela de uma execução em fases, desenhada a partir do `run` que o `useRun` devolveu (o módulo continua dono do `useRun`, do fluxo de início e do que `done` significa). De cima para baixo: a `ProgressBar` (`etaMs` é a duração total esperada) e a palavra do estado (`rodando`, `sem notícias do job`, `falhou`, `concluído`), as fases (`Steps`), a falha, os `children` do módulo (um `CellGrid` de pacotes, por exemplo) e o log do job (`LogTail`). A falha é um `Notice` (`<fase> falhou`, ou `execução parada` como aviso quando o técnico parou o job); sob ele, o comando, o código de saída e as últimas linhas de saída de um `StepError` (outra falha mostra a própria mensagem), o texto de `cause(falha)` sob `causa provável` quando o módulo o dá, e, com `onResume`, o botão `[ continuar daqui ]` (`enter`). Teclas: `x` para o job enquanto roda (`onStop`; por padrão `run.stop()`, e uma recusa, como a falta de root, aparece no rodapé), `c` copia o comando e a saída da falha, e `esc` chama `onExit`. Com `run.loading` ou `run.view` `idle` mostra um `Loading` (`loadingLabel`): monte-o quando existe uma execução. Precisa de uma página.
 - **`useCopy()`**: `copy(texto, { title? })` copia pelo clipboard do host e do terminal (OSC 52), mostra por alguns segundos um painel com exatamente o que foi copiado e o aviso `✓ copiado`. Sem clipboard, diz `não copiou: <causa>`, mantém o painel (dá para selecionar com o mouse) e resolve `false`.
@@ -1080,6 +1081,73 @@ export default (sdk: Sdk) => {
   }
 
   return { pages: { andamento: { title: "Andamento", render: () => <Andamento /> } } };
+};
+```
+
+## Primitivos de apresentação: selo, detalhes, medidores, bloco de cópia e rolagem
+
+Peças de leitura que uma tela monta com texto e números do módulo. Todas usam só tokens do tema e cabem em 80x24.
+
+- **`Badge`**: um chip cheio de texto em negrito e maiúsculo, ` ATIVO `. `tone` é `ok` (padrão), `warn`, `error` ou `info`. É o estado de uma coisa de relance, ao lado do nome dela.
+- **`Details`**: uma grade de rótulo e valor. `items` é `{ label, value, tone?, note? }[]`: o rótulo fica apagado e alinhado, o valor no `tone` (inclusive `ip`) e a `note` apagada depois dele. Com `columns={2}` os itens se alternam entre duas colunas (o primeiro à esquerda, o segundo à direita) e abaixo de 100 colunas do terminal a grade vira uma coluna.
+- **`Meter`**: a barra fina de uso `━━━━────` com a porcentagem: `value` de 0 a 1, `width` (padrão 20), `label` apagado antes (alinhe os rótulos com espaços) e `suffix` apagado depois (`18 de 44 GB`). A barra é da cor de destaque, e do aviso acima de `warnAbove` (padrão 0,8).
+- **`Spark`**: uma série no tempo em blocos `▁▂▃▅`. `values` do mais antigo ao mais novo, esticados até `width` (padrão 14), de 0 a `max` (padrão 100). Depois da barra vem o último valor em porcentagem (ou o `suffix`).
+- **`CopyBlock`**: linhas de rótulo e valor num fundo discreto (o token `panel`, sem borda) e, embaixo, o botão `[ copiar ]` (`copyLabel`, tecla `keys`, padrão `c`). Ele copia as linhas como texto alinhado (`rótulo  valor`) por `useCopy`, com `title` no painel de cópia. É o bloco de "o que o técnico leva consigo" (a URL e a senha de uma instalação pronta).
+- **`Chip` com `state`**: `state="on"` ou `"off"` desenha o chip de filtro, ` todos ` cheio no acento quando `on` e no fundo `panel` quando `off`; `onPress` o torna clicável. O módulo guarda o filtro e as teclas.
+- **`Row` com `fit`**: os filhos ficam lado a lado com a largura própria, `gap` colunas entre eles, e os que não cabem passam para a linha de baixo. Serve para uma fileira de botões ou para uma linha de pedaços com estilos diferentes. Sem `fit` são partes iguais da largura.
+- **`Scroll`**: rola a página quando ela é mais alta que a tela. `↑` `↓` uma linha, `pgup` `pgdn` uma página, `home` e `end`, e a roda do mouse. Dê a ele um pai com altura (ele cresce até preencher). Com `focused={false}` não toma tecla.
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, Panel, Text, Row, Badge, Chip, Details, Meter, Spark, CopyBlock, Notice, Scroll, useState } = sdk.ui;
+  const CPU = [8, 15, 10, 25, 18, 9, 8, 20, 32, 55, 30, 18, 10, 12];
+
+  function Maquina() {
+    const [filtro, setFiltro] = useState("todos");
+    return (
+      <Scroll>
+        <Panel>
+          <Row fit gap={2}>
+            <Text bold>central-01</Text>
+            <Badge label="ativo" />
+            <Badge label="desatualizado" tone="warn" />
+          </Row>
+          <Details
+            columns={2}
+            items={[
+              { label: "motor", value: "nftables", note: "(automático)" },
+              { label: "regras", value: "39 de 40 carregadas" },
+              { label: "último apply", value: "ontem 03:31", tone: "warn" },
+              { label: "IP", value: "10.0.0.1", tone: "ip" },
+            ]}
+          />
+          <Spark label="cpu     " values={CPU} />
+          <Meter label="disco   " value={0.41} suffix="18 de 44 GB" />
+          <Meter label="memória " value={0.86} />
+          <Row fit gap={1}>
+            {["todos", "ativos"].map((nome) => <Chip key={nome} label={nome} state={nome === filtro ? "on" : "off"} onPress={() => setFiltro(nome)} />)}
+          </Row>
+          <Notice level="info" action={{ label: "ver", focused: false, onPress: () => {} }}>2 regras novas desde a última aplicação</Notice>
+          <CopyBlock
+            title="acesso"
+            copyLabel="copiar acesso"
+            rows={[
+              { label: "acesso web", value: "https://10.0.0.1", tone: "ip" },
+              { label: "senha web", value: "xxxx-xxxx-xxxx" },
+            ]}
+          />
+        </Panel>
+      </Scroll>
+    );
+  }
+
+  return { pages: { maquina: { title: "Máquina", render: () => <Maquina /> } } };
 };
 ```
 
