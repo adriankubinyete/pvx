@@ -9,6 +9,7 @@ import { useKeys, type RoutedKey } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { useScreenScope } from "../router.tsx";
 import { useOver } from "../hover.ts";
+import { FilterChips } from "../sdk-ui/filter-chips.tsx";
 import { Chip } from "../sdk-ui/kit.tsx";
 import { useCopy } from "../sdk-ui/copy.tsx";
 import type { SessionApi } from "../session/store.ts";
@@ -124,8 +125,8 @@ export function LogsTab({ store, registry, nav, refreshMs }: { store: SessionApi
     <box flexDirection="row" justifyContent="space-between" flexShrink={0} paddingX={1}>
       <box flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={1}>
         {nav.audit
-          ? <Chip label={AUDIT_SOURCE} state="on" onPress={toggleAudit} />
-          : chips.map((chip) => <Chip key={chip} label={chip === ALL_SOURCES ? chip : sourceLabel(chip)} state={chip === source ? "on" : "off"} onPress={() => update({ source: chip })} />)}
+          ? <FilterChips chips={[{ id: AUDIT_SOURCE, label: AUDIT_SOURCE }]} selected={AUDIT_SOURCE} onSelect={toggleAudit} />
+          : <FilterChips chips={chips.map((chip) => ({ id: chip, label: chip === ALL_SOURCES ? chip : sourceLabel(chip) }))} selected={source} cursor={focused ? source : undefined} onSelect={(chip) => update({ source: chip })} />}
         <text wrapMode="none" fg={c.dim} flexShrink={0}>{" nível"}</text>
         <Chip label={levelChipLabel(nav.level)} state="off" onPress={() => update({ level: nextLevel(nav.level) })} />
         {search ? (

@@ -92,12 +92,13 @@ export function Text({ tone: t, bold, children }: Props<"Text">) {
   return <text fg={tone(c, t)} flexShrink={0}>{bold ? <b>{s}</b> : s}</text>;
 }
 
-/** The fill of a filter chip: the chosen one in the accent, the others on the `panel` token. */
-function FilterChip({ label, on, onPress }: { label: string; on: boolean; onPress?: () => void }) {
+/** The fill of a filter chip: the chosen one in the accent, the others on the `panel` token. `cursor`: the keyboard is on it (underlined). */
+export function FilterChip({ label, on, cursor, onPress }: { label: string; on: boolean; cursor?: boolean; onPress?: () => void }) {
   const { c } = useTheme();
+  const text = ` ${clean(label)} `;
   return (
     <box flexShrink={0} onMouseDown={onPress ? () => onPress() : undefined}>
-      <text wrapMode="none" fg={on ? c.bg : c.text} bg={on ? c.accent : c.panel}>{` ${clean(label)} `}</text>
+      <text wrapMode="none" fg={on ? c.bg : c.text} bg={on ? c.accent : c.panel}>{cursor ? <u>{text}</u> : text}</text>
     </box>
   );
 }

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { Loading } from "../sdk-ui/flow.tsx";
 import type { OutLine } from "@pvx/sdk";
 import { addModule, catalogHas, isModuleUrl, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type Review, type UpdateCheck } from "@pvx/core";
-import { useKeys } from "../keys.tsx";
+import { matchKey } from "../keymap.ts";
+import { useKeys, type RoutedKey } from "../keys.tsx";
+import { FilterChips } from "../sdk-ui/filter-chips.tsx";
 import { useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
 import { deliveredTail, reloadAndReport } from "../modules/actions.ts";
@@ -31,6 +33,9 @@ export interface MenuNav {
   catalog: boolean;
 }
 export const createMenuNav = (): MenuNav => ({ path: [], sel: {}, catalog: false });
+
+/** The two chips above the cards. */
+type ChipId = "installed" | "catalog";
 
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 const source = (c: Catalog) => `fonte: ${c.source}${c.fetchedAt ? ` · ${hhmm(c.fetchedAt)}` : ""}`;
@@ -65,6 +70,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const [catalog, setCatalog] = useState(nav.catalog);
   const [cat, setCat] = useState<Catalog | null>(null);
   const [actions, setActions] = useState<string | null>(null);
+  const [chipFocus, setChipFocus] = useState<ChipId | null>(null); // the keyboard is on the chip row (the chip it is on), not on the cards
   const deps = useModulesDeps();
   const nudge = useNudge();
   nav.path = path;
@@ -91,7 +97,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const level = catalog ? "catalogo" : path.join("/");
   const curCard = cards.find((x) => x.id === sel[level]) ?? cards[0];
   const atRoot = view.kind === "list" && !path.length;
-  useScreenScope(!atRoot ? "menu" : catalog ? "catalog" : "modules", atRoot ? 1 : 0);
+  useScreenScope(!atRoot ? "menu" : chipFocus ? "modulechips" : catalog ? "catalog" : "modules", atRoot ? 1 : 0);
 
   const runLine = (line: string, secrets?: Record<string, string>) => {
     void store.run(line, { secrets });
@@ -248,8 +254,18 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   };
   const select = (id: string) => setSel((s) => (s[level] === id ? s : { ...s, [level]: id }));
 
+  /** The keys of the chip row: `←→` move between the chips, `enter` chooses, `↓` goes back to the cards, `↑` and `esc` to the tab bar. */
+  const chipKey = (k: RoutedKey, on: ChipId): boolean | undefined => {
+    if (k.name === "left" || k.name === "right") return setChipFocus(on === "installed" ? "catalog" : "installed"), true;
+    if (matchKey(k, "enter")) return setCatalog(on === "catalog"), true;
+    if (k.name === "down") return setChipFocus(null), true;
+    if (k.name === "up" || k.name === "escape") return setChipFocus(null), tabs?.focusBar(), true;
+    if (k.sequence === "c") return setCatalog(!catalog), true;
+  };
+
   useKeys((k) => {
     if (view.kind !== "list" || tabs?.focused === false) return;
+    if (chipFocus && !path.length) return chipKey(k, chipFocus);
     if (k.name === "escape" && path.length) return setPath(path.slice(0, -1)), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
     if (path.length) return;
@@ -268,6 +284,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const empty = !catalog ? undefined : !cat ? <Loading label="carregando o catálogo…" /> : cat.modules.length ? `todos os módulos do catálogo já estão instalados · ${source(cat)}` : `catálogo vazio · ${source(cat)}`;
   const tone: Record<Tone, string> = { ok: c.ok, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
   const open = actions ? cards.find((x) => x.id === actions) : undefined;
+  const chips = [{ id: "installed", label: `instalados ${installed.length}` }, { id: "catalog", label: `catálogo${cat ? ` ${listed.length}` : ""}` }];
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {view.kind === "form" ? <MenuForm item={view.item} onRun={runLine} onBack={back} /> : null}
@@ -279,20 +296,11 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
       ) : null}
       {view.kind === "list" && !path.length ? (
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          <box flexShrink={0} height={1} paddingX={1} flexDirection="row" justifyContent="space-between">
-            <box flexDirection="row" flexShrink={0}>
-              <box flexShrink={0} onMouseDown={() => setCatalog(false)}>
-                <text wrapMode="none" fg={catalog ? c.dim : c.accent} bg={catalog ? undefined : c.selected}>{catalog ? ` instalados ${installed.length} ` : <b>{` instalados ${installed.length} `}</b>}</text>
-              </box>
-              <text wrapMode="none">{"  "}</text>
-              <box flexShrink={0} onMouseDown={() => setCatalog(true)}>
-                <text wrapMode="none" fg={catalog ? c.accent : c.dim} bg={catalog ? c.selected : undefined}>{catalog ? <b>{` catálogo${cat ? ` ${listed.length}` : ""} `}</b> : " catálogo "}</text>
-              </box>
-              <text wrapMode="none"><span>{"   "}</span><span fg={c.accent}><b>c</b></span><span fg={c.dim}>{" alterna"}</span></text>
-            </box>
+          <box flexShrink={0} paddingX={1} flexDirection="row" justifyContent="space-between">
+            <FilterChips chips={chips} selected={catalog ? "catalog" : "installed"} cursor={chipFocus && (tabs?.focused ?? true) ? chipFocus : undefined} onSelect={(id) => setCatalog(id === "catalog")} />
             {working ? <Loading label={`${working}…`} /> : !catalog && !loaded ? <Loading label="lendo os módulos…" /> : catalog && cat ? <text fg={c.dim} wrapMode="none">{source(cat)}</text> : null}
           </box>
-          <CardGrid cards={cards} sel={sel[level]} onSel={select} onActivate={activateCard} onTop={tabs?.focusBar} focused={(tabs?.focused ?? true) && !open} empty={empty} />
+          <CardGrid cards={cards} sel={sel[level]} onSel={select} onActivate={activateCard} onTop={() => setChipFocus(catalog ? "catalog" : "installed")} focused={(tabs?.focused ?? true) && !open && !chipFocus} empty={empty} />
           <Detail card={curCard} tone={tone} />
         </box>
       ) : null}
@@ -304,10 +312,9 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
 
 /** The strip under the grid: where the selected card comes from, and its warning. */
 function Detail({ card, tone }: { card?: Card; tone: Record<Tone, string> }) {
-  const { c, box } = useTheme();
-  const b = box();
+  const { c } = useTheme();
   return (
-    <box flexShrink={0} height={b.border ? 3 : 2} flexDirection="column" paddingX={1} border={b.border ? ["top"] : false} borderStyle={b.borderStyle} borderColor={b.borderColor}>
+    <box flexShrink={0} height={3} flexDirection="column" paddingX={1} paddingTop={1}>
       <text wrapMode="none">
         {card?.detail.parts.map((p, i) => <span key={i} fg={p.tone === "name" ? c.text : p.tone ? tone[p.tone] : c.dim}>{p.tone === "name" ? <b>{p.text}</b> : p.text}</span>)}
       </text>

@@ -41,8 +41,8 @@ export async function gotoCard(t: TuiHarness, name: string, key: "ARROW_RIGHT" |
 /** Text of the strip under the grid (what the selected card is, and its warning). */
 export function detail(t: TuiHarness): string {
   const lines = t.frame().split("\n");
-  const rule = lines.findLastIndex((l) => /^\s*─{20,}\s*$/.test(l));
-  return lines.slice(rule + 1, rule + 3).map((l) => l.trim()).join("\n");
+  const footer = lines.findLastIndex((l) => l.trim()); // the strip is the three rows above the footer: a blank one, the name line and the warning
+  return lines.slice(Math.max(0, footer - 3), footer).map((l) => l.trim()).filter((l) => l && !/^[╰│╭]/.test(l)).join("\n");
 }
 
 /** Last non-empty line of the frame: the footer. */

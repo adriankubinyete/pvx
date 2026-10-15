@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "logs" | "logsearch" | "session" | "shell" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "logs" | "logsearch" | "session" | "shell" | "modulechips" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -45,6 +45,10 @@ const base: readonly Shortcut[] = [
   { keys: "◇", label: "externo", scope: "modules" },
   { keys: "∞", label: "confia sempre", scope: "modules" },
   { keys: "⚠", label: "pede atenção", scope: "modules" },
+  { keys: "←→", label: "filtro", scope: "modulechips", footer: true },
+  { keys: "enter", label: "escolhe", scope: "modulechips", footer: true },
+  { keys: "↓", label: "cartões", scope: "modulechips", footer: true },
+  { keys: "c", label: "alterna", scope: "modulechips" },
   { keys: "↑↓←→", label: "cartão", scope: "catalog", footer: true },
   { keys: "enter", label: "ações", scope: "catalog", footer: true },
   { keys: "c", label: "instalados", scope: "catalog", footer: true },
