@@ -4,7 +4,9 @@ import { createContext, useContext } from "react";
 export const LEAD_TABS = ["inicio", "modulos"] as const;
 export const TRAIL_TABS = ["logs", "comando", "sistema"] as const;
 export const TAB_IDS = [...LEAD_TABS, ...TRAIL_TABS] as const;
-export type CoreTabId = (typeof TAB_IDS)[number];
+/** The Tarefas tab is not in `TAB_IDS`: it exists only while the user turns it on (Sistema), between the module tabs and Logs. */
+export const TASKS_TAB = "tarefas" as const;
+export type CoreTabId = (typeof TAB_IDS)[number] | typeof TASKS_TAB;
 /** A core tab, or `page:<module>.<page>` for a tab a module contributes. */
 export type TabId = CoreTabId | `page:${string}`;
 

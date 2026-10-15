@@ -19,3 +19,4 @@ export { strategyKit } from "./strategy.ts";
 export { packagesKit } from "./packages.ts";
 export { cronKit } from "./cron.ts";
 export { crontabKit } from "./crontab.ts";
+export * from "./tasks.ts";

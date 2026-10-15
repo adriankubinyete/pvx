@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -95,6 +95,12 @@ const base: readonly Shortcut[] = [
   { keys: "enter", label: "aplica", scope: "sistemaedit", footer: true },
   { keys: "esc", label: "cancela", scope: "sistemaedit", footer: true },
   { keys: "←→", label: "cursor", scope: "sistemaedit" },
+  { keys: "enter", label: "abre", scope: "tasks", footer: true },
+  { keys: "x", label: "para", scope: "tasks", footer: true },
+  { keys: "c", label: "continua daqui", scope: "tasks", footer: true },
+  { keys: "l", label: "log inteiro", scope: "tasks", footer: true },
+  { keys: "↑↓", label: "tarefa", scope: "tasks" },
+  { keys: "1-2", label: "seção", scope: "tasks" },
   { keys: "←→", label: "cursor", scope: "session" },
   { keys: "↑", label: "histórico", scope: "session", footer: true },
   { keys: "ctrl+r", label: "busca", scope: "session" },

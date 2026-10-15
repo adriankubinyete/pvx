@@ -13,15 +13,18 @@ import { PagePane, pageScope } from "../sdk-ui/index.tsx";
 import { Session } from "../session/Session.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
-import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
+import { LEAD_TABS, onTabRequest, TASKS_TAB, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { SistemaTab } from "./SistemaTab.tsx";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
 import { barVersion, fitBar } from "./bar.ts";
 import { Clock, clockCost, pickForm } from "./clock.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
+import { TarefasTab } from "./TarefasTab.tsx";
+import { finishedTasks, runningTasks, tabLabel } from "./tasks-view.ts";
+import { useTasks } from "./useTasks.ts";
 
-const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", logs: "Logs", comando: "Comando", sistema: "Sistema" };
+const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", tarefas: "Tarefas", logs: "Logs", comando: "Comando", sistema: "Sistema" };
 /** Tabs that show a core command's output (the id is also the command). */
 const CORE: readonly TabId[] = ["logs"];
 
@@ -41,6 +44,8 @@ export interface TabsNav {
   draft: string;
   /** Modules with commits upstream (background check, memory only). */
   updates: Pending[];
+  /** Tarefas: the selected task (`<module>/<name>`). */
+  taskSel?: string;
 }
 export const createTabsNav = (): TabsNav => ({ active: "inicio", bar: false, barFrom: 0, menu: createMenuNav(), home: createHomeNav(), core: {}, draft: "", updates: [] });
 
@@ -118,6 +123,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
   const hasPages = usePages() !== null; // module tabs need the page host
   const rev = useRegistryRev(registry); // add, trust, update, remove, disable and dev reloads change the tabs live
   const { axes } = useTheme();
+  const { tasks, now: tasksNow } = useTasks(axes.showTasksTab);
   const hiddenTabs = useMemo(() => new Set(axes.hiddenTabs), [axes.hiddenTabs]);
   const modTabs = useMemo(() => (hasPages ? pageTabs(registry, hiddenTabs) : []), [hasPages, registry, rev, hiddenTabs]);
   // Update notice: in the background, never in the way of the first frame; interactive hosts only (they pass `modules`).
@@ -127,7 +133,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
     defaultPending(modules).then((p) => live && update({ updates: p }), () => {});
     return () => void (live = false);
   }, [modules, registry, rev]);
-  const ids: TabId[] = [...LEAD_TABS, ...modTabs.map((t) => t.id), ...TRAIL_TABS];
+  const ids: TabId[] = [...LEAD_TABS, ...modTabs.map((t) => t.id), ...(axes.showTasksTab ? [TASKS_TAB] : []), ...TRAIL_TABS];
   const hiddenNow = !ids.includes(nav.active) && hasPages && pageTabs(registry).some((t) => t.id === nav.active); // hidden by the user, not gone
   if (hiddenNow) nav.active = "modulos";
   const active = ids.includes(nav.active) ? nav.active : "inicio"; // the module went away
@@ -136,7 +142,8 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
   const visited = useRef(new Set<TabId>());
   if (pageTab) visited.current.add(active);
   // A tab with nothing to select never holds focus.
-  const hasSel = (id: TabId) => id === "inicio" || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
+  const runningCount = runningTasks(tasks).length;
+  const hasSel = (id: TabId) => id === "inicio" || (id === TASKS_TAB && runningCount + finishedTasks(tasks, tasksNow).length > 0) || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
   const step = (d: number) => {
     const id = ids[(ids.indexOf(active) + d + ids.length) % ids.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in
@@ -153,10 +160,11 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
 
   const api = { focused: !nav.bar, focusBar: () => update({ bar: true }), focusContent: () => nav.bar && hasSel(active) && update({ bar: false }), goto: (id: TabId) => update({ active: id, bar: false }) };
   useEffect(() => onTabRequest((id) => ids.includes(id) && api.goto(id)));
-  const core = (id: CoreTabId) => ({ id, label: LABELS[id], errors: id === "modulos" ? registry.errors.length : 0, behind: id === "modulos" ? nav.updates.length : 0 });
+  const core = (id: CoreTabId) => ({ id, label: id === TASKS_TAB ? tabLabel(runningCount) : LABELS[id], errors: id === "modulos" ? registry.errors.length : 0, behind: id === "modulos" ? nav.updates.length : 0 });
   const bar: BarTab[] = [
     ...LEAD_TABS.map(core),
     ...modTabs.map((t) => ({ id: t.id, label: t.label, errors: 0, behind: 0 })),
+    ...(axes.showTasksTab ? [core(TASKS_TAB)] : []),
     ...TRAIL_TABS.map(core),
   ];
   return (
@@ -169,6 +177,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
         <box flexGrow={1} minHeight={0} flexDirection="column" onMouseDown={api.focusContent}>
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} session={session} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
+          {active === TASKS_TAB ? <TarefasTab store={store} registry={registry} tasks={tasks} now={tasksNow} selected={nav.taskSel} onSelect={(id) => update({ taskSel: id })} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} refreshMs={logsMs} /> : null}
           {active === "sistema" ? <SistemaTab store={store} registry={registry} version={version} /> : null}
           {active === "comando" ? <Session store={store} registry={registry} draft={nav} /> : null}

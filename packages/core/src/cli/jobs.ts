@@ -5,6 +5,7 @@ import { parseArgs } from "../engine/args.ts";
 import { execute } from "../engine/execute.ts";
 import { killExecGroups } from "../engine/exec.ts";
 import { appendJobLog, createJobs, listAllJobs, readJobState, secretsFile, writeJobState } from "../engine/jobs.ts";
+import { listTasks } from "../engine/tasks.ts";
 import { tokenize } from "../engine/tokenize.ts";
 import type { CoreCommand, Ctx } from "./core.ts";
 
@@ -79,7 +80,7 @@ const list: CoreCommand["run"] = async ({ o }) => {
 };
 
 export const JOBS_COMMANDS: CoreCommand[] = [
-  { key: "jobs", help: "Lista os jobs em segundo plano (subcomandos: list, log, stop)", run: list },
+  { key: "jobs", help: "Lista os jobs em segundo plano (subcomandos: list, log, stop, resume)", run: list },
   { key: "jobs list", help: "Lista os jobs em segundo plano de todos os módulos", run: list },
   {
     key: "jobs log",
@@ -122,6 +123,27 @@ export const JOBS_COMMANDS: CoreCommand[] = [
         return o.line({ kind: "error", text: (e as Error).message }), EXIT.ERROR;
       }
       o.line({ kind: "success", text: `job ${p.args.module}/${p.args.name} parado` });
+      return EXIT.OK;
+    },
+  },
+  {
+    key: "jobs resume",
+    help: "Continua um job parado ou que falhou, da fase onde ele parou",
+    args: jobArgs,
+    root: true,
+    noAudit: true, // `Jobs.start` writes its own audit line
+    async run({ io, o, rest }) {
+      const p = await parseArgs(jobArgs, rest, { env: io.env });
+      if (!p.ok) return usage(o, p.message);
+      const task = listTasks().find((t) => t.module === String(p.args.module) && t.name === String(p.args.name));
+      if (!task) return o.line({ kind: "error", text: `job inexistente: ${p.args.module}/${p.args.name}` }), EXIT.NOT_FOUND;
+      if (!task.resumable) return o.line({ kind: "error", text: `o job ${task.module}/${task.name} não tem fase a continuar` }), EXIT.ERROR;
+      try {
+        await createJobs(task.module).start(task.name, task.line);
+      } catch (e) {
+        return o.line({ kind: "error", text: (e as Error).message }), EXIT.ERROR;
+      }
+      o.line({ kind: "success", text: `job ${task.module}/${task.name} continuando da fase onde parou` });
       return EXIT.OK;
     },
   },

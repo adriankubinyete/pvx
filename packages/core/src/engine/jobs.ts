@@ -1,6 +1,6 @@
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { JobStatus, Jobs } from "@pvx/sdk";
+import type { JobOrigin, JobStatus, Jobs } from "@pvx/sdk";
 import { auditJob } from "../journal/audit.ts";
 import { createLogger } from "../logs/logger.ts";
 import { logsDir, pvxHome } from "./paths.ts";
@@ -14,11 +14,15 @@ export const jobsConfig = {
   /** The command that runs this pvx: the compiled binary, or `bun <entry>` in dev. */
   selfCmd: (): string[] => (/^(\/\$bunfs|[A-Za-z]:[\\/]~BUN)/.test(Bun.main) ? [process.execPath] : [process.execPath, Bun.main]),
   systemd: (): boolean => process.platform === "linux" && Boolean(Bun.which("systemd-run")),
+  /** Who is acting: a process with a terminal is a technician, one without (cron, systemd) is a schedule. */
+  origin: (): JobOrigin => (process.stdin.isTTY ? "manual" : "cron"),
 };
 
 interface State extends JobStatus {
   /** The command line (this module's, no module id). Never holds a secret. */
   line: string;
+  /** The run was given secrets, which are gone: it cannot start again from the record alone. */
+  withSecrets?: boolean;
 }
 const path = (id: string, name: string, ext: string) => join(jobsDir(id), `${name}.${ext}`);
 export const secretsFile = (id: string, name: string) => path(id, name, "secrets");
@@ -50,7 +54,8 @@ const alive = (pid: number) => {
   }
 };
 
-function statusOf(id: string, name: string): JobStatus {
+/** The status of a job: a job that says it runs but whose process is gone counts as failed. */
+export function statusOf(id: string, name: string): JobStatus {
   const s = readJobState(id, name);
   if (!s) return { state: "none" };
   const { line: _, ...st } = s;
@@ -95,7 +100,7 @@ export function createJobs(id: string): Jobs {
         writeFileSync(secretsFile(id, name), JSON.stringify(secrets), { mode: 0o600 });
         chmodSync(secretsFile(id, name), 0o600);
       }
-      writeJobState(id, name, { state: "running", startedAt: Date.now(), line });
+      writeJobState(id, name, { state: "running", startedAt: Date.now(), line, origin: jobsConfig.origin(), ...(secrets ? { withSecrets: true } : {}) });
       const self = [...jobsConfig.selfCmd(), "jobs", "run", id, name];
       const env = ["PVX_HOME", "PVX_USERMODULES"].filter((k) => process.env[k]).map((k) => `--setenv=${k}=${process.env[k]}`);
       const sys = jobsConfig.systemd();
@@ -119,6 +124,8 @@ export function createJobs(id: string): Jobs {
       if (!st.pid) throw new Error(`o job "${name}" ainda está iniciando; tente de novo em instantes`);
       lifecycle(id, "warn", `job ${name}: parada pedida`);
       auditJob(`stop ${id}/${name}`);
+      const asked = readJobState(id, name);
+      if (asked) writeJobState(id, name, { ...asked, stoppedBy: jobsConfig.origin() }); // before the kill: the job's own last write keeps it
       const kill = (sig: NodeJS.Signals) => {
         try {
           process.kill(-st.pid!, sig);

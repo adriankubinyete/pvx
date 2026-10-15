@@ -125,6 +125,9 @@ export interface CommandCtx {
   jobLog(line: string): void;
 }
 
+/** Who started a job or stopped it: `manual` from a terminal (a technician), `cron` with no terminal (a schedule). */
+export type JobOrigin = "cron" | "manual";
+
 export interface JobStatus {
   /** `none`: no such job. `failed` also covers a job whose process died without reporting. */
   state: "running" | "done" | "failed" | "stopped" | "none";
@@ -133,6 +136,10 @@ export interface JobStatus {
   endedAt?: number;
   exit?: number;
   pid?: number;
+  /** Who started this run. Absent in a record written before the host kept it. */
+  origin?: JobOrigin;
+  /** Who asked to stop it, when the state is `stopped` and the stop came through `jobs.stop`. */
+  stoppedBy?: JobOrigin;
 }
 
 /**
