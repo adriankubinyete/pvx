@@ -98,6 +98,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `bun run dev:link <pasta>` (script do repo, não do binário) liga um módulo local em `.dev/pvx` pela mesma lógica do `modules link`, sem root; `renderPage` e `runSession` repassam `sshClient` e `isRoot` também aos comandos que uma página roda → [Dev link e sessão nos comandos de página](#2026-10-14--dev-link-e-sessão-nos-comandos-de-página)
 - Duas `List` com `onAction` na mesma tela: só a lista que tem uma linha com o id de `selected` registra o `enter` (o rodapé o mostra uma vez, sem chave duplicada no React) → [List: só a lista dona da seleção registra o enter](#2026-10-14--list-só-a-lista-dona-da-seleção-registra-o-enter)
 - `ctx.net.fetch` com `body` binário, `bodyFile`, `signal` e `timeoutMs` (30 s); `ctx.net.upload` (multipart em fluxo, sem carregar o arquivo); `ctx.fs` com `entries`, `stat`, `du`, `free`, `mkdir` e `remove` recursivo (as leituras também no `ReadCtx`); `@pvx/testing` com `buffer: false` honrado, `fs` e `net` falsos completos → [SDK: envio binário em `ctx.net`, mais operações em `ctx.fs` e fakes completos](#2026-10-14--sdk-envio-binário-em-ctx-net-mais-operações-em-ctx-fs-e-fakes-completos)
+- `useCommand(linha).run({ args, stdin, secrets })`: o segredo vai ao comando pelo ambiente da execução (como o `Form`), nunca por argv nem pela linha do scrollback → [useCommand().run aceita secrets](#2026-10-14--usecommand-run-aceita-secrets)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1286,3 +1287,16 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o autobackup enviava o arquivo por `curl -K -` (o `NetInit.body` só tinha texto) e media espaço com `du -sk` e `df -Pk` por `ctx.shell`, e os dois tinham fakes de `exec` próprios.
 
 **Limite:** `du` e `free` medem o que o sistema operacional diz (num sistema de arquivos com compressão ou quotas, `Avail` pode enganar). Não há `Blob` em `body`, nem leitura de cabeçalhos da resposta, nem `net` com redirecionamento controlado. O fake de `fs` não simula permissão de manifest, e o `du` falso conta bytes de texto, não blocos.
+
+## 2026-10-14 — useCommand().run aceita secrets
+
+**Status:** vigente.
+
+**Decisão:** `run` de `useCommand` aceita `secrets` (`{ nomeDoArg: valor }`) e os repassa à sessão, que já os entrega como `PVX_SECRET_<NOME>` só ao filho daquela execução.
+
+- A linha mostrada no scrollback e no histórico não leva o valor (ele nem entra na linha).
+- O teste roda um comando com um `secret` por uma página e confere que o valor chegou ao comando e não está na tela, no log nem no histórico.
+
+**Motivo:** o autobackup colava o token por `args` para entrar no UOE, e um argumento aparece no argv e na linha.
+
+**Limite:** continua valendo só para argumentos declarados `secret: true`; um valor passado em `args` não é mascarado.

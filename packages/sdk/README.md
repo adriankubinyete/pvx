@@ -581,7 +581,7 @@ const factory: ModuleFactory = () => ({
 export default factory;
 ```
 
-Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário, veja abaixo), `ui.useViewport()` e `useCommand(linha).run({ args, stdin })`.
+Também no SDK: `CommandDef.readonly` (o comando só lê e roda sem root), `ArgSpec.stdin` (posicional de texto livre; sem valor e sem TTY, lê a entrada padrão, e as palavras que sobram entram nele), `ArgSpec.repeat` (opção que pode se repetir; o valor chega separado por vírgula), `ui.Fields` (formulário, veja abaixo), `ui.useViewport()` e `useCommand(linha).run({ args, stdin, secrets })`. `secrets` (pelo nome do `ArgSpec`, como `{ token: "..." }`) chega ao comando como no `Form`: pelo ambiente daquela execução, nunca no argv, na linha do scrollback, no histórico, no estado nem no log.
 
 `ui.Fields` desenha um formulário com campos `area`, `line`, `toggle` (caixa de marcar; `text` é o texto ao lado dela), `secret`, `choice` e `multi` (veja abaixo) e os botões `[ salvar ]` e `[ cancelar ]`, sempre presentes. Todo o teclado é do formulário:
 

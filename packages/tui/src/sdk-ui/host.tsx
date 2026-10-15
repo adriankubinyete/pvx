@@ -68,10 +68,10 @@ export async function runOwn(h: HostPage, line: string, secrets?: Record<string,
 function useCommand(line: string) {
   const h = useHost();
   const [state, setState] = useState<{ running: boolean; lastResult?: CommandRun }>({ running: false });
-  const run = useCallback(async (opts?: { args?: string[]; stdin?: string }) => {
+  const run = useCallback(async (opts?: { args?: string[]; stdin?: string; secrets?: Record<string, string> }) => {
     setState((s) => ({ ...s, running: true }));
     try {
-      const lastResult = await runOwn(h, [line, ...(opts?.args ?? []).map(quoteArg)].join(" "), undefined, opts?.stdin);
+      const lastResult = await runOwn(h, [line, ...(opts?.args ?? []).map(quoteArg)].join(" "), opts?.secrets, opts?.stdin);
       setState({ running: false, lastResult });
       return lastResult;
     } catch (e) {

@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ReactNode } from "react";
+import { logsDir, pvxHome } from "@pvx/core";
 import type { JobStatus, PhasesState } from "@pvx/sdk";
 import { renderPage, renderTui, runSession, type TuiHarness } from "../../testing/src/index.ts";
 import { ThemeProvider } from "../src/index.ts";
@@ -76,6 +77,18 @@ test("two lists with onAction register enter once: the footer shows it once and 
     console.error = original;
   }
   expect(errors.filter((line) => line.includes("same key"))).toEqual([]);
+});
+
+test("useCommand().run passes secrets to the command without putting them in the argv, the scrollback line or the history", async () => {
+  const session = await runSession(KIT);
+  h = await session.renderPage("secret-run", { cols: 80, rows: 24 });
+  await h.press("k");
+  await until("token length 12");
+  expect(h.frame()).not.toContain("S3CRET");
+  const logs = ["kit-demo", "core"].map((name) => join(logsDir(), `${name}.log`)).filter((file) => existsSync(file));
+  for (const file of logs) expect(readFileSync(file, "utf8")).not.toContain("S3CRET");
+  const history = join(pvxHome(), "tui-history");
+  if (existsSync(history)) expect(readFileSync(history, "utf8")).not.toContain("S3CRET");
 });
 
 test("useNudge tones: warn and error show their glyph and text in the footer, like ok", async () => {

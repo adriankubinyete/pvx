@@ -897,8 +897,12 @@ export interface SdkUi {
    * answers it shows `não copiou` with the cause (the panel stays, so the text can be selected with the mouse) and resolves false.
    */
   useCopy(): (text: string, opts?: { title?: string }) => Promise<boolean>;
-  /** Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. */
-  useCommand(line: string): { run(opts?: { args?: string[]; stdin?: string }): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
+  /**
+   * Runs `line` (a command of this module) through the session: it lands in the scrollback and the history. `secrets` (by the `ArgSpec` name of
+   * a `secret` argument, as `{ token: "..." }`) go to the command the way a `Form` hands them over, through the environment of that run only:
+   * never in the argv, the scrollback line, the history, the state or the log.
+   */
+  useCommand(line: string): { run(opts?: { args?: string[]; stdin?: string; secrets?: Record<string, string> }): Promise<CommandRun>; running: boolean; lastResult?: CommandRun };
   /** Same, and re-runs every `refreshMs` (min 500) while the page is mounted. The old data stays until the new arrives (`loading` is only true for the first run). */
   useQuery<T = unknown>(name: string, args: unknown[], opts: { refreshMs: number }): QueryState<T>;
   /** Calls `ctx.query`-style: `useQuery("module.name", ...args)`. Re-runs when name or args change. */

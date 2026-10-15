@@ -5,7 +5,7 @@ import type { CommandCtx, Sdk } from "@pvx/sdk";
 
 // Pages that exercise the newer SDK pieces: List window and row action, Panel shrink, Notice, useNudge tones, refetch, useRun.
 export default (sdk: Sdk) => {
-  const { h, Panel, Text, List, Notice, useState, useKey, useNudge, useQuery, useRun } = sdk.ui;
+  const { h, Panel, Text, List, Notice, useState, useCommand, useKey, useNudge, useQuery, useRun } = sdk.ui;
   const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
   let reads = 0;
 
@@ -48,6 +48,13 @@ export default (sdk: Sdk) => {
     );
   }
 
+  /** `k` runs `login` with the token as a secret: it must reach the command and nothing else. */
+  function SecretRun() {
+    const login = useCommand("kit-demo login");
+    useKey("k", "entra", () => void login.run({ secrets: { token: "S3CRET-TOKEN" } }));
+    return <Panel><Text>{`resultado=${login.lastResult?.lines.map((line) => line.text).join("|") ?? "-"}`}</Text></Panel>;
+  }
+
   function Refetch() {
     const count = useQuery<number>("kit-demo.count");
     useKey("r", "lê", () => void count.refetch());
@@ -80,6 +87,11 @@ export default (sdk: Sdk) => {
           if (!result.ok) ctx.out.error(`parou em ${result.failedPhase}`);
         },
       },
+      login: {
+        help: "Takes a secret token (the test never prints it)",
+        args: [{ name: "token", help: "Token", kind: "option", secret: true }],
+        run: (ctx: CommandCtx) => ctx.out.success(`token length ${String(ctx.args.token ?? "").length}`),
+      },
       break: { help: "Breaks the database phase", run: (ctx: CommandCtx) => ctx.store.set("broken", true) },
       fix: { help: "Fixes it", run: (ctx: CommandCtx) => ctx.store.delete("broken") },
     },
@@ -88,6 +100,7 @@ export default (sdk: Sdk) => {
       rows: { title: "Linhas", render: () => <Rows /> },
       "rows-select": { title: "Linhas (clique seleciona)", render: () => <Rows clickOpens={false} /> },
       "two-lists": { title: "Duas listas", render: () => <TwoLists /> },
+      "secret-run": { title: "Segredo", render: () => <SecretRun /> },
       refetch: { title: "Refetch", render: () => <Refetch /> },
       run: { title: "Run", render: () => <Run /> },
       "run-trailing": { title: "Run (database trailing)", render: () => <Run trailing={["database"]} /> },
