@@ -292,12 +292,13 @@ test("x removes after the host confirms; the module leaves the list and the regi
   await goto(t, "rm1");
   expect(registry.commands.has("rm1 hi")).toBe(true);
   await t.press("x");
-  expect(t.frame()).toContain("confirmar `modules remove rm1`");
-  await t.press("n");
+  expect(t.frame()).toContain("rodar modules remove rm1?");
+  await t.press("ESCAPE");
   expect(existsSync(dirOf("rm1"))).toBe(true);
   await t.press("RETURN"); // the "cancelado" block
   await t.press("x");
-  await t.press("s");
+  await t.press("ARROW_LEFT"); // confirmar (the focus starts on cancelar)
+  await t.press("RETURN");
   await see(t, (x) => x.includes("✓ rm1 removido"));
   expect(t.frame()).not.toContain("resultado");
   expect(existsSync(dirOf("rm1"))).toBe(false);
@@ -314,11 +315,13 @@ test("removing a row keeps the cursor on the row that takes its place", async ()
   await see(t, (x) => /rc\s+● carregado/.test(x));
   await goto(t, "rb");
   await t.press("x");
-  await t.press("s");
+  await t.press("ARROW_LEFT"); // confirmar (the focus starts on cancelar)
+  await t.press("RETURN");
   await see(t, (x) => x.includes("✓ rb removido"));
   expect(selectedName(t)).toBe("rc");
   await t.press("x");
-  await t.press("s");
+  await t.press("ARROW_LEFT"); // confirmar (the focus starts on cancelar)
+  await t.press("RETURN");
   await see(t, (x) => x.includes("✓ rc removido"));
   await see(t, (x) => x.includes("instalados 1"));
   expect(selectedName(t)).toBe("ra"); // last module gone: the previous one, not a dashed card
@@ -414,6 +417,9 @@ afterEach(() => {
   for (const k of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) delete process.env[k];
 });
 
+/** The background of the button with `text`: filled while it has the focus. */
+const fill = (t: TuiHarness, text: string) => t.spans().lines.flatMap((line) => line.spans).find((span) => span.text.includes(text))!.bg;
+
 /** Manual add of `o` up to the incompatibility modal. */
 async function addIncompatible(o: Origin, id: string) {
   const m = await mount();
@@ -423,7 +429,8 @@ async function addIncompatible(o: Origin, id: string) {
   const f = await see(m.t, (x) => x.includes("sistema incompatível"));
   expect(f).toContain("não é compatível com este sistema");
   expect(f).toMatch(/\[ Entendi, não instalar \]/);
-  expect(f).not.toMatch(/\[ Instalar mesmo assim \]/);
+  expect(f).toMatch(/\[ Instalar mesmo assim \]/);
+  expect(fill(m.t, "[ Entendi, não instalar ]").equals(fill(m.t, "[ Instalar mesmo assim ]"))).toBe(false); // the safe button has the focus
   return m;
 }
 
@@ -444,9 +451,9 @@ test("a incompatible module: esc on the modal also cancels", async () => {
 
 test("a incompatible module: right then enter installs anyway and the review shows the sistema row", async () => {
   const { t } = await addIncompatible(origin("inc3", { distro: ["nonexistent-distro"] }), "inc3");
+  const safeFill = fill(t, "[ Entendi, não instalar ]");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toMatch(/\[ Instalar mesmo assim \]/);
-  expect(t.frame()).not.toMatch(/\[ Entendi, não instalar \]/);
+  expect(fill(t, "[ Instalar mesmo assim ]").equals(safeFill)).toBe(true); // the focus moved to the other button
   await t.press("RETURN");
   const f = await see(t, (x) => x.includes("revisão de confiança"));
   expect(f).toMatch(/✗ só .*nonexistent-distro.* aqui é /);

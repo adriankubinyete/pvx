@@ -1,6 +1,7 @@
 import type { ArgSpec } from "@pvx/sdk";
 import { useTheme } from "../theme-context.tsx";
 import { LineText } from "../LineText.tsx";
+import { helpOf } from "../sdk-ui/labels.ts";
 import { clean } from "./search.ts";
 import type { BuiltLine, FormValues } from "./form.ts";
 
@@ -36,7 +37,7 @@ export function Form({ specs, values, focus, cursor = Infinity, line, last }: Fo
             {s.kind === "flag"
               ? <span fg={c.accent}>{v === true ? "[x]" : "[ ]"}</span>
               : <LineText line={{ text, cursor: Math.min(cursor, [...text].length) }} focused={on} width={FIELD_W} mask={s.secret} fg={c.accent} />}
-            <span fg={c.dim}>{`  ${clean(s.help)}${s.secret ? " (segredo)" : ""}`}</span>
+            <span fg={c.dim}>{`  ${helpOf(s.help)}`}</span>
           </text>
         );
       })}

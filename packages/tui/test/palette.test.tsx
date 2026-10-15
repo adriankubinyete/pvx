@@ -106,7 +106,7 @@ test("form shows required *, masks the secret and keeps it out of the line and t
   await h!.type("s3cr3t");
   const f = h!.frame();
   expect(f).toContain("token*");
-  expect(f).toContain("●●●●●●");
+  expect(f).toContain("••••••");
   expect(f).not.toContain("s3cr3t");
   expect(f).toContain("$ pvx demo login");
   await h!.press("RETURN");
@@ -126,7 +126,7 @@ test("→ enters the args; the cursor edits in place and ← at the start return
   await h!.press("ARROW_LEFT");
   await h!.press("ARROW_LEFT");
   await h!.type("X");
-  expect(h!.frame()).toMatch(/» token\* ●●●●/); // secret: masked, cursor moved, 4 chars
+  expect(h!.frame()).toMatch(/» token\* ••••/); // secret: masked, cursor moved, 4 chars
   expect(h!.frame()).toMatch(/» token\*/);
   await h!.press("HOME");
   await h!.press("ARROW_LEFT"); // crossing the start: back to the list

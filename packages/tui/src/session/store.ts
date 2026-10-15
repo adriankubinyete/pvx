@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Logger, OutLine, SessionInfo } from "@pvx/sdk";
+import type { ConfirmOptions, Logger, OutLine, SessionInfo } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
 import { interactiveProgram, spawnShell, type ShellRun } from "./shell.ts";
 import { auditCommand, execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
@@ -28,7 +28,7 @@ export interface Block {
 
 /** A question the host asks the user; answered with `answer`. */
 export type Pending =
-  | { id: number; kind: "confirm"; cmd: string }
+  | ({ id: number; kind: "confirm" } & ConfirmOptions)
   | { id: number; kind: "secret"; name: string }
   | { id: number; kind: "choice"; title: string; lines: string[]; options: string[] };
 
@@ -65,6 +65,8 @@ export interface SessionApi {
    * rule, `confirm` asks the host question first. `line` is the CLI line it stands for. `fn` gets a helper to ask the user a choice. Never rejects.
    */
   act(line: string, fn: (h: ActHelper) => Promise<{ exit: number; lines: OutLine[] }>, o?: { confirm?: boolean }): Promise<{ exit: number; id: number }>;
+  /** Asks the technician to confirm something in a centered dialog (the same one a destructive command uses). Resolves true on the confirm button. */
+  confirm(options: ConfirmOptions): Promise<boolean>;
   /** Answers a pending confirm (boolean), secret (string, or undefined to cancel) or choice (option index). */
   answer(id: number, value: boolean | string | number | undefined): void;
   subscribe(fn: () => void): () => void;
@@ -72,6 +74,12 @@ export interface SessionApi {
   onPage(fn: (key: string) => void): () => void;
   getSnapshot(): SessionState;
 }
+
+/** The question before a destructive command runs. */
+const destructiveCommandQuestion = (key: string): ConfirmOptions => ({ title: `rodar ${key}?`, description: "este comando é destrutivo", destructive: true });
+
+/** The question before a host mutation (trust, update, remove...) runs. */
+const hostActionQuestion = (line: string): ConfirmOptions => ({ title: `rodar ${line}?`, destructive: true });
 
 /** Strips ANSI/control chars (OpenTUI would print them literally) and splits on newlines. */
 export function sanitize(text: string): string[] {
@@ -160,7 +168,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     let lines: OutLine[];
     try {
       const denied = !isRoot && requiresRoot(registry, argv);
-      const confirmed = !denied && found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", cmd: found.key }) : false;
+      const confirmed = !denied && found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", ...destructiveCommandQuestion(found.key) }) : false;
       if (denied) lines = [{ kind: "error", text: rootMessage() }];
       else if (line.startsWith("#")) lines = [{ kind: "error", text: `página não encontrada: ${line.slice(1).trim()}` }];
       else if (found?.cmd.destructive && !confirmed) lines = [{ kind: "warning", text: "cancelado" }];
@@ -253,7 +261,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     let r: { exit: number; lines: OutLine[] };
     try {
       if (!isRoot) r = { exit: 1, lines: [{ kind: "error", text: rootMessage() }] };
-      else if (o.confirm && !(await ask<boolean>({ kind: "confirm", cmd: line }))) r = { exit: 1, lines: [{ kind: "warning", text: "cancelado" }] };
+      else if (o.confirm && !(await ask<boolean>({ kind: "confirm", ...hostActionQuestion(line) }))) r = { exit: 1, lines: [{ kind: "warning", text: "cancelado" }] };
       else (r = await fn({ choose: (title, lines, options) => ask<number>({ kind: "choice", title, lines, options }) })), auditCommand({ line, exit: r.exit, ms: Date.now() - t0, destructive: false }, { mutation: true }); // only what actually ran
     } catch (e) {
       r = { exit: 1, lines: [{ kind: "error", text: `erro interno: ${(e as Error).message ?? e}` }] };
@@ -310,6 +318,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
       const clean = lines.flatMap((l) => sanitize(l.text).map((text) => ({ kind: l.kind, text })));
       set({ blocks: [...state.blocks, { id: ++seq, line, status, moduleId, lines: clean }].slice(-MAX_BLOCKS) });
     },
+    confirm: (options) => ask<boolean>({ kind: "confirm", ...options }),
     answer(id, value) {
       waiting.get(id)?.(value);
       waiting.delete(id);

@@ -3,13 +3,15 @@ import type { RegisteredPage } from "@pvx/core";
 import type { Component, KeySpec, SdkUi } from "@pvx/sdk";
 import { addPageRow, matchKey, setPageRows, type Scope } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
-import { MenuForm } from "../menu/MenuForm.tsx";
 import { clean } from "../palette/search.ts";
 import { Boundary, useRouter, type Screen } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import { useTabs } from "../tabs/context.ts";
+import { tabOf } from "../tabs/pageTabs.ts";
 import { useTheme } from "../theme-context.tsx";
-import { activeBack, BackCtx, FocusCtx, HostCtx, RootPanelCtx, runOwn, useHost, usePages, type BackEntry, type HostPage } from "./host.tsx";
+import { CommandForm } from "./command-form.tsx";
+import { helpOf } from "./labels.ts";
+import { activeBack, BackCtx, FocusCtx, HostCtx, runOwn, useHost, usePages, type BackEntry, type HostPage } from "./host.tsx";
 
 /** Keys the host owns: a page cannot take them over. */
 const RESERVED = ["esc", "?", "ctrl+c", "ctrl+k"];
@@ -31,7 +33,6 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
   const deps = usePages();
   if (!deps) throw new Error("páginas indisponíveis: o App não recebeu `pages`");
   const router = useRouter();
-  const { box, g } = useTheme();
   const { pending } = useSyncExternalStore(deps.session.subscribe, deps.session.getSnapshot);
   const dynKeys = useRef(new Set<KeySpec>()).current; // `useKey`: the keys of the components mounted in this page
   const outerBacks = useContext(BackCtx); // set by PagePane, which owns esc in a tab
@@ -78,15 +79,27 @@ export function PageContent({ page, enabled = true }: { page: RegisteredPage; en
   return (
     <HostCtx.Provider value={host}>
       <FocusCtx.Provider value={focused}>
-        <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box()} title={`${g.query} ${clean(page.title)}`}>
-          <RootPanelCtx.Provider value={true}>
-            <Render page={page} />
-          </RootPanelCtx.Provider>
+        <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden">
+          {outerBacks ? null : <Breadcrumb page={page} />}
+          <Render page={page} />
         </box>
         {enabled && router.scope !== "palette" ? <SessionModals store={deps.session} pending={pending} /> : null}
       </FocusCtx.Provider>
     </HostCtx.Provider>
   );
+}
+
+/** The labels above a pushed page, root first: the module's tab (or its id) and the page title, without a repeat. */
+export function crumbOf(rootLabel: string, pageTitle: string): string[] {
+  return rootLabel.toLowerCase() === pageTitle.toLowerCase() ? [pageTitle] : [rootLabel, pageTitle];
+}
+
+/** A pushed page has no tab bar entry of its own: one dim line says where it is. A page shown as a tab needs none, the tab names it. */
+function Breadcrumb({ page }: { page: RegisteredPage }) {
+  const { c, g } = useTheme();
+  const deps = usePages()!;
+  const root = tabOf(deps.registry, page.moduleId)?.label ?? page.moduleId;
+  return <text fg={c.dim} wrapMode="none" flexShrink={0}>{crumbOf(root, clean(page.title)).join(` ${g.query} `)}</text>;
 }
 
 /** `render()` runs as part of this component, so a page may call hooks in it. */
@@ -133,12 +146,12 @@ export function PageHost() {
   return null;
 }
 
-/** `sdk.ui.Form`: the form of one of the module's commands (the Módulos menu's). */
-export const Form: Component<Parameters<SdkUi["Form"]>[0]> = ({ command, onRun, onCancel }) => {
+/** `sdk.ui.Form`: the form of one of the module's commands, drawn by `Fields` (no box, no command line). */
+export const Form: Component<Parameters<SdkUi["Form"]>[0]> = ({ command, title, description, submitLabel, derive, onRun, onCancel }) => {
   const host = useHost();
   const cmd = host.deps.registry.commands.get(command);
   if (!cmd || cmd.moduleId !== host.moduleId) throw new Error(`Form: "${command}" não é um comando deste módulo`);
   if (!cmd.args?.length) return <text>{`${clean(command)}: sem argumentos`}</text>;
-  const item = { id: command, label: command, help: clean(cmd.help), line: command, args: cmd.args };
-  return <MenuForm item={item} onRun={(line, secrets) => void runOwn(host, line, secrets).then((r) => onRun?.(r))} onBack={() => onCancel?.()} />;
+  const run = (line: string, secrets: Record<string, string>) => void runOwn(host, line, secrets).then((result) => onRun?.(result));
+  return <CommandForm line={command} args={cmd.args} title={title ?? clean(cmd.title ?? cmd.help)} description={description ?? (cmd.title ? helpOf(cmd.help) : undefined)} submitLabel={submitLabel} derive={derive} onRun={run} onCancel={() => onCancel?.()} />;
 };

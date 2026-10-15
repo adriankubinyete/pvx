@@ -120,15 +120,19 @@ test("ctrl+k opens the palette from the log screen too", async () => {
   expect(t.frame()).toContain("fila vazia");
 });
 
-test("destructive asks for confirmation: n cancels, s runs", async () => {
+test("destructive asks in a centered dialog: focus starts on cancelar, esc cancels, ← then enter confirms", async () => {
   const t = await mount();
   await run(t, "demo wipe");
-  expect(t.frame()).toContain("confirmar `demo wipe`? s/N");
-  await t.press("n");
+  for (const text of ["rodar demo wipe?", "este comando é destrutivo", "[ confirmar ]", "[ cancelar ]"]) expect(t.frame()).toContain(text);
+  await t.press("RETURN"); // the safe button has the focus
   expect(t.frame()).toContain("cancelado");
   expect(t.frame()).not.toContain("apagado");
   await run(t, "demo wipe");
-  await t.press("s");
+  await t.press("ESCAPE");
+  expect(t.frame().match(/cancelado/g)).toHaveLength(2);
+  await run(t, "demo wipe");
+  await t.press("ARROW_LEFT");
+  await t.press("RETURN");
   expect(t.frame()).toContain("[✓] apagado");
 });
 
@@ -138,11 +142,11 @@ test("a secret typed in the modal never reaches the frame, history or logs", asy
   expect(t.frame()).toContain("token:");
   await t.type("hunter2zz");
   expect(t.frame()).not.toContain("hunter2zz");
-  expect(t.frame()).toContain("●●●●●●●●●");
+  expect(t.frame()).toContain("•••••••••");
   await t.press("ARROW_LEFT");
   await t.press("ARROW_LEFT");
   await t.type("Q");
-  expect(t.frame()).toContain("●●●●●●●●●●");
+  expect(t.frame()).toContain("••••••••••");
   expect(t.frame()).not.toContain("hunter2zz");
   await t.press("RETURN");
   await t.flush();
@@ -207,8 +211,9 @@ test("a destructive command run from the palette asks through the palette's own 
   await t.press("k", { ctrl: true });
   await t.type(">wipe");
   await t.press("RETURN");
-  expect(t.frame()).toContain("confirmar `demo wipe`? s/N"); // would wait forever if only the palette were mounted
-  await t.press("s");
+  expect(t.frame()).toContain("rodar demo wipe?"); // would wait forever if only the palette were mounted
+  await t.press("ARROW_LEFT");
+  await t.press("RETURN");
   await t.flush();
   expect(t.frame()).toContain("[✓] apagado");
 });
@@ -222,7 +227,7 @@ test("a running block animates its spinner with one timer, and the timer stops a
   await t.flush();
   expect(first).toBeDefined();
   expect(f()).not.toBe(first);
-  await t.press("n");
+  await t.press("ESCAPE");
   expect(f()).toBeUndefined();
 });
 
@@ -366,13 +371,12 @@ test("mouse: a choice modal answers by clicking an option, hover moves its highl
   expect(t.frame()).toContain("picked 1");
 });
 
-test("mouse: the confirm modal answers by clicking s or N", async () => {
+test("mouse: the confirm dialog answers by clicking [ confirmar ] or [ cancelar ]", async () => {
   const t = await mount();
   await run(t, "demo wipe");
-  const y = rowY(t, "s/N");
-  await t.click(colOf(t, "s/N"), y);
+  await t.click(colOf(t, "[ confirmar ]") + 2, rowY(t, "[ confirmar ]"));
   expect(t.frame()).toContain("[✓] apagado");
   await run(t, "demo wipe");
-  await t.click(colOf(t, "s/N") + 2, rowY(t, "s/N"));
+  await t.click(colOf(t, "[ cancelar ]") + 2, rowY(t, "[ cancelar ]"));
   expect(t.frame()).toContain("cancelado");
 });

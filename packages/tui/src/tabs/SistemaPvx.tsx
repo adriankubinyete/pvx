@@ -12,8 +12,8 @@ import { useTabs } from "./context.ts";
 import { availableText, embeddedRows, fit, plainVersion, pvxInfoRows, sectionOfKey, updateBlocker, type InfoRow, type PvxFacts, type ReleaseCheck, type Section } from "./sistema.ts";
 
 const LABEL_W = 20;
-/** Border (2) and padding (2) of the panel, plus the gap after the label. */
-const CHROME_W = 6;
+/** Padding (2) of the section, plus the gap after the label. */
+const CHROME_W = 4;
 const ACTIONS = ["verificar", "atualizar"] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -75,7 +75,7 @@ function Available({ check, width }: { check: ReleaseCheck; width: number }) {
 
 /** The pvx section: about, update and the uninstall hint. Both actions are rows: `↑↓` and `enter`, or a click. */
 export function PvxSection({ store, registry, version, onSection }: { store: SessionApi; registry: Registry; version: string; onSection: (section: Section) => void }) {
-  const { c, box, g } = useTheme();
+  const { c } = useTheme();
   const { cols } = useLayout();
   const tabs = useTabs();
   const nudge = useNudge();
@@ -128,7 +128,7 @@ export function PvxSection({ store, registry, version, onSection }: { store: Ses
   });
 
   return (
-    <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box(focused ? c.accent : undefined)} title={`${g.query} pvx${focused ? ` ${g.active}` : ""}`}>
+    <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden">
       <Heading text="sobre o pvx" />
       {pvxInfoRows(facts).map((row) => (
         <Info key={row.label} row={row} width={valueWidth} />

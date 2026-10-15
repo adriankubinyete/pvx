@@ -38,7 +38,8 @@ function Preview() {
   const { c, g, box, result } = useTheme();
   const [full, empty] = meter(60, 10, g);
   return (
-    <box width={PREVIEW_W} flexShrink={0} flexDirection="column" paddingX={1} overflow="hidden" {...box()} title={`${g.query} prévia`}>
+    <box width={PREVIEW_W} flexShrink={0} flexDirection="column" paddingX={1} overflow="hidden">
+      <text wrapMode="none" fg={c.dim}>prévia</text>
       {(["ok", "warn", "error", "info"] as const).map((k, i) => {
         const r = result(k);
         return (
@@ -65,7 +66,7 @@ function Preview() {
 
 /** The Aparência section. Every change applies live (the theme provider repaints) and is saved by the debounced writer. */
 function AparenciaSection({ onSection }: { onSection: (section: Section) => void }) {
-  const { c, g, box, axes, set } = useTheme();
+  const { c, g, axes, set } = useTheme();
   const { cols } = useLayout();
   const tabs = useTabs();
   const nudge = useNudge();
@@ -175,7 +176,7 @@ function AparenciaSection({ onSection }: { onSection: (section: Section) => void
   };
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
-      <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden" {...box(focused ? c.accent : undefined)} title={`${g.query} aparência${focused ? ` ${g.active}` : ""}`}>
+      <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1} overflow="hidden">
         {AXES.map((a) => row(a.id, a.label, { name: a.opts[at(a.opts, axes[a.id])]![1], step: (d) => set({ [a.id]: cycle(a.opts, axes[a.id], d) }) }))}
         {custom ? row(FROM, "começar de", { name: SOURCES[at(SOURCES, from)]![1], step: (d) => setFrom(cycle(SOURCES, from, d)) }) : null}
         {custom ? TOKEN_KEYS.map(token) : null}

@@ -94,10 +94,33 @@ function ButtonKey({ keys, label, onPress }: { keys: string; label: string; onPr
   return null;
 }
 
+/** Labels of the mounted buttons the keyboard cannot reach (see `isReachable`), with a count each. Read by `unreachableButtons`. */
+const unreachable = new Map<string, number>();
+
+/** A button the keyboard reaches either has a key (`keys`, shown in the footer) or is drawn focused by a page that navigates to it (`focused` given, true or false). */
+const isReachable = ({ keys, focused }: { keys?: string; focused?: boolean }): boolean => keys !== undefined || focused !== undefined;
+
+/** Labels of the buttons mounted now that no key and no focus reaches: only the mouse does. A test of a page expects this to be empty (UI.md, section 14). */
+export const unreachableButtons = (): string[] => [...unreachable.keys()];
+
+/** Counts a button in `unreachable` while it is mounted and cannot be reached. */
+function useReachabilityCheck(label: string, reachable: boolean) {
+  useEffect(() => {
+    if (reachable) return;
+    unreachable.set(label, (unreachable.get(label) ?? 0) + 1);
+    return () => {
+      const left = (unreachable.get(label) ?? 1) - 1;
+      if (left > 0) unreachable.set(label, left);
+      else unreachable.delete(label);
+    };
+  }, [label, reachable]);
+}
+
 export function Button({ label, onPress, primary, keys, focused }: Props<"Button">) {
   const { c } = useTheme();
   const [hot, setHot] = useState(false);
   const text = `[ ${clean(label)} ]`;
+  useReachabilityCheck(label, isReachable({ keys, focused }));
   return (
     <box flexShrink={0} onMouseDown={() => onPress()} onMouseOver={() => setHot(true)} onMouseOut={() => setHot(false)}>
       {keys ? <ButtonKey keys={keys} label={label} onPress={onPress} /> : null}

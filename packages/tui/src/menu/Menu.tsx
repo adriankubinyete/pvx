@@ -55,7 +55,7 @@ function refusal(card: Card, key: string): string {
 
 export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi; registry: Registry; nav: MenuNav; updates?: UpdatePending[] }) {
   const router = useRouter();
-  const { c, g, axes, set } = useTheme();
+  const { c, axes, set } = useTheme();
   const tabs = useTabs();
   const { cols } = useLayout();
   const { pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
@@ -275,7 +275,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
       {view.kind === "result" ? <Result store={store} id={view.id} onBack={back} /> : null}
       {view.kind === "list" && path.length ? (
         <ItemList items={items} sel={sel[level]} onSel={select} onActivate={activate} onTop={tabs?.focusBar} focused={tabs?.focused ?? true}
-          title={`${g.query} ${["módulos", ...crumbs(root, path)].join(" › ")}`} helpW={helpW} />
+          title={`${["módulos", ...crumbs(root, path)].join(" › ")}`} helpW={helpW} />
       ) : null}
       {view.kind === "list" && !path.length ? (
         <box flexGrow={1} minHeight={0} flexDirection="column">

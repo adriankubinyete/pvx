@@ -7,7 +7,7 @@ import { clean } from "../palette/search.ts";
 import { columnWidths, fit, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
 import { levelOf, meter } from "../tabs/home.ts";
 import { useTheme } from "../theme-context.tsx";
-import { HostCtx, RootPanelCtx, useKey } from "./host.tsx";
+import { HostCtx, useKey } from "./host.tsx";
 import { windowStart } from "./window.ts";
 import type { Tokens } from "../theme.ts";
 
@@ -21,21 +21,51 @@ const textOf = (children: unknown) => clean(Children.toArray(children as ReactNo
 /** A shrinkable panel gives up height first (`minHeight` 0 lets it go below its content) and clips, so the host's tab bar and footer stay on screen. */
 const SHRINKABLE = { flexShrink: 1, minHeight: 0, overflow: "hidden" as const };
 
-/**
- * A Panel at the page root is the page's own frame: the host already draws the border and the `› title`, so it draws
- * neither (a second border would nest inside the first). A Panel inside another Panel keeps its border and title.
- */
-export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, children }: Props<"Panel">) {
-  const { c, g, box } = useTheme();
-  const atRoot = useContext(RootPanelCtx);
+/** `[1] rotinas` is the numbered form of a header: the number, then the label. */
+const NUMBERED_TITLE = /^\[(\w+)\]\s*(.*)$/;
+
+/** The parts of a section header: `[1] rotinas ●` gives number `1` and label `Rotinas` (the trailing active glyph is dropped: the gutter says it). */
+export function headerParts(title: string, activeGlyph: string): { number?: string; label: string } {
+  const cleaned = clean(title);
+  const suffix = ` ${activeGlyph}`;
+  const text = cleaned.endsWith(suffix) ? cleaned.slice(0, -suffix.length) : cleaned;
+  const numbered = NUMBERED_TITLE.exec(text);
+  const label = numbered ? numbered[2]! : text;
+  return { number: numbered?.[1], label: label.charAt(0).toUpperCase() + label.slice(1) };
+}
+
+/** One header line: the number and the label in the tone when the section is active (bold), dim otherwise. */
+function SectionHeader({ title, color, active }: { title: string; color: string; active: boolean }) {
+  const { g } = useTheme();
+  const { number, label } = headerParts(title, g.active);
   return (
-    <RootPanelCtx.Provider value={false}>
-      <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(atRoot ? {} : { paddingX: 1, ...box(t ? tone(c, t) : undefined), title: title ? `${g.query} ${clean(title)}` : undefined })}>
-        {children as ReactNode}
-      </box>
-    </RootPanelCtx.Provider>
+    <text wrapMode="none" flexShrink={0} fg={color}>
+      {number ? `${number} ` : ""}
+      {active ? <b>{label}</b> : label}
+    </text>
   );
 }
+
+/**
+ * A section of the page, never a box: a header line (`1 Rotinas`) with whitespace above it, and the content under it.
+ * With `tone` the section is the active one (or needs attention): the header takes the tone and a `▌` gutter runs down its side;
+ * without it the gutter is blank, so the content does not move. A Panel with neither `title` nor `tone` is a plain container.
+ */
+export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, children }: Props<"Panel">) {
+  const { c, g } = useTheme();
+  const section = title !== undefined || t !== undefined;
+  const active = t !== undefined;
+  const gutter = section ? { border: ["left" as const], borderColor: active ? tone(c, t) : c.bg, customBorderChars: { ...GUTTER_CHARS, vertical: active ? g.gutter : " " }, paddingLeft: 1 } : {};
+  return (
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined ? { marginTop: 1 } : {})} {...gutter}>
+      {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} /> : null}
+      {children as ReactNode}
+    </box>
+  );
+}
+
+/** A left border whose only drawn side is the vertical one; the other characters never show. */
+const GUTTER_CHARS = { topLeft: " ", topRight: " ", bottomLeft: " ", bottomRight: " ", horizontal: " ", vertical: " ", topT: " ", bottomT: " ", leftT: " ", rightT: " ", cross: " " };
 
 export function Row({ children }: Props<"Row">) {
   return (

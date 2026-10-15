@@ -81,7 +81,8 @@ test("Módulos: enter on a module lists its pages first (§); enter opens the pa
   expect(t.frame()).toMatch(/§ conformidade/);
   await t.press("RETURN");
   await t.flush();
-  expect(t.frame()).toContain("› [1] resultados");
+  expect(t.frame()).toContain("1 Resultados"); // a section header, no frame
+  expect(t.frame()).not.toMatch(/[╭╮╰╯]/);
   await t.press("ESCAPE");
   await t.flush();
   expect(t.frame()).toMatch(/§ conformidade/); // back on the module's list, same item
@@ -214,15 +215,15 @@ test("with no applicable profile the tabs say so instead of failing", async () =
 test("layout: side by side at 120x40, stacked at 80x24; each panel and the footer stay on screen", async () => {
   const wide = await mount(await load(), { cols: 120, rows: 40 });
   await open(wide.t);
-  const row = wide.t.frame().split("\n").find((l) => l.includes("[1] resultados"))!;
-  expect(row).toContain("[2] plano"); // same line: two columns
+  const row = wide.t.frame().split("\n").find((l) => l.includes("1 Resultados"))!;
+  expect(row).toContain("2 Plano"); // same line: two columns
   expect(lastLine(wide.t)).toContain("r atualiza");
   wide.t.destroy();
   const small = await mount(await load(), { cols: 80, rows: 24 });
   await open(small.t);
   const lines = small.t.frame().split("\n");
-  const i1 = lines.findIndex((l) => l.includes("[1] resultados"));
-  const i2 = lines.findIndex((l) => l.includes("[2] plano"));
+  const i1 = lines.findIndex((l) => l.includes("1 Resultados"));
+  const i2 = lines.findIndex((l) => l.includes("2 Plano"));
   expect(i1).toBeGreaterThan(-1);
   expect(i2).toBeGreaterThan(i1); // stacked
   expect(lines.slice(0, i2).join("\n")).toContain("1 ok, 1 avisos, 3 erros");
@@ -234,34 +235,34 @@ test("layout: side by side at 120x40, stacked at 80x24; each panel and the foote
 test("panels: the arrows follow the layout (→ side by side, ↓ stacked), 1 2 jump, enter nudges (nothing to enter)", async () => {
   const wide = await mount(await load());
   await open(wide.t);
-  expect(wide.t.frame()).toContain("[1] resultados ●");
+  expect(wide.t.frame()).toContain("▌ 1 Resultados");
   await wide.t.press("ARROW_LEFT");
   expect(lastLine(wide.t)).toContain("nada aqui");
   await wide.t.press("ARROW_DOWN");
   expect(lastLine(wide.t)).toContain("nada aqui"); // nothing below when side by side
   await wide.t.press("ARROW_RIGHT");
-  expect(wide.t.frame()).toContain("[2] plano ●");
+  expect(wide.t.frame()).toContain("▌ 2 Plano");
   await wide.t.press("ARROW_RIGHT");
   expect(lastLine(wide.t)).toContain("nada aqui");
   await wide.t.press("ARROW_LEFT");
-  expect(wide.t.frame()).toContain("[1] resultados ●");
+  expect(wide.t.frame()).toContain("▌ 1 Resultados");
   await wide.t.press("RETURN");
   expect(lastLine(wide.t)).toContain("nada para selecionar");
   await wide.t.press("2");
-  expect(wide.t.frame()).toContain("[2] plano ●");
+  expect(wide.t.frame()).toContain("▌ 2 Plano");
   await wide.t.press("1");
-  expect(wide.t.frame()).toContain("[1] resultados ●");
+  expect(wide.t.frame()).toContain("▌ 1 Resultados");
   wide.t.destroy();
 
   const { t } = await mount(await load(), { cols: 80, rows: 24 });
   await open(t);
   await t.press("ARROW_RIGHT");
   expect(lastLine(t)).toContain("nada aqui"); // stacked: nothing on the right
-  expect(t.frame()).toContain("[1] resultados ●");
+  expect(t.frame()).toContain("▌ 1 Resultados");
   await t.press("ARROW_DOWN");
-  expect(t.frame()).toContain("[2] plano ●");
+  expect(t.frame()).toContain("▌ 2 Plano");
   await t.press("ARROW_DOWN");
   expect(lastLine(t)).toContain("nada aqui");
   await t.press("ARROW_UP");
-  expect(t.frame()).toContain("[1] resultados ●");
+  expect(t.frame()).toContain("▌ 1 Resultados");
 });

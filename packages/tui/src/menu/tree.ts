@@ -21,6 +21,8 @@ export interface Item {
   children?: Item[];
   /** Command line to run (a registry key). */
   line?: string;
+  /** The command's own title (pt-BR), the header of its form; without it the form uses `help`. */
+  title?: string;
   /** Args of the command: any of them opens the form. */
   args?: ArgSpec[];
   destructive?: boolean;
@@ -55,7 +57,7 @@ function group(moduleId: string, entries: Entry[], depth: number): Item[] {
     if (e.path.length <= depth + 1) {
       items.push({
         id: `c:${e.key}`, label: e.path[depth] ?? moduleId, help: clean(e.cmd.help),
-        line: e.key, args: e.cmd.args ?? [], destructive: Boolean(e.cmd.destructive),
+        line: e.key, title: e.cmd.title && clean(e.cmd.title), args: e.cmd.args ?? [], destructive: Boolean(e.cmd.destructive),
       });
     } else sub.set(e.path[depth]!, [...(sub.get(e.path[depth]!) ?? []), e]);
   }

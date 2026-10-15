@@ -55,6 +55,8 @@ export interface Roles {
 
 export interface CommandDef {
   help: string;
+  /** Human title of the command's form (pt-BR, e.g. "Criar o usuário no UOE"). Without it the host falls back to the command line. */
+  title?: string;
   args?: ArgSpec[];
   /** Marked with ! and confirmed in the plan. */
   destructive?: boolean;
@@ -67,6 +69,9 @@ export interface CommandDef {
 
 export interface ArgSpec {
   name: string;
+  /** What the form calls the field, in pt-BR ("ID do cliente"). Without it the form shows the humanized name (`id-cliente` becomes "Id cliente"). */
+  label?: string;
+  /** One line for the CLI help. The form shows it under the focused field with any parenthesis about stdin, `PVX_SECRET_*` or prompt cut out. */
   help: string;
   kind: "positional" | "flag" | "option";
   required?: boolean;
@@ -658,6 +663,15 @@ export interface FieldSpec {
   text?: string;
   /** `choice` and `multi`. The value of a `choice` is the chosen option's `value` (the first option when `initial` has none); of a `multi`, the checked values joined by a comma (`initial` the same). */
   options?: FieldOption[];
+  /** Marks the field with a subtle `*`; submitting with it empty shows "preencha este campo" under it. Not for `toggle`, `choice` or `multi`. */
+  required?: boolean;
+  /** A short dim hint to the right of the value. Only when it helps fill the field (a constraint: "letras, números e hífen"); never to explain the obvious or why the form is built this way. */
+  help?: string;
+  /**
+   * `line` only: the value follows the other fields. While the technician has not edited the field it holds `derive(values)` and updates live as the
+   * others change (nothing on screen says so). Editing it stops the following and keeps the typed text; clearing it to empty follows again. `values` are the current values of every field, as `onSubmit` receives them.
+   */
+  derive?: (values: Record<string, string | boolean>) => string;
   /** `secret` only: the key that fills the field with 24 random letters and digits (e.g. `ctrl+g`). It shows in the footer and in `?`. */
   generate?: string;
 }
@@ -830,6 +844,20 @@ export interface RunState extends Omit<JobState, "view"> {
   current: boolean;
 }
 
+/** What a confirmation dialog says (`useConfirm`). */
+export interface ConfirmOptions {
+  /** The bold first line. */
+  title: string;
+  /** Dim lines under the title. */
+  description?: string | string[];
+  /** Default "confirmar". */
+  confirmLabel?: string;
+  /** Default "cancelar". */
+  cancelLabel?: string;
+  /** The confirm button takes the error style. */
+  destructive?: boolean;
+}
+
 export interface SdkUi {
   /** JSX factory. A module file needs the classic-runtime pragmas (jsxRuntime classic, jsx h, jsxFrag Fragment), else Bun imports React. */
   h(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
@@ -839,7 +867,11 @@ export interface SdkUi {
   useMemo<T>(fn: () => T, deps: readonly unknown[]): T;
   useRef<T>(init: T): { current: T };
 
-  /** Bordered box with a title. */
+  /**
+   * A section of the page: a header line (`1 Rotinas`, a leading `[1] ` becomes the number), the content under it and whitespace above. No border.
+   * With `tone` the section is the active one (or needs attention): the header takes the tone and a `▌` gutter runs down its side. A Panel without
+   * `title` and `tone` is only a container (use it as the page root).
+   */
   Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
   /** Children side by side, equal widths. Give each Panel `grow` so their borders match in height. */
   Row: Component<Kids>;
@@ -872,8 +904,12 @@ export interface SdkUi {
     /** Default true: a click opens the action. With `false` a click only selects (`onPress`); `enter`, or a click on the row that is already selected, opens it. */
     actionOnClick?: boolean;
   }>;
-  /** Form of one of the module's commands (generated from its ArgSpec). enter runs it; esc cancels. */
-  Form: Component<{ command: string; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
+  /**
+   * Form of one of the module's commands, generated from its `ArgSpec` list (`label`, `required`, `secret`, `help`) and drawn by `Fields`:
+   * no box, a header line with `title` (default: the command's `title`, else the command line), the buttons `[ submitLabel ]` (default "executar")
+   * and `[ cancelar ]`. No command line on screen by default; `ctrl+d` shows it dim. Secrets reach the command through the environment, never the line.
+   */
+  Form: Component<{ command: string; title?: string; description?: string; submitLabel?: string; /** Derived fields by argument name (`FieldSpec.derive`): `{ "root-path": (v) => `clientes/${v["id-cliente"]}-${v.empresa}` }`. The values are keyed by argument name. */ derive?: Record<string, (values: Record<string, string | boolean>) => string>; onRun?: (result: CommandRun) => void; onCancel?: () => void }>;
   Spacer: Component<{ size?: number }>;
   /** Phases of a long task, one row each: `✓` done, a spinner running, `○` pending, `✗` failed, `-` skipped. The spinner ticks only while an item is running. */
   Steps: Component<{ items: StepItem[] }>;
@@ -882,7 +918,8 @@ export interface SdkUi {
   /** An inline result block: `[✓]`, `[!]` or `[✗]` in the level's color and the text beside it (several lines allowed). Theme tokens only. */
   Notice: Component<Kids & { level: Level }>;
   /**
-   * An editable form: `area` (multiline), `line` (one line), `toggle` (checkbox), `secret` (masked line), `choice` (radio) and
+   * An editable form (no box: a header line, one row per field with a visible input cell, the focused field's `help` under the form, then the buttons):
+   * `area` (multiline), `line` (one line), `toggle` (checkbox), `secret` (masked line), `choice` (radio) and
    * `multi` (checkbox list) fields, then the buttons
    * [ salvar ] and [ cancelar ] (always there) and [ remover ] (only with `onDelete`). It owns the keyboard while mounted:
    * up/down and tab/shift+tab move across fields and buttons (wrapping; in an `area` only tab moves), left/right move the cursor
@@ -900,12 +937,22 @@ export interface SdkUi {
     onDelete?: () => void | Promise<void>;
     /** Label of that button (default "remover"). */
     deleteLabel?: string;
+    /** The dialog that asks before `onDelete` runs (`useConfirm`): defaults to the title `<deleteLabel>?`, the buttons `[ deleteLabel ]  [ cancelar ]`, destructive. */
+    deleteConfirm?: Partial<ConfirmOptions>;
     /** `false` while the form is a parked part of a bigger flow (`Conversation` uses it): it draws no cursor, owns no key and adds nothing to the footer. Default true. */
     active?: boolean;
     /** `false` hides [ salvar ], [ cancelar ] and [ remover ]: enter on the last field or ctrl+s submits, esc cancels. Default true. */
     buttons?: boolean;
     /** With it, an up/down arrow past the first/last field calls it instead of wrapping (tab still wraps). */
     onEdge?: (dir: "up" | "down") => void;
+    /** Header line of the form (bold), written once (no box). */
+    title?: string;
+    /** One dim line under the title. */
+    description?: string;
+    /** Label of the primary button (default "salvar"). */
+    submitLabel?: string;
+    /** A dim one-liner hidden behind `ctrl+d` ("detalhes"), built from the current values. Off by default. */
+    details?: (values: Record<string, string | boolean>) => string;
   }>;
 
   /**
@@ -1016,6 +1063,13 @@ export interface SdkUi {
    * (accent), `warn` or `error`, each with its glyph, in the theme color, for about 4 s.
    */
   useNudge(): (msg?: string, tone?: "ok" | "warn" | "error") => void;
+  /**
+   * Asks for a confirmation in a dialog centered on the screen, the page behind it dimmed: the bold `title`, the dim `description`, then
+   * `[ confirmLabel ]  [ cancelLabel ]` (defaults `confirmar` and `cancelar`). Focus starts on the cancel button, the safe one. `←` `→` and
+   * `tab` move between the buttons, `enter` picks, `esc` cancels, a click picks. `destructive` draws the confirm button in the error style.
+   * It resolves true only on the confirm button. The CLI keeps its own text prompt; this is for the TUI pages.
+   */
+  useConfirm(): (options: ConfirmOptions) => Promise<boolean>;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
   /**

@@ -162,7 +162,7 @@ const rich = [
 test("secret: the value is masked on screen, kept in the values, and ctrl+g fills 24 alphanumerics (readable until the focus leaves)", async () => {
   const { t, calls } = await mount({ fields: rich });
   await t.type("abc");
-  expect(t.frame()).toContain("●●●");
+  expect(t.frame()).toContain("•••");
   expect(t.frame()).not.toContain("abc");
   await t.press("g", { ctrl: true });
   const pw = t.frame().match(/([A-Za-z0-9]{24})/)?.[1];

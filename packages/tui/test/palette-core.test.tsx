@@ -80,7 +80,8 @@ test("opening a page entry pushes it as a screen (the page is not a tab)", async
   await t.flush();
   expect(t.frame()).not.toContain("nada encontrado");
   expect(t.frame()).not.toContain("favoritos"); // palette closed
-  expect(t.frame()).toMatch(/› conformidade/);
+  expect(t.frame().split("\n")[0]).toContain("conformidade"); // the breadcrumb of the pushed page, no frame
+  expect(t.frame()).not.toMatch(/[╭╮╰╯]/);
   expect(t.frame()).not.toContain("Início"); // a pushed screen hides the tab bar
 });
 

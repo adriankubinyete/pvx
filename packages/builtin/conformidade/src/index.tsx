@@ -116,7 +116,6 @@ export default (sdk: Sdk) => {
 
   function Conformidade() {
     const c = useConformity();
-    const { g } = useTheme();
     const { cols, rows } = useViewport();
     const nudge = useNudge();
     const nav = usePanels();
@@ -167,7 +166,7 @@ export default (sdk: Sdk) => {
     const wide = cols >= WIDE;
     const inner = wide ? [body - 2, body - 2] : [Math.floor(body / 2) - 2, Math.ceil(body / 2) - 2];
     const frame = (n: 1 | 2, title: string, children: unknown) => (
-      <Panel key={n} panelRef={nav.ref(String(n))} onPress={() => setPanel(n)} title={`[${n}] ${title}${pageFocused && panel === n ? ` ${g.active}` : ""}`} tone={pageFocused && panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
+      <Panel key={n} panelRef={nav.ref(String(n))} onPress={() => setPanel(n)} title={`[${n}] ${title}`} tone={pageFocused && panel === n ? "accent" : undefined} grow={wide}>{children}</Panel>
     );
     const header = c.running ? "verificando…" : c.checkedAt ? `verificado às ${hhmm(c.checkedAt)}` : "não verificado";
     const plan = run ? <Aplicando run={run} max={inner[1]!} onClose={() => setRun(null)} /> : <Passos c={c} max={inner[1]!} />;

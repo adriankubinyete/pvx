@@ -13,7 +13,7 @@ import { DEFAULT_STALE_MS, isCurrentRun, jobViewOf, progressOf, runViewOf, steps
 
 /** What the page hooks need from the host. Provided once by `App` (`pages` prop). */
 export interface PageDeps {
-  session: Pick<SessionApi, "run" | "capture" | "subscribe" | "getSnapshot" | "onPage" | "answer">;
+  session: Pick<SessionApi, "run" | "capture" | "subscribe" | "getSnapshot" | "onPage" | "answer" | "confirm">;
   registry: Registry;
   makeLogger: (name: string) => Logger;
   /** Real uid 0 (the session's rule): `useJob().start` and `stop` need it. */
@@ -42,9 +42,6 @@ export const BackCtx = createContext<BackEntry[] | null>(null);
 export const HostCtx = createContext<HostPage | null>(null);
 /** Whether the page receives keys now (`usePageFocused`). Separate from `HostCtx` so a focus change does not re-register keys. */
 export const FocusCtx = createContext(false);
-/** True at the page root: a `Panel` there is the page's own frame (the host's border and title), not a second border. */
-export const RootPanelCtx = createContext(false);
-
 export function useHost(): HostPage {
   const h = useContext(HostCtx);
   if (!h) throw new Error("hook de sdk.ui usado fora de uma página");
@@ -277,6 +274,12 @@ function usePanelsHost() {
   return useMemo(() => ({ ...nav, toBar: () => latest.current?.focusBar() }), [nav]);
 }
 
+/** `useConfirm`: the dialog of the session (one question at a time, centered, the page dimmed behind it). */
+function useConfirm() {
+  const { deps } = useHost();
+  return deps.session.confirm;
+}
+
 /** True while the page receives keys: its tab is active with the bar not focused, or it is the top pushed screen. */
 function usePageFocused() {
   useHost();
@@ -293,6 +296,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused"> = {
-  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused" | "useConfirm"> = {
+  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useConfirm, useTheme: useModuleTheme,
 };

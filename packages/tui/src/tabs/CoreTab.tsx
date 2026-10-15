@@ -39,7 +39,7 @@ export function refreshCore(store: SessionApi, cache: CoreCache, line: string, d
  * `logs` also refreshes by itself every `refreshMs` while the tab is mounted, and follows the end like the Comando scrollback.
  */
 export function CoreTab({ store, line, cache, refreshMs = LOGS_REFRESH_MS }: { store: SessionApi; line: string; cache: CoreCache; refreshMs?: number }) {
-  const { c, box, g } = useTheme();
+  const { c } = useTheme();
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const refresh = () => refreshCore(store, cache, line, bump);
   useEffect(() => {
@@ -62,7 +62,7 @@ export function CoreTab({ store, line, cache, refreshMs = LOGS_REFRESH_MS }: { s
     status: !done ? "running" : done.exit !== 0 ? "error" : done.lines.some((l) => l.kind === "warning") ? "warn" : "ok",
   };
   return (
-    <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={`${g.query} ${line}`}>
+    <box flexGrow={1} minHeight={0} flexDirection="column" paddingX={1}>
       {done ? <text fg={c.dim} flexShrink={0}>{`${line === "logs" ? `atualizado ${hhmmss(done.at)}` : `verificado às ${hhmm(done.at)}`} · ${hintText("tabs", "r")}`}</text> : <Loading label="verificando…" />}
       <scrollbox flexGrow={1} minHeight={0} {...(line === "logs" ? followProps : {})} focused>
         <BlockView b={b} focused={false} tick={0} onPick={noop} />

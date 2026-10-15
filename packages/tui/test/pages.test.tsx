@@ -248,19 +248,20 @@ test("useKey rows are removed when the page closes: a second visit shows each ke
   expect(lastLine(t).match(/soma 1/g)).toHaveLength(1);
 });
 
-test("a pushed page shows one border: the host frame, titled › name; the root Panel adds none", async () => {
+test("a pushed page has no box, only a dim breadcrumb line; a page tab has neither (the tab names it)", async () => {
   const t = await mount();
   await openCounter(t);
   const f = t.frame();
-  expect(f.split("\n").filter((l) => l.includes("╭"))).toHaveLength(1);
-  expect(f.split("\n").filter((l) => l.includes("╰"))).toHaveLength(1);
-  expect(f).toContain("› Contador");
-  expect(f).not.toContain("› contador"); // the Panel's own title is gone
+  expect(f).not.toMatch(/[╭╮╰╯]/);
+  expect(f.split("\n")[0]).toContain("Demo › Contador"); // the module's tab, then the page
+  expect(f).toContain("Contador"); // the section header of the Panel
   expect(f).toContain("n = 0");
   await t.press("ESCAPE");
-  await toDemo(t); // the same rule in a page tab
+  await toDemo(t); // a page tab: no frame, no breadcrumb
   await t.press("ARROW_DOWN");
-  expect(t.frame().split("\n").filter((l) => l.includes("╭"))).toHaveLength(1);
+  expect(t.frame()).not.toMatch(/[╭╮╰╯]/);
+  expect(t.frame()).not.toContain("› Quadro");
+  expect(t.frame()).not.toContain("Demo ›");
 });
 
 // The SDK components return `unknown`; typed loosely so the test can use JSX.
@@ -453,8 +454,8 @@ test("Panel onPress: a click anywhere in a panel calls it, so the page focuses t
     const focused = ui.usePageFocused();
     return (
       <Panel>
-        <Panel title={`A${focused && panel === "a" ? " ●" : ""}`} onPress={() => setPanel("a")}><Text>a-body</Text></Panel>
-        <Panel title={`B${focused && panel === "b" ? " ●" : ""}`} onPress={() => setPanel("b")}><Text>b-body</Text></Panel>
+        <Panel title="A" tone={focused && panel === "a" ? "accent" : undefined} onPress={() => setPanel("a")}><Text>a-body</Text></Panel>
+        <Panel title="B" tone={focused && panel === "b" ? "accent" : undefined} onPress={() => setPanel("b")}><Text>b-body</Text></Panel>
       </Panel>
     );
   }
@@ -463,13 +464,13 @@ test("Panel onPress: a click anywhere in a panel calls it, so the page focuses t
   const t = await mount({ registry: reg });
   await toDemo(t);
   const at = (s: string) => { const l = t.frame().split("\n"); const y = l.findIndex((x) => x.includes(s)); return [l[y]!.indexOf(s) + 1, y] as const; };
-  expect(t.frame()).not.toContain("B ●");
+  expect(t.frame()).not.toContain("▌ B");
   const [x, y] = at("b-body");
   await t.click(x, y);
-  expect(t.frame()).toContain("B ●"); // the bar had the keys: the click also entered the tab
-  expect(t.frame()).not.toContain("A ●");
+  expect(t.frame()).toContain("▌ B"); // the bar had the keys: the click also entered the tab
+  expect(t.frame()).not.toContain("▌ A");
   const [ax, ay] = at("a-body");
   await t.click(ax, ay);
-  expect(t.frame()).toContain("A ●");
-  expect(t.frame()).not.toContain("B ●");
+  expect(t.frame()).toContain("▌ A");
+  expect(t.frame()).not.toContain("▌ B");
 });

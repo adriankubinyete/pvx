@@ -67,7 +67,7 @@ export interface ItemListProps {
 
 /** Selectable rows with a cursor: arrows, enter, mouse, scroll to the cursor. The one list of the Módulos tab. */
 export function ItemList({ items, sel, onSel, onActivate, onTop, focused, title, helpW, empty }: ItemListProps) {
-  const { box, c } = useTheme();
+  const { c } = useTheme();
   const nudge = useNudge();
   const scroll = useRef<ScrollBoxRenderable>(null);
   const cur = items.find((i) => i.id === sel) ?? items[0];
@@ -98,7 +98,8 @@ export function ItemList({ items, sel, onSel, onActivate, onTop, focused, title,
   });
 
   return (
-    <box flexGrow={1} minHeight={0} flexDirection="column" {...box()} title={title}>
+    <box flexGrow={1} minHeight={0} flexDirection="column">
+      <box flexShrink={0} paddingX={1}><text fg={c.dim} wrapMode="none">{title}</text></box>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
         {!items.length && empty ? <box paddingX={1} flexShrink={0}><text fg={c.dim}>{empty}</text></box> : null}
         {items.map((i) => <Row key={i.id} item={i} selected={focused && i.id === cur?.id} helpW={helpW} onHover={hover} onPick={pick} />)}
