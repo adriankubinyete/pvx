@@ -43,3 +43,19 @@ bun dev
 ```
 
 `bun run dev:link` sem argumento lista os módulos linkados; `bun run dev:unlink <id>` remove o link.
+
+## Testar numa central
+
+Para levar o módulo a uma máquina de teste sem push nem release, gere um binário dev dentro do repositório do pvx (o caminho é relativo à raiz dele):
+
+```sh
+bun run build:dev linux-amd64 --with ../meu-modulo
+```
+
+O build embute a pasta como está, com as alterações não commitadas, e imprime o comando para copiar e rodar:
+
+```sh
+scp dist/pvx-<versão>-dev.<data>.<hora>-<sha>-linux-amd64.tar.gz central:/tmp/ && ssh central 'cd /tmp && tar xzf pvx-<versão>-dev.<data>.<hora>-<sha>-linux-amd64.tar.gz && sudo ./pvx'
+```
+
+O módulo carrega sem revisão de confiança e vence uma cópia instalada com o mesmo id (o Início avisa). Ele só pode importar tipos do SDK e arquivos relativos; o build recusa dependências. O pacote traz um `BUILD.txt` com o commit de cada módulo (`*` marca alterações não commitadas). Detalhes em "Desenvolvimento" no `packages/sdk/README.md`.

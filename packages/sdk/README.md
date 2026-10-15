@@ -1183,6 +1183,16 @@ sudo -E pvx meumodulo status
 
 No repositório do pvx há um atalho sem root: `bun run dev:link ../meu-modulo` registra a pasta em `.dev/pvx` (o `PVX_HOME` do `bun dev`), valida o `pvx-module.json` e imprime id e caminho; depois rode `bun dev`. Sem argumento, `bun run dev:link` lista os módulos linkados; `bun run dev:unlink <id>` remove o link. É um script do repositório: o binário continua exigindo root e não tem atalho.
 
+Para provar o módulo numa central de teste sem dar push nem criar release, embuta a pasta num binário de desenvolvimento, no repositório do pvx:
+
+```sh
+bun run build:dev linux-amd64 --with ../meu-modulo --with ../outro-modulo
+```
+
+A pasta entra no binário como está no disco, com as alterações não commitadas. O build valida o `pvx-module.json`, grava de cada módulo o id, a versão, o caminho, o commit curto e se havia alteração (`*`), e **recusa** o módulo que declara `dependencies` ou importa um pacote: só `import type` do SDK e imports relativos, com JSX clássico, entram. Uma pasta `node_modules` só com tipos não atrapalha, porque nada dela é importado. O módulo precisa estar num repositório git com ao menos um commit. O `--with` só existe no `build:dev`; o `release.sh` recusa qualquer artefato com módulos embutidos.
+
+No binário dev o módulo embutido carrega sem a revisão de confiança (quem gerou o binário o escolheu) e vence uma cópia instalada ou linkada com o mesmo id: o Início avisa e nada no disco muda. O estado fica na pasta normal do módulo em `PVX_HOME`, então os dados valem para o binário dev e para o normal. A barra de abas mostra `pvx X.Y.Z (dev, +meu-modulo)`, a aba Módulos marca `embutido (dev)` e a aba Sistema, `pvx version` e `pvx version --json` listam cada módulo com o commit. O resultado fica em `dist/pvx-<versão>-dev.<AAAAMMDD>.<HHMM>-<sha do host>[-dirty]-<alvo>.tar.gz`, com `pvx` e um `BUILD.txt` dentro; o fim do build imprime o `scp` e o `ssh` para rodar na central. Sem `--with`, o `build:dev` gera um binário dev sem módulos.
+
 Para testes use `@pvx/testing` (`runSession`), que não precisa de root. `renderPage` e `runSession` aceitam `sshClient` e `isRoot`, e valem também para os comandos que a página roda.
 
 ## O que um módulo nunca faz

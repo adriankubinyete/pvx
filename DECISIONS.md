@@ -19,6 +19,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 ### Segurança e confiança
 
 - Todo módulo git só é importado com o commit aprovado, `HEAD` igual ao aprovado e árvore limpa; cadeia de verificação e recarga limpando o `require.cache` → [Confiança e recarga de módulos](#2026-10-09--confiança-e-recarga-de-módulos), [Módulos git e confiança por commit (Fase 4A)](#2026-10-09--módulos-git-e-confiança-por-commit-fase-4a) (em parte)
+- Binário dev com módulos embutidos (`build:dev --with`): sem revisão de confiança, vence a cópia instalada, `release.sh` recusa o artefato → [Build dev com módulos embutidos](#2026-10-15--build-dev-com-módulos-embutidos)
 - Nenhuma variável de ambiente desliga a confiança; dev só por `modules link`; `update` só avança com o sha aprovado (exceção: confiar sempre); permissões declarativas (não são sandbox) → [Fase 4B: sem desvio de confiança, update, link, permissões, cache de avisos](#2026-10-09--fase-4b-sem-desvio-de-confiança-update-link-permissões-cache-de-avisos) (em parte)
 - Confiar sempre (mesma origem, fast-forward, árvore limpa, manifest legível, auditado, revogável) e catálogo confiado sempre → [Confiança sempre e módulos do catálogo confiados sempre](#2026-10-13--confiança-sempre-e-módulos-do-catálogo-confiados-sempre)
 - Tela de revisão de confiança sem código na tela principal, com análise por arquivo e por linha → [Revisão de confiança redesenhada](#2026-10-13--revisão-de-confiança-redesenhada)
@@ -37,6 +38,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Binário compilado; módulos externos só com imports relativos e `import type` → [Distribuição: binário compilado (provisório)](#2026-10-09--distribuição-binário-compilado-provisório)
 - Stack OpenTUI + React + Bun confirmada em CentOS 7 e Rocky 8 → [Spike 1 (runtime): CentOS 7 OK — stack confirmada](#2026-10-09--spike-1-runtime-centos-7-ok--stack-confirmada), [Spike 1 (runtime): Rocky 8 OK](#2026-10-09--spike-1-runtime-rocky-8-ok)
 - Perfis em `profiles/*.json`, embutidos no binário no build (só os rastreados pelo git) → [Perfis: pasta resolvida pelo código-fonte](#2026-10-09--perfis-pasta-resolvida-pelo-código-fonte), [Fase 8: distribuição e atualização](#2026-10-13--fase-8-distribuição-e-atualização)
+- `bun run build:dev <alvo> --with <pasta>` gera `dist/pvx-<versão>-dev.<data>.<hora>-<sha7>[-dirty]-<alvo>.tar.gz` com `BUILD.txt`; as releases mantêm `pvx-<alvo>.tar.gz` → [Build dev com módulos embutidos](#2026-10-15--build-dev-com-módulos-embutidos)
 - Versão única, instalação com checksum, `self-update` atômico, `uninstall` que protege notas e módulos → [Fase 8: distribuição e atualização](#2026-10-13--fase-8-distribuição-e-atualização)
 - A Fase 7 não porta módulos Python; o binário continua `pvx` → [Sem porte automático e sem renomear](#2026-10-09--sem-porte-automático-e-sem-renomear)
 - `bun dev` roda com `PVX_HOME=.dev/pvx` → [`bun dev` com `PVX_HOME` em `.dev/pvx`](#2026-10-13--bun-dev-com-pvx_home-em-devpvx)
@@ -1332,3 +1334,23 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** os dois módulos tinham a mesma pilha (barra, `Steps`, `Notice` de falha, botão, `LogTail`) e os mesmos mapas `BAR_STATE` e de palavras.
 
 **Limite:** o layout é uma coluna. A tela lado a lado do issabel (fases à esquerda, pacotes à direita, alternância com o log completo) não cabe no componente: o issabel pode usar `RunPanel` com os pacotes em `children` e perder a segunda coluna, ou manter a sua tela. `RunPanel` não decide o `done`: depois dele a página mostra o que quiser.
+
+## 2026-10-15 — Build dev com módulos embutidos
+
+**Status:** vigente.
+
+**Decisão:** `bun run build:dev <alvo> --with <pasta>...` gera um binário de desenvolvimento que carrega checkouts locais de módulo, para levar um módulo a uma central de teste sem push nem release.
+
+- **Embutir.** Cada pasta entra no binário como está no disco, com as alterações não commitadas, pelo mesmo caminho dos módulos oficiais: o `scripts/dev-build.ts plan` valida e gera um `embedded.ts` com `import` estático de cada manifest e entry, que o entry do build importa antes do app. Uma lista global (`__PVX_EMBEDDED__`) leva os módulos ao `loadModules({ embedded })`.
+- **Validação no build.** Manifest (`readManifestRaw`), id fora dos comandos do núcleo, dos oficiais e dos outros `--with`, faixa `pvx`, entry dentro da pasta, e o código empacotado com `packages: "external"`: qualquer import que não seja relativo ou `node:`/`bun:` falha (só `import type` do SDK e JSX clássico entram), assim como `dependencies` no `package.json`, ou uma entry sem `export default`. A pasta tem de ser um repositório git com commit. Uma `node_modules` só com tipos é aceita, porque nada dela é importado (o `pvx-firewall` tem uma para o `tsc`); recusar toda `node_modules` barraria o próprio módulo de referência.
+- **Registro.** Por módulo: id, versão, caminho, commit curto e `dirty` (`git status --porcelain`, que inclui arquivos novos). Aparece na barra (`pvx 0.1.2 (dev, +firewall +autobackup)`, o formato da marca nightly), no cartão da aba Módulos (`embutido (dev)`, sem atualizar nem remover), na seção pvx da aba Sistema, em `pvx modules` e em `pvx version` (`--json` traz `build.embedded` e `build.buildId`).
+- **Confiança.** O módulo embutido carrega sem o portão de confiança, porque quem gerou o binário o escolheu. Só o `build:dev` embute: `--with` fora dele, ou junto de `PVX_RELEASE_BUILD=1`, sai com erro 2; o app só lê a lista quando o binário tem o id de build dev. Nenhuma variável ou flag do binário final muda isso: a lista nasce no build.
+- **Precedência.** Uma cópia instalada ou linkada com o mesmo id é ignorada (nunca importada) e o Início mostra o aviso `<id>: usando a cópia embutida no binário dev; a instalada foi ignorada`. Nada no disco muda; recarga de link e `reconcile` deixam o embutido em paz.
+- **Estado.** O mesmo `PVX_HOME/modules/<id>/state`, então os dados valem para o binário dev e para o normal.
+- **Nome.** `dist/pvx-<versão>-dev.<AAAAMMDD>.<HHMM>-<sha7 do host>[-dirty]-<alvo>.tar.gz` com `pvx` e `BUILD.txt` (versão, hora, commit do host, alvo e cada módulo). O fim do build imprime o mesmo resumo e o `scp`/`ssh`. Sem `--with` o build dev funciona igual, sem módulos. As releases e o nightly mantêm `pvx-<alvo>.tar.gz`, para o `release.sh`, o `install.sh` e o `self-update`.
+- **Guarda do release.** `scripts/check-artifact.sh` recusa um artefato com `BUILD.txt` ou com um destes textos no binário: a marca nightly, `dev-build:` (o id do build dev, que entra só por `--define` e aparece em `version --json`) e `pvx-embedded-module:` (a marca de cada módulo, escrita só no `embedded.ts` gerado). Nenhum arquivo do host escreve esses textos por inteiro (`test/release.test.ts` confere o binário de release).
+
+**Motivo:** provar um módulo numa central real sem cometer, dar push (que faz deploy da `main`) nem publicar release.
+
+**Limite:** o `dev-link` e o `modules link` seguem sendo o caminho do dia a dia na máquina de quem desenvolve. O embutido não recarrega. Um módulo embutido que falha ao registrar aparece com erro e ainda esconde a cópia instalada. No Windows o build gera o `.exe` e o `.BUILD.txt` lado a lado, sem tar. `applies` e `os` do manifest não são conferidos no build.
+
