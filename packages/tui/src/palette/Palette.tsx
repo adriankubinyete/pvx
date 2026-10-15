@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { memo, useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { Registry } from "@pvx/core";
 import { useKeys } from "../keys.tsx";
 import { BACKGROUND_NUDGE } from "../sdk-ui/busy.ts";
@@ -31,33 +31,67 @@ export interface PaletteProps {
 }
 
 type Line = { kind: "head"; id: string; text: string } | { kind: "item"; id: string; hit: Hit };
-const LIST_W = 44;
-const VISIBLE = 14;
+/** Rows of the list the dialog shows at once. */
+const VISIBLE = 10;
+/** Rows of the dialog besides the list and the form: the border (2), the query, a rule, a rule and the footer. */
+const DIALOG_CHROME_ROWS = 6;
+const DIALOG_MAX_W = 90;
+/** Cells of the dialog taken by its border and padding. */
+const DIALOG_CHROME_W = 4;
+const KEY_COLUMN_MAX_W = 34;
+const KEY_COLUMN_SHARE = 0.42;
+/** Cells of the right edge of a row: marks and the key that runs it. */
+const HINT_W = 8;
+/** Section headings of the list. */
+const HEADINGS = { fav: "favoritos", rec: "recentes", commands: "comandos", pages: "páginas" } as const;
+const FOOTER_HINT = "enter roda · tab completa · ctrl+f favorito · esc fecha";
+const SELECTED_HINT = "enter";
+/** What the empty field offers: the prefixes that narrow the search. */
+const QUERY_SCOPES = " @módulo  >comando  #página  !destrutivo";
 
-interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; onHover: (id: string) => void; onPick: (id: string) => void }
+interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; width: number; onHover: (id: string) => void; onPick: (id: string) => void }
+
+/** The text a row shows first: a command's key, a page's title. */
+const nameOf = (hit: Hit): string => (hit.page ? hit.label ?? hit.key : hit.key);
+/** The dim text after the name: what the command does, or where the page is. */
+const noteOf = (hit: Hit): string => (hit.page ? `${clean(hit.moduleId)}${hit.tab ? " · aba" : ""}` : hit.help);
+
+/** The text split in runs: `matched` for the parts the query marks (the letters of each word), plain for the rest. */
+function runsOf(text: string, ranges: [number, number][]): { text: string; matched: boolean }[] {
+  const runs: { text: string; matched: boolean }[] = [];
+  let at = 0;
+  for (const [start, end] of ranges) {
+    if (start >= text.length) break;
+    if (start > at) runs.push({ text: text.slice(at, start), matched: false });
+    runs.push({ text: text.slice(start, Math.min(end, text.length)), matched: true });
+    at = Math.min(end, text.length);
+  }
+  if (at < text.length) runs.push({ text: text.slice(at), matched: false });
+  return runs;
+}
 
 /** Memoized: moving the selection repaints two rows, not the list. */
-const Row = memo(function Row({ id, hit, selected, fav, onHover, onPick }: RowProps) {
+const Row = memo(function Row({ id, hit, selected, fav, width, onHover, onPick }: RowProps) {
   const { c, g } = useTheme();
-  const mark = hit.core ? [g.core, c.info] : hit.page ? [g.page, c.dim] : hit.origin === "official" ? [g.official, c.accent] : hit.origin === "dev" ? [g.dev, c.warn] : [g.thirdParty, c.thirdParty];
-  const full = hit.page ? hit.label ?? hit.key : hit.key;
-  const max = hit.page && hit.tab ? 26 : 30; // room for the " aba" tag
-  const key = full.length > max ? `${full.slice(0, max - 1)}…` : full;
-  const [a, b] = hit.range && hit.range[1] <= key.length ? hit.range : [0, 0];
+  const nameW = Math.min(KEY_COLUMN_MAX_W, Math.floor(width * KEY_COLUMN_SHARE));
+  const full = nameOf(hit);
+  const name = full.length > nameW ? `${full.slice(0, nameW - 1)}…` : full;
+  const ranges = hit.ranges.filter(([start]) => start < name.length);
+  const noteW = Math.max(0, width - 2 - nameW - 2 - HINT_W);
+  const note = noteOf(hit);
+  const shownNote = note.length > noteW ? `${note.slice(0, Math.max(0, noteW - 1))}…` : note;
+  const marks = `${fav ? g.favorite : ""}${hit.destructive ? "!" : ""}`;
+  const hint = [marks, selected ? SELECTED_HINT : ""].filter(Boolean).join(" ");
   return (
-    <box
-      height={1} flexShrink={0} flexDirection="row" paddingX={1}
-      backgroundColor={selected ? c.selected : undefined}
-      onMouseOver={() => onHover(id)} onMouseDown={() => onPick(id)}
-    >
-      <text>
-        <span fg={mark[1]}>{`${mark[0]} `}</span>
-        <span fg={c.text}>{key.slice(0, a)}</span>
-        <span fg={c.accent}><b>{key.slice(a, b)}</b></span>
-        <span fg={c.text}>{key.slice(b)}</span>
-        <span fg={c.dim}>{hit.page && hit.tab ? " aba" : ""}</span>
-        <span fg={c.error}>{hit.destructive ? " !" : ""}</span>
-        <span fg={c.warn}>{fav ? ` ${g.favorite}` : ""}</span>
+    <box height={1} flexShrink={0} flexDirection="row" justifyContent="space-between" backgroundColor={selected ? c.selected : undefined} onMouseOver={() => onHover(id)} onMouseDown={() => onPick(id)}>
+      <text wrapMode="none">
+        {selected ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span>{"  "}</span>}
+        {runsOf(name, ranges).map((run, i) => (run.matched ? <span key={i} fg={c.accent}><b>{run.text}</b></span> : <span key={i} fg={c.text}>{run.text}</span>))}
+        <span>{" ".repeat(Math.max(0, nameW - name.length) + 2)}</span>
+        <span fg={c.dim}>{shownNote}</span>
+      </text>
+      <text wrapMode="none" flexShrink={0}>
+        <span fg={hit.destructive ? c.error : fav ? c.warn : c.dim}>{hint}</span>
       </text>
     </box>
   );
@@ -97,10 +131,11 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
       // Longest command key that prefixes the line (core or module).
       const keyOf = (l: string) => hits.filter((h) => !h.page && (l === h.key || l.startsWith(`${h.key} `))).sort((a, b) => b.key.length - a.key.length)[0]?.key;
       const recent = [...new Set([...session.history].reverse().map(keyOf).filter((k): k is string => !!k))].slice(0, 3);
-      section("fav", "favoritos", hits.filter((h) => favs.includes(h.key)));
-      section("rec", "recentes", recent.map((k) => hits.find((h) => h.key === k)).filter((h): h is Hit => !!h));
+      section("fav", HEADINGS.fav, hits.filter((h) => favs.includes(h.key)));
+      section("rec", HEADINGS.rec, recent.map((k) => hits.find((h) => h.key === k)).filter((h): h is Hit => !!h));
     }
-    for (const m of new Set(hits.map((h) => h.moduleId))) section(`m:${m}`, clean(m), hits.filter((h) => h.moduleId === m));
+    section("commands", HEADINGS.commands, hits.filter((h) => !h.page));
+    section("pages", HEADINGS.pages, hits.filter((h) => h.page));
     return out;
   }, [hits, query, favs, registry, rev, session.history]);
 
@@ -197,47 +232,37 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
 
   const at = Math.max(0, lines.findIndex((l) => l.id === cur?.id));
   const start = Math.max(0, Math.min(at - Math.floor(VISIBLE / 2), lines.length - VISIBLE));
-  const w = Math.min(cols - 4, 110);
-  const body: ReactNode = (
-    <box flexDirection="row" flexGrow={1} minHeight={0}>
-      <box width={LIST_W} flexShrink={0} flexDirection="column">
-        {lines.length === 0 ? <text fg={c.dim}>{" nada encontrado"}</text> : null}
-        {lines.slice(start, start + VISIBLE).map((l) => l.kind === "head"
-          ? <text key={l.id} fg={c.dim}>{` ${l.text}`}</text>
-          : <Row key={l.id} id={l.id} hit={l.hit} selected={l.id === cur?.id} fav={favs.includes(l.hit.key)} onHover={hover} onPick={pick} />)}
-      </box>
-      <box flexGrow={1} flexDirection="column" paddingLeft={1}>
-        {hit && built ? (
-          <>
-            {hit.page ? (
-              <>
-                <text fg={c.text}>{`página ${hit.label}`}</text>
-                <text fg={c.dim}>{`módulo ${clean(hit.moduleId)}`}</text>
-                <text fg={c.dim}>{hit.tab ? "aba na barra" : "abre com enter"}</text>
-              </>
-            ) : (
-              <>
-                <text fg={c.text}>{`${hit.key}${hit.destructive ? " !" : ""}`}</text>
-                <text fg={c.dim}>{hit.help}</text>
-              </>
-            )}
-            {hit.page ? null : <Form specs={specs} values={values} focus={focus} cursor={fcur} line={built} last={last} />}
-          </>
-        ) : null}
-      </box>
-    </box>
-  );
+  const w = Math.min(cols - 4, DIALOG_MAX_W);
+  const innerW = w - DIALOG_CHROME_W;
+  const shown = lines.slice(start, start + VISIBLE);
+  const hasForm = Boolean(hit && !hit.page && built);
+  const formRows = hasForm ? specs.length + 1 + (Object.keys(built!.secrets).length ? 1 : 0) + (last ? 1 : 0) : 0;
+  const listRows = Math.max(1, shown.length);
+  const height = Math.min(rows - 2, DIALOG_CHROME_ROWS + listRows + formRows + (queue.length ? 1 : 0));
+  const rule = <text wrapMode="none" flexShrink={0} fg={c.border}>{g.hline.repeat(innerW)}</text>;
   return (
     <box position="absolute" top={0} left={0} width="100%" height="100%" zIndex={20}>
       <box position="absolute" top={0} left={0} width="100%" height="100%" backgroundColor={c.bg} opacity={0.6} />
       <box
-        position="absolute" top={1} left={Math.floor((cols - w) / 2)} width={w} height={Math.min(rows - 2, VISIBLE + 7)}
-        flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.accent)}
+        position="absolute" top={1} left={Math.floor((cols - w) / 2)} width={w} height={height}
+        flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(c.border)}
       >
-        <text><span fg={c.accent}>{`${g.query} `}</span><LineText line={{ text: query, cursor: qcur }} focused={focus < 0} width={30} /><span fg={c.dim}>{query ? "" : " @módulo  >comando  #página  !destrutivo"}</span></text>
-        {body}
-        <text fg={queue.length ? c.accent : c.dim}>{queue.length ? `fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}` : "fila vazia"}</text>
-        {busy ? <Loading label="rodando…" /> : <text fg={c.warn}>{msg}</text>}
+        <text wrapMode="none" flexShrink={0}>
+          <span fg={c.accent}>{`${g.query} `}</span>
+          <LineText line={{ text: query, cursor: qcur }} focused={focus < 0} width={query ? innerW - 2 : 1} pad={Boolean(query)} />
+          {query ? null : <span fg={c.dim}>{QUERY_SCOPES}</span>}
+        </text>
+        {rule}
+        <box flexDirection="column" flexShrink={0}>
+          {lines.length === 0 ? <text fg={c.dim}>{"  nada encontrado"}</text> : null}
+          {shown.map((l) => l.kind === "head"
+            ? <text key={l.id} fg={c.dim} wrapMode="none">{l.text}</text>
+            : <Row key={l.id} id={l.id} hit={l.hit} selected={l.id === cur?.id} fav={favs.includes(l.hit.key)} width={innerW} onHover={hover} onPick={pick} />)}
+        </box>
+        {hasForm ? <Form specs={specs} values={values} focus={focus} cursor={fcur} line={built!} last={last} /> : null}
+        {queue.length ? <text wrapMode="none" fg={c.accent}>{`fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}`}</text> : null}
+        {rule}
+        {busy ? <Loading label="rodando…" /> : <text wrapMode="none" flexShrink={0} fg={msg ? c.warn : c.dim}>{msg || FOOTER_HINT}</text>}
       </box>
       <SessionModals store={session} pending={pending} />
     </box>

@@ -61,7 +61,7 @@ test("typing a query shows ranked results with the destructive mark", async () =
   await open(fake().session);
   await h!.type(">wipe");
   const f = h!.frame();
-  expect(f).toContain("demo wipe !");
+  expect(f).toMatch(/demo wipe .*!/); // the destructive mark is at the right of the row
   expect(f).not.toContain("demo greet");
 });
 
@@ -191,7 +191,7 @@ test("→ on a command without args nudges \"sem argumentos\", and the notice go
   expect(h!.frame()).not.toContain("sem argumentos");
 });
 
-test("`#` pages: rows show the title (not the key), tab pages carry an `aba` tag, preview does not repeat", async () => {
+test("`#` pages: rows show the title (not the key), tab pages carry an `aba` tag", async () => {
   const pages = search(registry, "#");
   expect(pages.length).toBeGreaterThan(0);
   expect(search(registry, "#quadro")[0]).toMatchObject({ key: "ui-demo.board", label: "Quadro", tab: true, range: [0, 6] });
@@ -201,12 +201,10 @@ test("`#` pages: rows show the title (not the key), tab pages carry an `aba` tag
   await open(fake().session);
   await h!.type("#ui-demo");
   const f = h!.frame();
-  expect(f).toContain("Quadro aba");
-  expect(f).toContain("Contador");
+  expect(f).toMatch(/Quadro\s+ui-demo · aba/); // the title, then where the page is, with the `aba` tag for a tab
+  expect(f).toMatch(/Contador\s+ui-demo(?! · aba)/);
   expect(f).not.toContain("§ ui-demo.");
-  expect(f).toContain("página Quadro");
-  expect(f).toContain("módulo ui-demo");
-  expect(f).toContain("aba na barra");
+  expect(f).toContain("páginas");
 });
 
 test("`#` page whose title equals the module id is not printed twice as a key", async () => {
@@ -224,6 +222,59 @@ test("`#` page whose title equals the module id is not printed twice as a key", 
   await h.type("#conf");
   const f = h.frame();
   expect(f).not.toContain("conformidade.conformidade");
-  expect(f).toContain("página conformidade");
-  expect(f).toContain("abre com enter");
+  expect(f).toMatch(/páginas[^\n]*\n[^\n]*conformidade\s+conformidade/); // the title, then the module
+});
+
+// ---- the redesigned dialog ----
+
+const rows = () => h!.frame().split("\n");
+
+test.each([[80, 24], [120, 40]] as const)("the dialog at %ix%i: one border, the query on top, a rule, grouped results, a rule and one dim footer line", async (cols, height) => {
+  h = await renderTui(
+    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={fake().session} registry={registry} onClose={() => {}} /></KeyRouter></NudgeProvider></ThemeProvider>,
+    { cols, rows: height },
+  );
+  await h.type("gre");
+  const f = h.frame();
+  for (const l of rows()) expect(l.length).toBeLessThanOrEqual(cols);
+  expect(f.match(/╭/g)).toHaveLength(1); // a single border: the dialog floats, nothing nests in it
+  expect(f).toContain("comandos");
+  expect(rows().filter((l) => l.includes("enter roda · tab completa · ctrl+f favorito · esc fecha"))).toHaveLength(1);
+  const query = rows().findIndex((l) => l.includes("› gre"));
+  expect(rows()[query + 1]).toMatch(/│ ─{20,} │/); // the rule under the query
+  expect(rows()[rows().findIndex((l) => l.includes("enter roda ·")) - 1]).toMatch(/│ ─{20,} │/); // and the rule over the footer
+  const selected = rows().find((l) => l.includes("» demo greet"))!;
+  expect(selected).toMatch(/enter/); // the key that runs the selected row, at its right edge
+});
+
+test("an empty query shows favorites and recent commands, then the commands (and below them the pages)", async () => {
+  const { session } = fake();
+  await open({ ...session, history: ["demo greet ana", "cap-fixture fix-a"] });
+  const f = h!.frame();
+  const order = ["recentes", "comandos"].map((word) => f.indexOf(word)); // the pages come after, below the ten rows in view
+  expect(order.every((i) => i >= 0)).toBe(true);
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+  expect(f).toContain("@módulo  >comando  #página  !destrutivo");
+});
+
+test("words in the query match in order and mark their letters: `dem gr` finds demo greet and marks `dem` and `gr`", async () => {
+  expect(search(registry, "dem gr")[0]).toMatchObject({ key: "demo greet", ranges: [[0, 3], [5, 7]] });
+  expect(search(registry, "dem gr").map((x) => x.key)).not.toContain("demo wipe");
+  expect(search(registry, "gr dem")).toEqual([]); // out of order
+  expect(search(registry, "demo")[0]!.ranges).toEqual([[0, 4]]);
+  await open(fake().session);
+  await h!.type("dem gr");
+  const y = rows().findIndex((l) => l.includes("demo greet"));
+  const spans = h!.spans().lines[y]!.spans;
+  const marked = spans.filter((span) => (span.attributes & 1) !== 0 && /^(dem|gr)$/.test(span.text)).map((span) => span.text);
+  expect(marked).toEqual(["dem", "gr"]); // the matched letters are bold in the accent
+});
+
+test("the selected row has the fill, the others none; the dialog keeps ↓ walking across the groups", async () => {
+  await open(fake().session);
+  await h!.type("demo");
+  const selected = rows().findIndex((l) => l.includes("»"));
+  expect(rows().filter((l) => l.includes("»"))).toHaveLength(1);
+  await h!.press("ARROW_DOWN");
+  expect(rows().findIndex((l) => l.includes("»"))).toBeGreaterThan(selected);
 });

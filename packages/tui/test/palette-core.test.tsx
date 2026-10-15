@@ -55,7 +55,7 @@ test("fresh server: core commands and the built-in pages are listed; `conf` find
 test("running a core command from the palette lands in the scrollback", async () => {
   const { t, store } = await mount(await fresh());
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("núcleo");
+  expect(t.frame()).toContain("comandos");
   await t.type(">version");
   await t.press("RETURN");
   await t.flush();
