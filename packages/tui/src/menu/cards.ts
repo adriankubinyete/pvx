@@ -1,4 +1,4 @@
-import type { CatalogEntry, ModuleRow, Registry } from "@pvx/core";
+import { commitLabel, type CatalogEntry, type ModuleRow, type Registry } from "@pvx/core";
 import { clean } from "../palette/search.ts";
 import type { TabId } from "../tabs/context.ts";
 import { tabOf } from "../tabs/pageTabs.ts";
@@ -34,6 +34,8 @@ export interface Card {
   version?: string;
   /** Official card without chips: the bottom left reads `oficial`; the version is always on the right. */
   official?: boolean;
+  /** Carried by a dev build: not updatable or removable from here. */
+  embedded?: boolean;
   /** Dashed cards: the key shown bold, the label and the sub line. */
   key?: string;
   sub?: string;
@@ -77,6 +79,7 @@ export function moduleCards(root: readonly Item[], registry: Registry, rows: rea
     const row = rows.find((r) => r.id === m.id);
     const origin = item.origin!;
     const official = origin === "official";
+    const embedded = origin === "embedded";
     const version = registry.modules.get(m.id)?.version ?? row?.version;
     const cmds = [...registry.commands.values()].filter((c) => c.moduleId === m.id).length;
     const own = [...registry.pages.values()].filter((p) => p.moduleId === m.id);
@@ -94,14 +97,16 @@ export function moduleCards(root: readonly Item[], registry: Registry, rows: rea
       : { text: errText || "não carregado" };
 
     const chips: Chip[] = [];
+    if (embedded) chips.push({ text: "embutido (dev)", tone: "warn" });
     if (row?.incompatible) chips.push({ text: `⚠ só ${wantedOf(row.incompatible)}`, tone: "warn", solid: true });
     if (tab && tabHidden) chips.push({ text: "aba oculta", tone: "dim" });
     if (widgets && widgetsHidden) chips.push({ text: "widget oculto", tone: "dim" });
 
-    const where = row?.url ? repoOf(row.url) : official ? "embutido no pvx" : "";
+    const where = row?.url ? repoOf(row.url) : official ? "embutido no pvx" : embedded ? "embutido (dev)" : "";
     const parts: Card["detail"]["parts"] = [{ text: m.id, tone: "name" }];
     if (where) parts.push({ text: ` · ${where}${row?.ref ? ` @ ${clean(row.ref)}` : ""}` });
     if (row?.sha) parts.push({ text: " · " }, { text: row.sha.slice(0, 7), tone: "info" });
+    if (row?.embedded) parts.push({ text: " · " }, { text: commitLabel(row.embedded), tone: "info" });
     if (row?.url || row?.sha) parts.push(m.behind ? { text: ` · ↓${m.behind} ${m.behind === 1 ? "atualização" : "atualizações"}`, tone: "info" } : { text: " · em dia" });
 
     const warn: Card["detail"]["warn"] = row?.incompatible ? { text: `⚠ ${clean(row.incompatible)}`, tone: "warn" }
@@ -109,7 +114,7 @@ export function moduleCards(root: readonly Item[], registry: Registry, rows: rea
       : m.state === "aguardando-confianca" ? { text: "aguardando confiança: enter → revisar", tone: "warn" }
       : undefined;
     return {
-      id: item.id, kind: "module", name: m.id, origin, state: stateOf(m, m.loaded), line2, chips, version, official,
+      id: item.id, kind: "module", name: m.id, origin, state: stateOf(m, m.loaded), line2, chips, version, official, embedded,
       module: m, children: Boolean(item.children), tab, tabHidden, widgets, widgetsHidden, detail: { parts, warn },
     };
   });
@@ -155,7 +160,7 @@ export function cardActions(card: Card): CardAction[] {
   else if (card.children) out.push({ id: "children", label: "comandos e páginas", key: "l" });
   if (card.tab) out.push({ id: "tab", label: "mostrar a aba", key: "t", state: card.tabHidden ? "—" : "✓" });
   if (card.widgets) out.push({ id: "widgets", label: "widgets no Início", key: "w", state: card.widgetsHidden ? "—" : "✓" });
-  if (!card.official) {
+  if (!card.official && !card.embedded) {
     if (m.state === "aguardando-confianca") out.push({ id: "review", label: "revisar", key: "r" });
     else out.push({ id: "update", label: "atualizar", key: "u" }, { id: "toggle", label: m.state === "desativado" ? "ativar" : "desativar", key: "d" });
     out.push({ id: "remove", label: "remover", key: "x" });

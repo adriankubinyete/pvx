@@ -44,6 +44,7 @@ const askIncompatible = (h: ActHelper) => (r: Review) =>
 
 /** Why a direct shortcut does nothing on this card. */
 function refusal(card: Card, key: string): string {
+  if ("udxr".includes(key) && card.embedded) return "embutido no binário dev";
   if ("udxr".includes(key) && card.official) return "embutido no pvx";
   if (key === "r") return "nada a aprovar";
   if (key === "u" || key === "d") return "aprove o módulo primeiro: r revisa";

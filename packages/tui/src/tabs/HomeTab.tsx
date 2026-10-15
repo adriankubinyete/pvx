@@ -119,7 +119,7 @@ export function HomeTab({ store, nav, profile, registry, sampler }: { store: Ses
   const snap = useSyncExternalStore(conf.subscribe, conf.getSnapshot);
   const checked = snap.conformidade;
   const done = checked ? parseConformity(checked) : undefined;
-  syncHost(slots, done); // the profile's items go through the same slots the modules use
+  syncHost(slots, done, registry.warnings); // the profile's items and the load avisos go through the same slots the modules use
   const mark = (l: Att["level"]): [string, string] => (l === "error" ? [g.error, c.error] : l === "warn" ? [g.warn, c.warn] : [g.ok, c.dim]);
   const attention = slotItems<Att>(slots, "home.attention", hidden);
   const brokenRow = (id: string): Row => ({ id: `broken:${id}`, mark: mark("warn"), text: `widget quebrou: ${id}` });

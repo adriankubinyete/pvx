@@ -11,11 +11,13 @@ import { summarizeCommands, summarizePermissions, type CommandSummary, type Perm
 import * as G from "./git.ts";
 import { audit, devLinks, disabledSet, invalidateUpdateCache, isLink, isRegisteredDev, matchSha, msg, setDevLinks, validId, writeDisabled, type Result } from "./common.ts";
 import { approve, getTrust, revoke } from "./trust.ts";
+import type { EmbeddedInfo } from "./embedded.ts";
 
 export * from "./trust.ts";
 export * from "./dev.ts";
 export * from "./update.ts";
 export * from "./live.ts";
+export * from "./embedded.ts";
 export { audit, devLinks, invalidateUpdateCache, type Result };
 export { GitError, checkUrl } from "./git.ts";
 export { analyze };
@@ -31,6 +33,8 @@ export interface ModuleRow {
   version?: string;
   /** Ships with pvx (not on disk). */
   official?: boolean;
+  /** Carried by a dev build (not on disk): it wins over an installed copy of the same id. */
+  embedded?: EmbeddedInfo;
   url?: string;
   ref?: string;
   sha?: string;
@@ -78,6 +82,17 @@ export function trustGate(o: { warn?: (msg: string) => void } = {}) {
   };
 }
 
+/** The row of a module a dev build carries: loaded unless its registration failed. */
+function embeddedRow(id: string, info: EmbeddedInfo, registry: Registry): ModuleRow {
+  const row: ModuleRow = { id, state: "carregado", version: info.version, embedded: info };
+  const failure = registry.errors.find((e) => e.id === id);
+  if (failure) {
+    row.state = "erro";
+    row.error = failure.error;
+  }
+  return row;
+}
+
 /** Every module with its `--json` state. `registry` tells loaded from errored; with none, eligible modules count as loaded. */
 export async function listModules(registry?: Registry, host: HostPlatform = hostPlatform()): Promise<ModuleRow[]> {
   const rows: ModuleRow[] = [];
@@ -85,6 +100,12 @@ export async function listModules(registry?: Registry, host: HostPlatform = host
   for (const b of registry?.official ?? []) {
     seen.add(b);
     rows.push({ id: b, state: "carregado", official: true, version: registry!.modules.get(b)?.version });
+  }
+  if (registry) {
+    for (const [id, info] of registry.embedded) {
+      seen.add(id);
+      rows.push(embeddedRow(id, info, registry));
+    }
   }
   const root = usermodulesDir();
   const ids = existsSync(root) ? readdirSync(root).filter((n) => !n.startsWith(".")).sort() : [];

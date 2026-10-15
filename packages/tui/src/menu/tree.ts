@@ -1,5 +1,5 @@
 import type { ArgSpec } from "@pvx/sdk";
-import type { CatalogEntry, ModuleRow, ModuleState, Pending, Registry, RegisteredCommand } from "@pvx/core";
+import { commitLabel, type CatalogEntry, type ModuleRow, type ModuleState, type Pending, type Registry, type RegisteredCommand } from "@pvx/core";
 import { clean } from "../palette/search.ts";
 
 export type Tone = "ok" | "warn" | "error" | "info" | "dim";
@@ -10,7 +10,7 @@ export interface Cell {
 }
 
 /** Where a module comes from: the mark after its id. */
-export type Origin = "official" | "usermodule" | "dev";
+export type Origin = "official" | "usermodule" | "dev" | "embedded";
 
 /** One menu row. Exactly one of `children` (submenu), `line` (runs) or `errorOf` (opens a module's log) is set. */
 export interface Item {
@@ -24,7 +24,7 @@ export interface Item {
   /** Args of the command: any of them opens the form. */
   args?: ArgSpec[];
   destructive?: boolean;
-  /** Origin mark after the label (◆ official, ◇ usermodule, dev mark). */
+  /** Origin mark after the label (◆ official, ◇ usermodule, dev mark; an embedded module takes the dev mark). */
   origin?: Origin;
   /** `help` split in colored pieces; `help` is always their concatenation. */
   cells?: Cell[];
@@ -71,6 +71,18 @@ export const STATE_TEXT: Record<ModuleState, string> = {
 const STATE_TONE: Record<ModuleState, Tone> = { carregado: "ok", "aguardando-confianca": "warn", desativado: "dim", erro: "error", modificado: "warn", atras: "info", dev: "warn" };
 const withHelp = (cells: Cell[]) => ({ cells, help: cells.map((c) => c.text).join("") });
 
+const ORIGIN_RANK: [(registry: Registry, id: string, row?: ModuleRow) => boolean, Origin][] = [
+  [(registry, id, row) => registry.official.has(id) || Boolean(row?.official), "official"],
+  [(registry, id) => registry.embedded.has(id), "embedded"],
+  [(_registry, _id, row) => row?.state === "dev", "dev"],
+];
+
+/** Where a module comes from: the first rule that holds, else an installed usermodule. */
+function originOf(registry: Registry, id: string, row?: ModuleRow): Origin {
+  const found = ORIGIN_RANK.find(([holds]) => holds(registry, id, row));
+  return found ? found[1] : "usermodule";
+}
+
 /**
  * The Módulos root, from the registry plus what the disk and the update check know (`rows`, `pending`; both optional: the
  * first frame has only the registry). Loaded modules open their commands; the others have no children (the actions act on them).
@@ -84,7 +96,7 @@ export function buildRoot(registry: Registry, rows: readonly ModuleRow[] = [], p
     const behind = Math.max(row?.behind ?? 0, pending.find((p) => p.id === id)?.behind ?? 0);
     let state: ModuleState = failed.has(id) ? "erro" : row?.state ?? "carregado";
     if (loaded && state === "carregado" && behind) state = "atras";
-    const origin: Origin = registry.official.has(id) || row?.official ? "official" : row?.state === "dev" ? "dev" : "usermodule";
+    const origin = originOf(registry, id, row);
     const module = { id, state, loaded, behind };
     if (failed.has(id)) return { id: `m:${id}`, label: id, origin, module, ...withHelp([{ text: "erro: ", tone: "error" }, { text: clean(failed.get(id)!) }]), errorOf: id };
     const entries = [...registry.commands]
@@ -92,6 +104,7 @@ export function buildRoot(registry: Registry, rows: readonly ModuleRow[] = [], p
       .map(([key, cmd]) => ({ key, cmd, path: key.split(" ").slice(1).filter(Boolean) }));
     const git = row?.ref && row.sha ? `${clean(row.ref)}@${row.sha.slice(0, 7)} ` : "";
     const cells: Cell[] = [
+      ...(row?.embedded ? [{ text: `embutido (dev) ${commitLabel(row.embedded)} `, tone: "warn" as const }] : []),
       ...(git ? [{ text: git }] : []),
       ...(behind ? [{ text: `↓${behind} `, tone: "info" as const }] : []),
       ...(row?.dirty ? [{ text: `✎${row.dirty} `, tone: "warn" as const }] : []),

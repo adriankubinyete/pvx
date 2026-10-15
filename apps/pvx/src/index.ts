@@ -1,10 +1,10 @@
 import { join } from "node:path";
 import { theme, ui } from "@pvx/tui";
 import { EXIT, type Logger } from "@pvx/sdk";
-import { createLogger, createRegistry, hostIsRoot, loadModules, logsDir, runCli, trustGate } from "@pvx/core";
+import { createLogger, createRegistry, embeddedFromBuild, hostIsRoot, loadModules, logsDir, runCli, trustGate } from "@pvx/core";
 import { builtin } from "../../../packages/builtin/index.ts";
 import { ask, askSecret } from "./prompt.ts";
-import { VERSION, VERSION_LABEL } from "./version.ts";
+import { BUILD_ID, VERSION, VERSION_LABEL } from "./version.ts";
 
 // Dev layout; the compiled binary carries the profiles embedded and loadProfiles prefers them.
 const PROFILES_DIR = join(import.meta.dir, "../../../profiles");
@@ -20,12 +20,16 @@ const makeLogger = (name: string): Logger => {
   return { debug: safe(real.debug), info: safe(real.info), warn: safe(real.warn), error: safe(real.error) };
 };
 
+/** Only a dev build carries modules: without its id (a release, or source) whatever the global holds is ignored. */
+const embeddedOfThisBuild = () => (BUILD_ID ? embeddedFromBuild() : []);
+
 async function main(): Promise<number> {
   const registry = createRegistry();
-  // No env var bypasses trust: PVX_USERMODULES only moves the directory. Built-ins ship with pvx and skip the gate.
+  // No env var bypasses trust: PVX_USERMODULES only moves the directory. Built-ins ship with pvx and skip the gate;
+  // so do the modules a dev build carries (build:dev), because whoever built the binary chose them.
   // The login banner has 1 s: built-ins only (no git probe per usermodule); the notes it shows come from a built-in.
   const canImport = process.argv[2] === "banner" ? () => false : trustGate({ warn: (m) => makeLogger("core").warn(m) });
-  await loadModules(registry, { hostVersion: VERSION, makeLogger, ui, builtin, canImport });
+  await loadModules(registry, { hostVersion: VERSION, makeLogger, ui, builtin, embedded: embeddedOfThisBuild(), canImport });
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const abort = new AbortController();
   // Only `logs -f` handles Ctrl+C; a global listener would swallow the first Ctrl+C of a hung command.
@@ -38,6 +42,7 @@ async function main(): Promise<number> {
     makeLogger,
     profilesDir: PROFILES_DIR,
     version: VERSION_LABEL,
+    build: BUILD_ID,
     theme,
   };
   const r = await runCli({

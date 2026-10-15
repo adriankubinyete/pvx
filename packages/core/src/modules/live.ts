@@ -9,10 +9,10 @@ import * as G from "./git.ts";
 /**
  * Brings the registry in line with the disk for one usermodule, no restart: drops what it contributed, then imports it again if
  * it is still there and `opts.canImport` (the trust gate) lets it in. Call it after trust, update, remove, enable and disable.
- * A failed import becomes a registry error. Built-ins are never touched.
+ * A failed import becomes a registry error. Built-ins and embedded modules are never touched.
  */
 export async function reconcileModule(registry: Registry, id: string, opts: LoadOpts): Promise<void> {
-  if (registry.official.has(id)) return;
+  if (registry.official.has(id) || registry.embedded.has(id)) return;
   registry.unregister(id);
   const dir = join(usermodulesDir(), id);
   if (!existsSync(dir)) return;

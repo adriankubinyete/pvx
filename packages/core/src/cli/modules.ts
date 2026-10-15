@@ -1,6 +1,7 @@
 import { EXIT, type ArgSpec, type OutLine } from "@pvx/sdk";
 import { isCatalogUrl, resolveModuleRefInfo } from "../catalog/index.ts";
 import { parseArgs } from "../engine/args.ts";
+import { commitLabel } from "../modules/embedded.ts";
 import { addModule, installedIds, linkModule, listModules, listTrust, removeModule, reviewLines, reviewModule, revokeTrust, setEnabled, trustModule, updateModule, type ModuleRow, type PermDiff, type Result, type UpdateResult } from "../modules/index.ts";
 import { join } from "node:path";
 import { usermodulesDir } from "../engine/paths.ts";
@@ -9,7 +10,8 @@ import type { CoreCommand } from "./core.ts";
 export const sha7 = (s?: string) => s?.slice(0, 7);
 
 export function rowLine(r: ModuleRow): OutLine & { module: ModuleRow } {
-  const extra = [r.official && "◆", r.ref && r.sha && `${r.ref}@${sha7(r.sha)}`, r.behind && `↓${r.behind}`, r.dirty && `✎${r.dirty}`, r.incompatible && "⚠ sistema", r.always && "∞ sempre", r.error].filter(Boolean).join(" ");
+  const embedded = r.embedded && `embutido (dev) ${commitLabel(r.embedded)}`;
+  const extra = [r.official && "◆", embedded, r.ref && r.sha && `${r.ref}@${sha7(r.sha)}`, r.behind && `↓${r.behind}`, r.dirty && `✎${r.dirty}`, r.incompatible && "⚠ sistema", r.always && "∞ sempre", r.error].filter(Boolean).join(" ");
   const kind = r.state === "carregado" || r.state === "atras" ? "success" : "warning";
   const text = r.state === "erro" ? `${r.id} erro: ${r.error}` : `${r.id} ${r.version ?? "?"} ${r.state}${extra ? ` ${extra}` : ""}`;
   return { kind, text, module: r };

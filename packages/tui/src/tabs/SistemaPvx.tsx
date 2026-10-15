@@ -9,7 +9,7 @@ import { Button, Loading } from "../sdk-ui/flow.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
-import { availableText, fit, plainVersion, pvxInfoRows, sectionOfKey, updateBlocker, type InfoRow, type PvxFacts, type ReleaseCheck, type Section } from "./sistema.ts";
+import { availableText, embeddedRows, fit, plainVersion, pvxInfoRows, sectionOfKey, updateBlocker, type InfoRow, type PvxFacts, type ReleaseCheck, type Section } from "./sistema.ts";
 
 const LABEL_W = 20;
 /** Border (2) and padding (2) of the panel, plus the gap after the label. */
@@ -26,6 +26,7 @@ function readFacts(registry: Registry, version: string, binary: string | null): 
     usermodules: usermodulesDir(),
     catalog: catalogUrl(),
     modules: registry.modules.size,
+    embedded: [...registry.embedded.values()],
   };
 }
 
@@ -41,6 +42,21 @@ function Info({ row, width }: { row: InfoRow; width: number }) {
       <span fg={c.dim}>{row.label.padEnd(LABEL_W)}</span>
       <span fg={c.text}>{fit(row.value, width)}</span>
     </text>
+  );
+}
+
+/** The modules a dev build carries; nothing at all in a release. */
+function EmbeddedRows({ facts, width }: { facts: PvxFacts; width: number }) {
+  const rows = embeddedRows(facts);
+  if (!rows.length) return null;
+  return (
+    <>
+      <text wrapMode="none"> </text>
+      <Heading text="módulos embutidos (dev)" />
+      {rows.map((row) => (
+        <Info key={row.label} row={row} width={width} />
+      ))}
+    </>
   );
 }
 
@@ -117,6 +133,7 @@ export function PvxSection({ store, registry, version, onSection }: { store: Ses
       {pvxInfoRows(facts).map((row) => (
         <Info key={row.label} row={row} width={valueWidth} />
       ))}
+      <EmbeddedRows facts={facts} width={valueWidth} />
       <text wrapMode="none"> </text>
       <Heading text="atualização" />
       <Info row={{ label: "instalada", value: plainVersion(version) }} width={valueWidth} />

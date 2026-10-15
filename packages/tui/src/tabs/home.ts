@@ -78,12 +78,16 @@ type Att = { level: Level; title: string; fix?: string };
 type Chip = { label: string; level: Level; detail?: string };
 
 /** What the host puts in the slots from the cached `conformidade` result (the profile's capabilities). */
-export function syncHost(hub: SlotHub, done?: Conformity) {
+export function syncHost(hub: SlotHub, done?: Conformity, warnings: readonly string[] = []) {
   const has = done && !done.message;
   hub.setHost("home.attention", has ? done.pending.map((p): Att => ({ level: p.level, title: p.text, fix: p.fix })) : undefined);
   hub.setHost("home.configured", has ? done.okItems.map((title): Att => ({ level: "ok", title })) : undefined);
   hub.setHost("home.summary", has ? `${done.ok} de ${done.total}` : undefined);
+  hub.setHost("home.chips", warnings.length ? warnings.map(warningChip) : undefined);
 }
+
+/** A host aviso (an installed module that lost to an embedded one) as a warning chip of the Início. */
+const warningChip = (label: string): Chip => ({ label, level: "warn" });
 
 /** `hidden`: modules whose widgets the user turned off. */
 export const slotItems = <T,>(hub: SlotHub, slot: SlotId, hidden?: ReadonlySet<string>): T[] => (hub.read(slot, hidden) as T[] | undefined) ?? [];

@@ -1,4 +1,5 @@
 import { createReadCtx } from "./permissions.ts";
+import type { EmbeddedInfo } from "../modules/embedded.ts";
 import { createSlotHub, type SlotHub, type SlotOpts } from "./slots.ts";
 import type { CapabilityDef, CommandDef, Manifest, ModuleDef, ModuleQuery, PageDef, QueryFn, ReadCtx, Roles } from "@pvx/sdk";
 
@@ -21,6 +22,10 @@ export interface Registry {
   modules: Map<string, Manifest>;
   /** Ids of the modules that ship with pvx (marked ◆). */
   official: Set<string>;
+  /** Modules a dev build carries, by id (not on disk, trusted by whoever built the binary). */
+  embedded: Map<string, EmbeddedInfo>;
+  /** Avisos of the load for the Início (an installed module that lost to an embedded one). */
+  warnings: string[];
   /** Role -> the query or command name that fills it (see `ModuleDef.roles`). */
   roles: Map<keyof Roles, { moduleId: string; name: string }>;
   /** Widgets of every module, collected per home slot. */
@@ -61,6 +66,8 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
     pages: new Map(),
     modules: new Map(),
     official: new Set(),
+    embedded: new Map(),
+    warnings: [],
     roles: new Map(),
     slots: createSlotHub({ ...opts.slots, ctxFor: (id) => r.readCtx(id) }),
     errors: [],
@@ -75,6 +82,7 @@ export function createRegistry(opts: { slots?: SlotOpts } = {}): Registry {
       drop(id);
       r.modules.delete(id);
       r.official.delete(id);
+      r.embedded.delete(id);
       r.errors = r.errors.filter((e) => e.id !== id);
       r.changed();
     },

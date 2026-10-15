@@ -12,6 +12,7 @@ import { readManifest } from "./manifest.ts";
 import { createGranted, createReadCtx } from "./permissions.ts";
 import { usermodulesDir } from "./paths.ts";
 import type { Registry } from "./registry.ts";
+import { shadowNotice, type EmbeddedModule } from "../modules/embedded.ts";
 
 /** Destructuring works (factories do it at load time); calling anything throws. */
 const unavailableUi = new Proxy({}, {
@@ -30,6 +31,11 @@ export interface LoadOpts {
   ui?: SdkUi;
   /** Modules that ship with pvx (the app's static barrel): registered first, trusted, official. Not read from disk. */
   builtin?: readonly BuiltinModule[];
+  /**
+   * Modules a dev build carries: registered after the built-ins, with no trust gate (whoever built the binary trusts them).
+   * An installed or linked module of the same id is skipped, with an aviso in `registry.warnings`. Not read from disk.
+   */
+  embedded?: readonly EmbeddedModule[];
   /** `ctx.session` of the read contexts. Default: the real host session (tests hand a fixed one). */
   session?: SessionInfo;
   /** `ctx.isRoot` of the read contexts. Default: the real process (tests hand a fixed one). */
@@ -44,6 +50,18 @@ const sdkFor = (manifest: Manifest, opts: LoadOpts): Sdk => {
   return { version: 1, log, proof: proofKit, packages: packagesKit, strategy: strategyKit, errors: errorsKit, phases: phasesKit, cron: cronKit, crontab: crontabKit, validate: validateKit, ui: opts.ui ?? unavailableUi, fs: createGranted(manifest.id, manifest.permissions, log, opts.makeLogger("core")).fs };
 };
 
+/** The embedded id is recorded before registering, so a broken embedded module still shadows the installed one. */
+function loadEmbedded(registry: Registry, opts: LoadOpts): void {
+  for (const { manifest, factory, info } of opts.embedded ?? []) {
+    registry.embedded.set(manifest.id, info);
+    try {
+      registry.register(manifest, factory(sdkFor(manifest, opts)));
+    } catch (e) {
+      registry.addError(manifest.id, (e as Error).message);
+    }
+  }
+}
+
 /** Scans usermodulesDir(). One module's failure is recorded in registry.errors and never stops the others. */
 export async function loadModules(registry: Registry, opts: LoadOpts): Promise<void> {
   registry.readCtx = (id) => createReadCtx(id, registry.modules.get(id)?.permissions, opts.makeLogger, registry.query, opts.session, opts.isRoot);
@@ -55,11 +73,16 @@ export async function loadModules(registry: Registry, opts: LoadOpts): Promise<v
       registry.addError(manifest.id, (e as Error).message);
     }
   }
+  loadEmbedded(registry, opts);
   const root = usermodulesDir();
   if (!existsSync(root)) return;
   for (const id of readdirSync(root).sort()) {
     const dir = join(root, id);
     if (id.startsWith(".") || !statSync(dir).isDirectory()) continue; // dot dirs: clones in progress
+    if (registry.embedded.has(id)) {
+      registry.warnings.push(shadowNotice(id));
+      continue;
+    }
     try {
       await loadOne(registry, dir, opts);
     } catch (e) {

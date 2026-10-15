@@ -14,6 +14,7 @@ import { BANNER_COMMAND } from "./banner.ts";
 import { SELF_COMMANDS } from "./self.ts";
 import { JOBS_COMMANDS } from "./jobs.ts";
 import { listCommand, MODULES_COMMANDS } from "./modules.ts";
+import { embeddedText, versionInfo } from "../modules/embedded.ts";
 import type { CliIO, Output } from "./run.ts";
 
 export interface Ctx {
@@ -183,7 +184,9 @@ export const CORE: CoreCommand[] = [
     key: "version",
     help: "Mostra a versão",
     async run({ io, o }) {
-      o.line({ kind: "plain", text: `pvx ${io.version}` });
+      const info = versionInfo(io.version, io.build, io.registry.embedded.values());
+      o.line({ kind: "plain", text: `pvx ${io.version}`, build: info });
+      for (const embedded of info.embedded) o.line({ kind: "plain", text: `embutido (dev): ${embeddedText(embedded)}` });
       return EXIT.OK;
     },
   },

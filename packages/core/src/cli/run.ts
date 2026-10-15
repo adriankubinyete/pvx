@@ -4,7 +4,7 @@ import { auditCommand, lineOf } from "../journal/index.ts";
 import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
-import type { ModuleRow } from "../modules/index.ts";
+import type { ModuleRow, VersionInfo } from "../modules/index.ts";
 import type { PlanStep } from "../plan/index.ts";
 import { CORE, RESERVED } from "./core.ts";
 import { catalogOf, pathHelp, rootHelp } from "./help.ts";
@@ -28,6 +28,8 @@ export interface CliIO {
   makeLogger: (name: string) => Logger;
   profilesDir: string;
   version: string;
+  /** The id of a dev build (what `pvx version --json` reports as `build`); unset in a release and from source. */
+  build?: string;
   theme: Palette;
   /** One call per output line (no trailing newline). */
   out: (line: string) => void;
@@ -53,6 +55,8 @@ export interface CoreLine extends OutLine {
   module?: ModuleRow;
   /** `conformidade` only: ISO instant until which this pending item is ignored. */
   ignored?: string;
+  /** `version` only: the build facts (JSON mode only shows it). */
+  build?: VersionInfo;
 }
 
 export interface Output {
@@ -91,7 +95,7 @@ export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}), ...(l.ignored ? { ignored: l.ignored } : {}) }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}), ...(l.ignored ? { ignored: l.ignored } : {}), ...(l.build ? { build: l.build } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;

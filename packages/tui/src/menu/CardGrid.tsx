@@ -45,7 +45,7 @@ const CardView = memo(function CardView({ card, selected, hot, lit, w, onHover, 
     );
   } else {
     const isCat = card.kind === "catalog";
-    const badge: [string, string] = card.origin === "official" ? [g.official, c.accent] : card.origin === "dev" ? ["dev", c.warn] : [g.thirdParty, c.thirdParty];
+    const badge: [string, string] = card.origin === "official" ? [g.official, c.accent] : card.origin === "dev" || card.origin === "embedded" ? ["dev", c.warn] : [g.thirdParty, c.thirdParty];
     const right = isCat ? (card.version ?? "") : card.state ? `${card.state.dot} ${card.state.text}` : "";
     const nameW = Math.max(1, iw - len(badge[0]) - 1 - len(right) - (right ? 1 : 0));
     const name = cut(card.name, nameW);

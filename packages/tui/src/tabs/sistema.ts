@@ -1,4 +1,4 @@
-import { compareSemver } from "@pvx/core";
+import { commitLabel, compareSemver, type EmbeddedInfo } from "@pvx/core";
 
 /** The sections of the Sistema tab, in the order of their numbers. */
 export const SECTIONS = ["aparencia", "pvx"] as const;
@@ -26,6 +26,8 @@ export interface PvxFacts {
   usermodules: string;
   catalog: string;
   modules: number;
+  /** The modules a dev build carries (empty in a release). */
+  embedded: readonly EmbeddedInfo[];
 }
 
 export interface InfoRow {
@@ -49,6 +51,11 @@ export function pvxInfoRows(facts: PvxFacts): InfoRow[] {
     { label: "catálogo", value: facts.catalog },
     { label: "módulos", value: `${facts.modules} carregados` },
   ];
+}
+
+/** One row per embedded module: version, commit (`*` when dirty) and the checkout it came from. */
+export function embeddedRows(facts: PvxFacts): InfoRow[] {
+  return facts.embedded.map((info) => ({ label: info.id, value: `${info.version} · ${commitLabel(info)} · ${info.source}` }));
 }
 
 /** The plain version of a label: `0.1.0 (nightly, dev)` becomes `0.1.0`. */

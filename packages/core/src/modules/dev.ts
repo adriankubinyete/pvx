@@ -59,6 +59,7 @@ async function precheck(entry: string): Promise<void> {
  */
 export async function reloadModule(registry: Registry, id: string, opts: LoadOpts): Promise<Result> {
   try {
+    if (registry.embedded.has(id)) throw new Error(`"${id}" está embutido no binário dev: a cópia do disco não recarrega`);
     const dir = join(usermodulesDir(), id);
     if (!lstatSync(dir, { throwIfNoEntry: false })?.isSymbolicLink() || !isRegisteredDev(dir, id)) throw new Error(`"${id}" não é um módulo dev registrado`);
     await precheck(join(realpathSync(dir), readManifestRaw(dir).entry));
