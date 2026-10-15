@@ -203,13 +203,44 @@ test("enter opens the tab of the module that owns the task, or says it has none"
   expect(t.frame()).not.toContain("Em andamento"); // the Demo tab is open now
 });
 
-test("with no tasks both sections say so; the keyboard is free and every button is reachable", async () => {
+/** The numbers of the sections that carry the `▌` gutter: the active one. */
+const activeSections = (t: TuiHarness) => lines(t).flatMap((l) => /▌ (\d) /.exec(l)?.[1] ?? []);
+
+test("an empty section is still selectable: the arrows, the numbers and a click land on it and it shows the active gutter and its empty line", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
   for (let i = 0; i < 12 && !t.frame().includes("Em andamento"); i++) await t.press("TAB");
   expect(t.frame()).toContain("nenhuma tarefa em andamento");
   expect(t.frame()).toContain("nenhuma tarefa nas últimas 24 h");
+  await t.press("ARROW_DOWN"); // into the tab: the first section, empty
+  expect(activeSections(t)).toEqual(["1"]);
+  await t.press("ARROW_DOWN"); // the second section, empty too: the cursor does not skip it
+  expect(activeSections(t)).toEqual(["2"]);
+  await t.press("RETURN"); // nothing to open: harmless
+  expect(activeSections(t)).toEqual(["2"]);
+  await t.press("1");
+  expect(activeSections(t)).toEqual(["1"]);
+  const y = lines(t).findIndex((l) => l.includes("2 Terminadas"));
+  await t.click(10, y);
+  expect(activeSections(t)).toEqual(["2"]);
+  await t.press("x");
+  await t.press("c");
+  await t.press("l");
+  expect(activeSections(t)).toEqual(["2"]); // nothing moved, nothing ran
   expectButtonsReachable();
   await expectNoKeyboardTrap(t);
+});
+
+test("an empty section between tasks is not skipped", async () => {
+  const now = Date.now();
+  writeJobState("issabel", "netinstall", { state: "done", startedAt: now - 61 * MIN, endedAt: now - 20 * MIN, origin: "manual", line: "netinstall" });
+  const { t } = await mount({ cols: 120, rows: 40 });
+  await gotoTarefas(t);
+  expect(activeSections(t)).toEqual(["1"]); // nothing runs: the first stop is the empty section
+  await t.press("ARROW_DOWN");
+  expect(rowOf(t, "netinstall")).toContain("»");
+  expect(activeSections(t)).toEqual(["2"]);
+  await t.press("ARROW_UP");
+  expect(activeSections(t)).toEqual(["1"]);
 });
 
 test("with tasks the keyboard is free too: esc from inside reaches the bar", async () => {

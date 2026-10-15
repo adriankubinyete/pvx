@@ -21,7 +21,7 @@ import { Clock, clockCost, pickForm } from "./clock.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 import { TarefasTab } from "./TarefasTab.tsx";
-import { finishedTasks, runningTasks, tabLabel } from "./tasks-view.ts";
+import { runningTasks, tabLabel } from "./tasks-view.ts";
 import { useTasks } from "./useTasks.ts";
 
 const LABELS: Record<CoreTabId, string> = { inicio: "Início", modulos: "Módulos", tarefas: "Tarefas", logs: "Logs", comando: "Comando", sistema: "Sistema" };
@@ -141,7 +141,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
   if (pageTab) visited.current.add(active);
   // A tab with nothing to select never holds focus.
   const runningCount = runningTasks(tasks).length;
-  const hasSel = (id: TabId) => id === "inicio" || id === "logs" || (id === TASKS_TAB && runningCount + finishedTasks(tasks, tasksNow).length > 0) || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
+  const hasSel = (id: TabId) => id === "inicio" || id === "logs" || id === TASKS_TAB || id === "comando" || id === "sistema" || id.startsWith("page:") || (id === "modulos" && (Boolean(modules) || registry.modules.size + registry.errors.length > 0));
   const step = (d: number) => {
     const id = ids[(ids.indexOf(active) + d + ids.length) % ids.length]!;
     update({ active: id, bar: true }); // switching never auto-focuses the content: down goes in

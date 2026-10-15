@@ -51,20 +51,21 @@ export function TarefasTab({ store, registry, tasks, now, selected, onSelect }: 
 
   const running = runningTasks(tasks);
   const finished = finishedTasks(tasks, now);
-  const ordered = [...running, ...finished];
-  const current = ordered.find((task) => taskId(task) === selected) ?? ordered[0];
-  const currentId = current ? taskId(current) : undefined;
-  const sectionOf = (task?: Task): SectionId | undefined => (task ? (running.includes(task) ? "running" : "finished") : undefined);
+  const stops = [...stopsOf("running", running), ...stopsOf("finished", finished)];
+  const stop = stops.find((candidate) => candidate.id === selected) ?? stops[0]!;
+  const current = stop.task;
+  const currentId = stop.id;
   const log = useTaskLog(current);
   const shown = listRows(rows, running.length, finished.length);
 
   const open = () => {
-    const tab = current && tabOf(registry, current.module);
+    if (!current) return nudge("nada para abrir");
+    const tab = tabOf(registry, current.module);
     if (tab) return tabs?.goto(tab.id);
     nudge("módulo sem aba");
   };
-  const stop = async () => {
-    if (!current || sectionOf(current) !== "running") return nudge("nenhuma tarefa rodando aqui");
+  const stopTask = async () => {
+    if (!current || !running.includes(current)) return nudge("nenhuma tarefa rodando aqui");
     const sure = await store.confirm({ title: `parar ${current.name}?`, description: current.module, confirmLabel: "parar", destructive: true });
     if (sure) void store.run(`jobs stop ${current.module} ${current.name}`);
   };
@@ -78,32 +79,28 @@ export function TarefasTab({ store, registry, tasks, now, selected, onSelect }: 
     tabs?.goto("comando");
   };
   const move = (delta: number) => {
-    const index = ordered.findIndex((task) => taskId(task) === currentId) + delta;
+    const index = stops.findIndex((candidate) => candidate.id === currentId) + delta;
     if (index < 0) return tabs?.focusBar();
-    if (ordered.length) onSelect(taskId(ordered[wrap(index, 0, ordered.length)]!));
+    onSelect(stops[wrap(index, 0, stops.length)]!.id);
   };
-  const jump = (section: SectionId) => {
-    const first = section === "running" ? running[0] : finished[0];
-    if (first) onSelect(taskId(first));
-    else nudge("nada aqui");
-  };
+  const jump = (section: SectionId) => onSelect(stops.find((candidate) => candidate.section === section)!.id);
   const onKey = (key: RoutedKey) => {
     if (key.name === "up") return move(-1), true;
     if (key.name === "down") return move(1), true;
     if (key.sequence === "1" || key.sequence === "2") return jump(key.sequence === "1" ? "running" : "finished"), true;
     if (matchKey(key, "enter")) return open(), true;
-    if (matchKey(key, "x")) return void stop(), true;
+    if (matchKey(key, "x")) return void stopTask(), true;
     if (matchKey(key, "c")) return resume(), true;
     if (matchKey(key, "l")) return wholeLog(), true;
     if (matchKey(key, "esc")) return tabs?.focusBar(), true;
   };
   useKeys((key) => (focused ? onKey(key) : undefined));
 
-  const active = focused ? sectionOf(current) : undefined;
+  const active = focused ? stop.section : undefined;
   const width = cols - FRAME_W - GUTTER_W;
   const select = (id: string) => onSelect(id);
   const section = (id: SectionId, title: string, empty: string, body: React.ReactNode, count: number, aside?: string) => (
-    <Panel title={title} tone={active === id ? "accent" : undefined} aside={aside}>
+    <Panel title={title} tone={active === id ? "accent" : undefined} aside={aside} onPress={() => jump(id)}>
       {count ? body : <text wrapMode="none" flexShrink={0} fg={c.dim}>{`  ${empty}`}</text>}
     </Panel>
   );
@@ -119,6 +116,18 @@ export function TarefasTab({ store, registry, tasks, now, selected, onSelect }: 
       {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}
     </box>
   );
+}
+
+/** What the cursor can stop on in a section: its tasks, or one stop for the section itself when it is empty (an empty section is still selectable). */
+interface Stop {
+  id: string;
+  section: SectionId;
+  task?: Task;
+}
+
+function stopsOf(section: SectionId, tasks: readonly Task[]): Stop[] {
+  if (!tasks.length) return [{ id: `empty:${section}`, section }];
+  return tasks.map((task) => ({ id: taskId(task), section, task }));
 }
 
 function LogBox({ name, lines, width }: { name: string; lines: string[]; width: number }) {

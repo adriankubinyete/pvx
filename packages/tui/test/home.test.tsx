@@ -342,3 +342,16 @@ test("mouse: the button of an item puts its fix in the Comando; `verificar` runs
   await t.click(rowX(t, "[ corrigir ]") + 2, rowY(t, "cap-fixture.a: pendente"));
   expect(t.frame()).toContain("❯ cap-fixture fix-a");
 });
+
+test("an empty section is still selectable: the arrows and the number land on it, it shows the gutter and its empty line, enter does no harm", async () => {
+  const { t, store } = await mount({ cols: 120, rows: 40 });
+  expect(t.frame()).toContain("nada executado ainda");
+  await t.press("ARROW_DOWN"); // atividade has no rows
+  expect(activeSections(t)).toEqual(["2"]);
+  await t.press("RETURN");
+  expect(activeSections(t)).toEqual(["2"]);
+  expect(store.blocks).toEqual([]);
+  await t.press("1");
+  await t.press("2");
+  expect(activeSections(t)).toEqual(["2"]);
+});
