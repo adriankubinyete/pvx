@@ -1505,3 +1505,13 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Comando: o resultado segue o formato do tema (`[✓]`), não o `✓` do mockup.
 
 **Limite:** não há ação de ver processos por módulo (`[ ver processos ]` abre `!top` no Comando); a prévia do Sistema não repinta o fundo do terminal.
+
+## 2026-10-15 — Núcleos do Início enchem a largura (como o htop)
+
+**Status:** vigente. Corrige a disposição das barras de núcleo do Início ("colunas de até 8 núcleos").
+
+**Decisão:** as barras de núcleo enchem a largura primeiro: quantas colunas couberem com barras de pelo menos 26 células (4 a 120 colunas, 2 a 80, 1 muito estreito), linhas = teto de núcleos ÷ colunas, preenchidas por coluna, e as barras esticam até a coluna. `mem`, `swp` e `dsk` ocupam a metade esquerda com o tamanho dentro da barra; a metade direita leva os fatos. `BarMeter` ganhou `text` (toma o lugar da porcentagem, à direita).
+
+**Motivo:** 12 núcleos viravam 2 colunas de 6, alto demais; o htop do dono mostra 4 colunas de 3.
+
+**Limite:** metade direita menor que 36 células (terminal estreito) manda os fatos para baixo das barras.

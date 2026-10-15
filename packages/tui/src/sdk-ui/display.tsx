@@ -98,13 +98,13 @@ export function Spark({ values, width = DEFAULT_SPARK_WIDTH, label, suffix, max 
 const DEFAULT_BAR_METER_W = 30;
 
 /** The bar of a system monitor: `label[|||||        54.0%] suffix`. */
-export function BarMeter({ value, width = DEFAULT_BAR_METER_W, label, labelWidth, suffix, warnAbove }: Props<"BarMeter">) {
+export function BarMeter({ value, width = DEFAULT_BAR_METER_W, label, labelWidth, suffix, text, warnAbove }: Props<"BarMeter">) {
   const { c } = useTheme();
-  const { filled, empty, percent } = barMeterParts(value, width);
-  const text = label === undefined ? "" : clean(label).padEnd(labelWidth ?? 0);
+  const { filled, empty, percent } = barMeterParts(value, width, text === undefined ? undefined : clean(text));
+  const labelText = label === undefined ? "" : clean(label).padEnd(labelWidth ?? 0);
   return (
     <text wrapMode="none" flexShrink={0}>
-      <span fg={c.info}>{text}</span>
+      <span fg={c.info}>{labelText}</span>
       <span fg={c.dim}>{"["}</span>
       <span fg={tone(c, meterTone(value, warnAbove))}>{filled}</span>
       <span>{empty}</span>

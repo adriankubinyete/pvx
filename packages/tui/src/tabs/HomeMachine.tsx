@@ -1,7 +1,7 @@
 import type { MachineSnap } from "@pvx/core";
 import { BarMeter } from "../sdk-ui/display.tsx";
 import { useTheme } from "../theme-context.tsx";
-import { BAR_LABEL_W, coreColumns, heaviestLines, loadParts, machineLayout, processesText, rateText, sizeText, sizeWidth, uptimeText, type MachineLayout } from "./home-view.ts";
+import { BAR_LABEL_W, coreColumns, heaviestLines, loadParts, machineLayout, processesText, rateText, sizeText, uptimeText, type MachineLayout } from "./home-view.ts";
 
 /** Cells of the dim label of a fact on the right (`processos` is the longest) and the space after it. */
 const FACT_LABEL_W = 9;
@@ -11,17 +11,17 @@ const SIZE_UNAVAILABLE = "—";
 
 type Used = { used: number; total: number };
 
-function Bar({ label, value, inner, size }: { label: string; value: number; inner: number; size?: string }) {
-  return <BarMeter label={label} labelWidth={BAR_LABEL_W} value={value} width={inner} suffix={size} />;
+function Bar({ label, value, inner, text }: { label: string; value: number; inner: number; text?: string }) {
+  return <BarMeter label={label} labelWidth={BAR_LABEL_W} value={value} width={inner} text={text} />;
 }
 
-/** One bar per core, in columns of up to eight (as htop does), each short. */
+/** One bar per core, filled column by column (1, 2, 3 down the first column, then 4, 5, 6), each stretched to its column. */
 function CoreBars({ cores, layout }: { cores: readonly number[]; layout: MachineLayout }) {
   return (
     <box flexDirection="row" columnGap={SUB_GAP_W} flexShrink={0}>
       {coreColumns(cores, layout.rows).map((column) => (
         <box key={column[0]!.index} flexDirection="column" flexShrink={0}>
-          {column.map(({ index, value }) => <Bar key={index} label={String(index)} value={value / 100} inner={layout.inner} />)}
+          {column.map(({ index, value }) => <Bar key={index} label={String(index + 1)} value={value / 100} inner={layout.coreInner} />)}
         </box>
       ))}
     </box>
@@ -29,19 +29,18 @@ function CoreBars({ cores, layout }: { cores: readonly number[]; layout: Machine
 }
 
 function UsedBar({ label, usage, inner }: { label: string; usage?: Used; inner: number }) {
-  if (!usage) return <Bar label={label} value={0} inner={inner} size={SIZE_UNAVAILABLE} />;
-  if (!usage.total) return <Bar label={label} value={0} inner={inner} size="0/0" />;
-  return <Bar label={label} value={usage.used / usage.total} inner={inner} size={sizeText(usage.used, usage.total)} />;
+  if (!usage) return <Bar label={label} value={0} inner={inner} text={SIZE_UNAVAILABLE} />;
+  if (!usage.total) return <Bar label={label} value={0} inner={inner} text="0/0" />;
+  return <Bar label={label} value={usage.used / usage.total} inner={inner} text={sizeText(usage.used, usage.total)} />;
 }
 
-/** The bars of the left column: every core, then memory, swap and disk. */
-function Bars({ machine, layout }: { machine: MachineSnap; layout: MachineLayout }) {
+/** Memory, swap and disk, with their size inside the bar. */
+function UsedBars({ machine, inner }: { machine: MachineSnap; inner: number }) {
   return (
     <box flexDirection="column" flexShrink={0}>
-      <CoreBars cores={machine.cpu.cores} layout={layout} />
-      <UsedBar label="mem" usage={machine.mem} inner={layout.inner} />
-      <UsedBar label="swp" usage={machine.swap} inner={layout.inner} />
-      <UsedBar label="dsk" usage={machine.disk} inner={layout.inner} />
+      <UsedBar label="mem" usage={machine.mem} inner={inner} />
+      <UsedBar label="swp" usage={machine.swap} inner={inner} />
+      <UsedBar label="dsk" usage={machine.disk} inner={inner} />
     </box>
   );
 }
@@ -84,26 +83,28 @@ function Facts({ machine, product, sessionIp }: { machine: MachineSnap; product?
 }
 
 /**
- * The top of Início, in the style of htop: the bars on the left (every core, memory, swap, disk) and the facts of the machine on the right.
- * When the width does not fit both, the facts go under the bars. `width` is the page's inner width.
+ * The top of Início, in the style of htop: every core across the width, then memory, swap and disk on the left half and the facts of the machine on the right half.
+ * When the half is narrower than the facts, they go under the bars. `width` is the page's inner width.
  */
 export function MachineBlock({ machine, product, sessionIp, width }: { machine: MachineSnap; product?: string; sessionIp?: string; width: number }) {
-  const sizeW = Math.max(sizeWidth(machine.mem.total), sizeWidth(machine.swap?.total ?? 0), sizeWidth(machine.disk?.total ?? 0));
-  const layout = machineLayout(width, machine.cpu.cores.length, sizeW);
+  const layout = machineLayout(width, machine.cpu.cores.length);
+  const used = <UsedBars machine={machine} inner={layout.usedInner} />;
   const facts = <Facts machine={machine} product={product} sessionIp={sessionIp} />;
-  if (layout.beside) {
-    return (
-      <box flexDirection="row" columnGap={COLUMNS_GAP_W} flexShrink={0}>
-        <Bars machine={machine} layout={layout} />
-        {facts}
-      </box>
-    );
-  }
   return (
     <box flexDirection="column" flexShrink={0}>
-      <Bars machine={machine} layout={layout} />
-      <text wrapMode="none" flexShrink={0}> </text>
-      {facts}
+      <CoreBars cores={machine.cpu.cores} layout={layout} />
+      {layout.beside ? (
+        <box flexDirection="row" columnGap={COLUMNS_GAP_W} flexShrink={0}>
+          {used}
+          {facts}
+        </box>
+      ) : (
+        <>
+          {used}
+          <text wrapMode="none" flexShrink={0}> </text>
+          {facts}
+        </>
+      )}
     </box>
   );
 }

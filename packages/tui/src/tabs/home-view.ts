@@ -82,69 +82,47 @@ export function heaviestLines(top: MachineSnap["top"]): string[] {
 export const BAR_LABEL_W = 3;
 /** The brackets of a bar. */
 const BRACKETS_W = 2;
-/** Cells of a bar with its label: the label, the brackets and what is between them. */
-export const barCellWidth = (inner: number): number => BAR_LABEL_W + BRACKETS_W + inner;
-
-const INNER_MAX = 30;
-const INNER_MIN = 10;
-const CORES_PER_COLUMN = 8;
-const SUB_GAP_W = 3;
-const COLUMNS_GAP_W = 4;
-/** The widest line of the right column: the network rates. */
+const CORE_GAP_W = 3;
+/** The least cells of a core bar with its label (the brackets and the percentage included); it gives 4 columns at 120 and 2 at 80. */
+const CORE_BAR_MIN_W = 26;
+/** The widest line of the right half: the network rates. */
 export const RIGHT_W = 36;
-/** Lines of the right column when it has everything: the host, six facts, a blank, the heading and three processes. */
-const FACT_LINES = 11;
-/** Rows of memory, swap and disk under the cores. */
-const USED_ROWS = 3;
-/** Cells between the bar and its size (`dsk[...] 177/228G`). */
-const SIZE_GAP_W = 1;
+/** Cells between the two halves under the cores. */
+const HALVES_GAP_W = 4;
 
 export interface MachineLayout {
-  /** The right column sits beside the bars; otherwise it goes under them. */
+  /** The facts sit on the right half; otherwise they go under the bars. */
   beside: boolean;
-  /** Columns of core bars. */
+  /** Columns of core bars, filled column by column. */
   columns: number;
   /** Rows of core bars in each column. */
   rows: number;
-  /** Cells between the brackets of every bar. */
-  inner: number;
+  /** Cells between the brackets of a core bar. */
+  coreInner: number;
+  /** Cells between the brackets of the memory, swap and disk bars. */
+  usedInner: number;
 }
 
-/** The bars of `width` cells: `columns` of up to eight cores, each `inner` wide (16 to 30), shrinking the width before the count. */
-function barsIn(width: number, cores: number, sizeW: number): MachineLayout | undefined {
-  const needed = Math.max(1, Math.ceil(cores / CORES_PER_COLUMN));
-  const maxColumns = Math.floor((width + SUB_GAP_W) / (barCellWidth(INNER_MIN) + SUB_GAP_W));
-  if (maxColumns < 1) return undefined;
-  const columns = Math.min(needed, maxColumns);
-  const share = Math.floor((width - SUB_GAP_W * (columns - 1)) / columns) - BAR_LABEL_W - BRACKETS_W;
-  const withSize = width - BAR_LABEL_W - BRACKETS_W - SIZE_GAP_W - sizeW; // the first column also carries a size
-  const inner = Math.min(INNER_MAX, share, withSize);
-  if (inner < INNER_MIN) return undefined;
-  return { beside: false, columns, rows: Math.ceil(cores / columns), inner };
-}
+/** Cells between the brackets of a bar that takes `cells` with its label. */
+const innerOf = (cells: number): number => cells - BAR_LABEL_W - BRACKETS_W;
 
-/** The height of the block for a layout: beside, the taller of the two columns; stacked, the bars, a blank row and the facts. */
-const heightOf = (layout: MachineLayout): number => {
-  const bars = layout.rows + USED_ROWS;
-  return layout.beside ? Math.max(bars, FACT_LINES) : bars + 1 + FACT_LINES;
+/** As many columns as fit the minimum bar width, never more than there are cores. */
+const columnsFor = (width: number, cores: number): number => {
+  const fit = Math.floor((width + CORE_GAP_W) / (CORE_BAR_MIN_W + CORE_GAP_W));
+  return Math.max(1, Math.min(cores, fit));
 };
 
-/** Up to eight cores in a column; with more, another column (the bars get shorter before the columns get fewer). */
-const columnsNeeded = (cores: number): number => Math.max(1, Math.ceil(cores / CORES_PER_COLUMN));
-
 /**
- * Bars on the left and the facts on the right when the bars keep their columns of eight there; else the facts go under the bars, if that keeps them;
- * else the shorter of the two (a machine with too many cores for any width gets columns longer than eight).
+ * The cores fill the width first, as htop does: `rows = ceil(cores / columns)` and the bars stretch to their column.
+ * Memory, swap and disk take the left half and the facts the right half; when that half is narrower than the facts, they go under the bars.
  */
-export function machineLayout(width: number, cores: number, sizeW: number): MachineLayout {
-  const needed = columnsNeeded(cores);
-  const beside = barsIn(width - COLUMNS_GAP_W - RIGHT_W, cores, sizeW);
-  const stacked = barsIn(width, cores, sizeW) ?? { beside: false, columns: 1, rows: cores, inner: INNER_MIN };
-  const side: MachineLayout | undefined = beside && { ...beside, beside: true };
-  if (side && side.columns === needed) return side;
-  if (stacked.columns === needed) return stacked;
-  if (!side) return stacked;
-  return heightOf(side) <= heightOf(stacked) ? side : stacked;
+export function machineLayout(width: number, cores: number): MachineLayout {
+  const rows = Math.ceil(cores / columnsFor(width, cores));
+  const columns = Math.ceil(cores / rows);
+  const columnWidth = Math.floor((width - CORE_GAP_W * (columns - 1)) / columns);
+  const half = Math.floor((width - HALVES_GAP_W) / 2);
+  const beside = half >= RIGHT_W;
+  return { beside, columns, rows, coreInner: innerOf(columnWidth), usedInner: innerOf(beside ? half : width) };
 }
 
 /** The cores by column: column-major, `rows` to a column. */

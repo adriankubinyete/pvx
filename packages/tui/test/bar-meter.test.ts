@@ -13,3 +13,9 @@ test("the bar is the pipes, the empty cells and the percentage: the same width a
   expect(barMeterParts(0, 30).filled).toBe("");
   expect(barMeterParts(0.5, 4)).toEqual({ filled: "", empty: "", percent: " 50.0%" }); // narrower than the percentage: only the percentage
 });
+
+test("a text takes the place of the percentage, right-aligned inside the bar", () => {
+  const parts = barMeterParts(0.5, 30, "6,4/13,7G");
+  expect(parts.percent).toBe("6,4/13,7G");
+  expect(parts.filled.length + parts.empty.length + parts.percent.length).toBe(30);
+});

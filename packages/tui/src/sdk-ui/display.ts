@@ -80,10 +80,11 @@ export const BAR_FILL = "|";
 /** Cells of the percentage inside the brackets (`54.0%` padded to 6, `100.0%` fills it). */
 export const BAR_PERCENT_W = 6;
 
-/** The three parts of a `BarMeter` between its brackets: the filled cells, the empty ones and the percentage; `inner` cells in all. */
-export function barMeterParts(value: number, inner: number): { filled: string; empty: string; percent: string } {
+/** The three parts of a `BarMeter` between its brackets: the filled cells, the empty ones and the text on the right (the percentage unless `text` is given); `inner` cells in all. */
+export function barMeterParts(value: number, inner: number, text?: string): { filled: string; empty: string; percent: string } {
   const share = Math.max(0, Math.min(1, value));
-  const barCells = Math.max(0, inner - BAR_PERCENT_W);
+  const tail = (text ?? `${(share * 100).toFixed(1)}%`).padStart(BAR_PERCENT_W);
+  const barCells = Math.max(0, inner - tail.length);
   const lit = Math.round(share * barCells);
-  return { filled: BAR_FILL.repeat(lit), empty: " ".repeat(barCells - lit), percent: `${(share * 100).toFixed(1)}%`.padStart(BAR_PERCENT_W) };
+  return { filled: BAR_FILL.repeat(lit), empty: " ".repeat(barCells - lit), percent: tail };
 }

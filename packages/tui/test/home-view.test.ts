@@ -38,28 +38,29 @@ test("the heaviest processes are three lines: the name, the cpu share and the me
   expect(memoryText(900)).toBe("   0 MB");
 });
 
-test("the bars: one column up to eight cores, another column for each eight more, the bars shrinking before the columns get fewer; the facts beside when that keeps the columns", () => {
-  const size = sizeWidth(228 * GIB);
-  for (const cores of [1, 2, 8]) {
-    const wide = machineLayout(116, cores, size);
-    expect(wide).toMatchObject({ beside: true, columns: 1, inner: 30 });
-    expect(wide.rows).toBe(cores);
-  }
-  expect(machineLayout(116, 16, size)).toMatchObject({ beside: true, columns: 2, rows: 8 });
-  expect(machineLayout(116, 32, size)).toMatchObject({ beside: true, columns: 4, rows: 8 }); // shorter bars, but eight to a column
-  expect(machineLayout(116, 32, size).inner).toBeLessThan(30);
-  expect(machineLayout(76, 8, size)).toMatchObject({ beside: true, columns: 1 }); // at 80 columns the eight cores still fit beside
-  expect(machineLayout(76, 16, size)).toMatchObject({ beside: true, columns: 2, rows: 8 });
-  expect(machineLayout(76, 32, size)).toMatchObject({ beside: false, columns: 4, rows: 8 }); // the facts go under the bars to keep them
-  for (const width of [76, 96, 116, 200]) {
-    for (const cores of [1, 2, 8, 16, 32, 64, 128]) {
-      const layout = machineLayout(width, cores, size);
-      expect(layout.inner).toBeGreaterThanOrEqual(10);
-      expect(layout.inner).toBeLessThanOrEqual(30);
-      expect(layout.columns * layout.rows).toBeGreaterThanOrEqual(cores);
-      if (cores <= 32) expect(layout.rows, `${cores} cores at ${width}`).toBeLessThanOrEqual(8 * Math.ceil(Math.min(cores, 8) / 8));
+test("the cores fill the width first: as many columns as fit, rows = ceil(cores / columns), the bars stretching to the column", () => {
+  expect(machineLayout(116, 1)).toMatchObject({ columns: 1, rows: 1, coreInner: 111 });
+  expect(machineLayout(116, 2)).toMatchObject({ columns: 2, rows: 1 });
+  expect(machineLayout(116, 8)).toMatchObject({ columns: 4, rows: 2 });
+  expect(machineLayout(116, 12)).toMatchObject({ columns: 4, rows: 3 });
+  expect(machineLayout(116, 32)).toMatchObject({ columns: 4, rows: 8 });
+  expect(machineLayout(76, 12)).toMatchObject({ columns: 2, rows: 6 });
+  expect(machineLayout(76, 1)).toMatchObject({ columns: 1, rows: 1 });
+  expect(machineLayout(20, 12)).toMatchObject({ columns: 1, rows: 12 });
+  expect(machineLayout(200, 12).columns).toBeGreaterThan(4);
+  for (const width of [30, 76, 96, 116, 200]) {
+    for (const cores of [1, 2, 8, 12, 32, 128]) {
+      const layout = machineLayout(width, cores);
+      expect(layout.columns * layout.rows, `${cores} at ${width}`).toBeGreaterThanOrEqual(cores);
+      expect(layout.coreInner, `${cores} at ${width}`).toBeGreaterThan(0);
     }
   }
+});
+
+test("the facts sit on the right half when it holds them, else under the bars; the used bars take the left half", () => {
+  expect(machineLayout(76, 8)).toMatchObject({ beside: true, usedInner: 31 });
+  expect(machineLayout(116, 8)).toMatchObject({ beside: true, usedInner: 51 });
+  expect(machineLayout(60, 8)).toMatchObject({ beside: false, usedInner: 55 });
 });
 
 test("the cores are laid out column by column", () => {

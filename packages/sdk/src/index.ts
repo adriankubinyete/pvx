@@ -956,10 +956,10 @@ export interface SdkUi {
   Meter: Component<{ value: number; width?: number; label?: string; suffix?: string; warnAbove?: number }>;
   /**
    * The bar of a system monitor: `0  [|||||||           54.0%]`. `value` goes from 0 to 1; `width` is the cells between the brackets (default 30, the percentage
-   * takes the last 6 of them); `label` (in the `info` color, padded to `labelWidth`) and `suffix` (dim, after the `]`, e.g. `7,9/8G`) are optional.
+   * takes the last 6 of them); `label` (in the `info` color, padded to `labelWidth`) `suffix` (dim, after the `]`, e.g. `7,9/8G`) and `text` (right-aligned inside the bar in place of the percentage, e.g. `6,4/13,7G`) are optional.
    * The `|` are the accent color, and the warn color above `warnAbove` (default 0,8); the brackets and the percentage are dim.
    */
-  BarMeter: Component<{ value: number; width?: number; label?: string; labelWidth?: number; suffix?: string; warnAbove?: number }>;
+  BarMeter: Component<{ value: number; width?: number; label?: string; labelWidth?: number; suffix?: string; text?: string; warnAbove?: number }>;
   /**
    * A time series as `▁▂▃▅` blocks, oldest first, stretched to `width` cells (default 14). `values` are 0..`max` (default 100); `suffix` is the dim text after
    * the bar (default: the last value as a percentage when `max` is 100, else none); `label` is a dim prefix.

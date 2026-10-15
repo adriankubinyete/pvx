@@ -53,15 +53,16 @@ test("Início at 120x40 has the bars, the facts, the sections and the footer, an
   for (const s of ["central-sp-01", "ligado", "carga", "rede", "mem[", "swp[", "dsk[", "1 Atenção", "sem perfil", "conformidade não verificada", "[ verificar ]"]) expect(small.t.frame(), s).toContain(s);
 });
 
-test("with the bars of eight cores the facts still fit beside them at 80 columns; with many cores they go under the bars", async () => {
-  const eight = await mount({ cols: 80, rows: 24 });
-  expect(lines(eight.t).find((l) => l.includes("central-sp-01"))!.indexOf("central-sp-01")).toBeGreaterThan(30);
-  eight.t.destroy();
-  const many = await mount({ cols: 80, rows: 24, cores: 32 });
-  const host = lines(many.t).findIndex((l) => l.includes("central-sp-01"));
-  const mem = lines(many.t).findIndex((l) => l.includes("mem["));
-  expect(host).toBeGreaterThan(mem); // under the bars
-  expect(lines(many.t)[host]!.indexOf("central-sp-01")).toBeLessThan(6);
+test("the facts sit on the right half beside mem, swp and dsk, which take the left half with their size inside the bar, at 80 and 120 columns", async () => {
+  for (const cols of [80, 120] as const) {
+    const { t } = await mount({ cols, rows: 40 });
+    const host = lines(t).findIndex((l) => l.includes("central-sp-01"));
+    const mem = lines(t).findIndex((l) => l.includes("mem["));
+    expect(host, `at ${cols}`).toBe(mem);
+    expect(lines(t)[host]!.indexOf("central-sp-01"), `at ${cols}`).toBeGreaterThanOrEqual(cols / 2 - 6);
+    expect(lines(t)[mem], `at ${cols}`).toMatch(/mem\[[| ]*3,1\/6G\]/);
+    t.destroy();
+  }
 });
 
 test("the facts: hostname in bold, the session IP in its own color, the load with the first value bold, the product from the slot", async () => {
@@ -87,32 +88,39 @@ test("without a session there is no `sessão` line", async () => {
   expect(t.frame()).not.toContain("sessão");
 });
 
-test.each([1, 2, 4, 8, 16, 32, 64] as const)("every one of %i cores is a bar, in columns of up to eight when there are many", async (cores) => {
+/** The htop-style grid of core bars (it fills the width first): the columns and the rows at each width. */
+const CORE_GRID: Record<number, Record<number, { columns: number; rows: number }>> = {
+  80: { 1: { columns: 1, rows: 1 }, 2: { columns: 2, rows: 1 }, 8: { columns: 2, rows: 4 }, 12: { columns: 2, rows: 6 }, 32: { columns: 2, rows: 16 } },
+  120: { 1: { columns: 1, rows: 1 }, 2: { columns: 2, rows: 1 }, 8: { columns: 4, rows: 2 }, 12: { columns: 4, rows: 3 }, 32: { columns: 4, rows: 8 } },
+};
+
+test.each([1, 2, 8, 12, 32] as const)("every one of %i cores is a bar, filled across the width and column by column", async (cores) => {
   for (const cols of [80, 120] as const) {
+    const { columns, rows } = CORE_GRID[cols]![cores]!;
     const { t } = await mount({ cols, rows: 80, cores }); // tall enough to see every bar: the page itself scrolls at 24 rows
     const text = lines(t).join("\n");
-    for (let i = 0; i < cores; i++) expect(text, `core ${i} at ${cols}`).toMatch(new RegExp(`(^|\\s)${i} +\\[[| ]+\\d+\\.\\d%\\]`, "m"));
-    const first = lines(t).findIndex((l) => /^\s+0 +\[/.test(l));
+    for (let core = 1; core <= cores; core++) expect(text, `core ${core} at ${cols}`).toMatch(new RegExp(`(^|\\s)${core} +\\[[| ]+\\d+\\.\\d%\\]`, "m"));
+    const first = lines(t).findIndex((l) => /^\s+1 +\[/.test(l));
     const memRow = lines(t).findIndex((l) => l.includes("mem["));
-    const barsPerLine = (lines(t)[first]!.match(/\d+ +\[/g) ?? []).length;
-    if (cores <= 32) expect(barsPerLine, `${cores} cores at ${cols}`).toBe(Math.ceil(cores / 8)); // one column up to eight cores, another for each eight more
-    else expect(barsPerLine, `${cores} cores at ${cols}`).toBeGreaterThan(3);
-    expect(memRow).toBeGreaterThan(first);
+    expect((lines(t)[first]!.match(/\d+ +\[/g) ?? []).length, `${cores} cores at ${cols}`).toBe(columns);
+    expect(memRow - first, `${cores} cores at ${cols}`).toBe(rows);
+    if (rows > 1) expect(lines(t)[first + 1], "column-major").toMatch(/^\s+2 +\[/);
     for (const l of lines(t)) expect(l.length).toBeLessThanOrEqual(cols);
     t.destroy();
   }
 });
 
 test("a bar above 80% turns to the warn color; the others stay in the accent; the brackets and the percent are dim and the label is info", async () => {
-  const { t } = await mount({ cols: 120, rows: 40 }); // the fixture's core 5 is at 85%, core 4 at 48%
-  const row = (label: string) => lines(t).findIndex((l) => new RegExp(`^\\s+${label} +\\[`).test(l));
-  const spans = (label: string) => t.spans().lines[row(label)]!.spans;
-  const bar = (label: string) => spans(label).find((span) => span.text.includes("|"))!;
-  expect(bar("5").fg.equals(RGBA.fromHex(tokens.warn))).toBe(true);
-  expect(bar("4").fg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
-  expect(spans("4").find((span) => span.text.trim() === "4")!.fg.equals(RGBA.fromHex(tokens.info))).toBe(true);
-  expect(spans("4").find((span) => span.text === "[")!.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
-  expect(spans("4").find((span) => span.text.includes("48.0%"))!.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+  const cpu = { total: 1, cores: [48, 85], load: [1, 1, 1], history: [1] };
+  const { t } = await mount({ cols: 120, rows: 40, machine: { cpu } }); // two cores sit in one row: 48% then 85%
+  const row = lines(t).findIndex((l) => /^\s+1 +\[/.test(l));
+  const spans = t.spans().lines[row]!.spans;
+  const bars = spans.filter((span) => span.text.includes("|"));
+  expect(bars[0]!.fg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
+  expect(bars[1]!.fg.equals(RGBA.fromHex(tokens.warn))).toBe(true);
+  expect(spans.find((span) => span.text.trim() === "1")!.fg.equals(RGBA.fromHex(tokens.info))).toBe(true);
+  expect(spans.find((span) => span.text === "[")!.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+  expect(spans.find((span) => span.text.includes("48.0%"))!.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
 });
 
 test("live values keep their width when they change: the bars and the facts end in the same cell at any use", async () => {
