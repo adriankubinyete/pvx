@@ -7,6 +7,8 @@ import { artifactStem, buildSummary, copyHint, embeddedEntrySource, gitState, in
 const root = join(import.meta.dir, "..");
 const fixtureSource = join(import.meta.dir, "fixtures/embed-module");
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
+/** A test that compiles the real app: under load (the full suite) a `bun build --compile` takes far more than the 5 s default. */
+const COMPILE_TIMEOUT_MS = 180_000;
 
 let work = "";
 beforeEach(() => {
@@ -205,7 +207,7 @@ test("build:dev embeds a checkout: named artifact, BUILD.txt, listed in version 
   expect(listed.lines.find((line) => line.module.id === "embed-demo")!.module.state).toBe("carregado");
   expect(runBinary(packed.bin, ["embed-demo", "ping"]).out).toContain("pong from an uncommitted change");
   expect(existsSync(join(work, "home/trust.json"))).toBe(false);
-});
+}, COMPILE_TIMEOUT_MS);
 
 test("an installed module of the same id loses to the embedded copy in the real binary", () => {
   const build = runBuild(["host", "--with", moduleRepo()], { PVX_DEV_BUILD: "1" });
@@ -220,7 +222,7 @@ test("an installed module of the same id loses to the embedded copy in the real 
   expect(rows).toHaveLength(1);
   expect(rows[0]!.module).toMatchObject({ version: "0.4.0", embedded: { id: "embed-demo" } });
   expect(readFileSync(join(installed, "index.ts"), "utf8")).toContain("must never be imported");
-});
+}, COMPILE_TIMEOUT_MS);
 
 test("build:dev without --with still works: a dev build with no embedded modules and the same naming", () => {
   const build = runBuild(["host"], { PVX_DEV_BUILD: "1" });
@@ -230,7 +232,7 @@ test("build:dev without --with still works: a dev build with no embedded modules
   expect(packed.buildTxt).toContain("módulos embutidos: nenhum");
   const text = runBinary(packed.bin, ["version"]).out;
   expect(text.trim()).toBe(`pvx ${version} (dev)`);
-});
+}, COMPILE_TIMEOUT_MS);
 
 test("--with is refused outside build:dev, in a release build, and for a checkout that fails validation", () => {
   const dir = moduleRepo();
@@ -287,4 +289,4 @@ test("the real dev artifact is refused by the release guard, and release.sh runs
   const tarball = join(build.dist, readdirSync(build.dist).find((name) => name.endsWith(".tar.gz"))!);
   expect(guard(tarball).exitCode).toBe(1);
   expect(readFileSync(join(root, "scripts/release.sh"), "utf8")).toContain('sh scripts/check-artifact.sh "$dist/pvx-$t.tar.gz"');
-});
+}, COMPILE_TIMEOUT_MS);

@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
 const version = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version as string;
+/** A test that compiles the real app: under load (the full suite) a `bun build --compile` takes far more than the 5 s default. */
+const COMPILE_TIMEOUT_MS = 180_000;
 
 /** Compiles the real app for the host and returns the unpacked binary path. */
 function build(release: boolean, profilesSrc?: string) {
@@ -28,7 +30,7 @@ test("a release-mode artifact has no dev mark and prints the plain version; a de
 
   const dev = build(false);
   expect(Bun.spawnSync([dev, "--version"]).stdout.toString()).toMatch(new RegExp(`^pvx ${version.replace(/\./g, "\\.")} \\(nightly, \\w+\\)`));
-}, 120_000);
+}, COMPILE_TIMEOUT_MS);
 
 test("the compiled binary carries only the selected profiles (no profiles dir next to it)", () => {
   const src = mkdtempSync(join(tmpdir(), "pvx-profiles-"));
@@ -38,7 +40,7 @@ test("the compiled binary carries only the selected profiles (no profiles dir ne
   // An unknown PVX_PROFILE would be a usage error: "main" must have come from the embedded set.
   expect(r.stdout.toString()).not.toContain("desconhecido");
   expect(readdirSync(join(bin, "..")).includes("profiles")).toBe(false);
-}, 120_000);
+}, COMPILE_TIMEOUT_MS);
 
 // Regression: an untracked local profiles/10-main.json shipped inside release v0.1.0.
 test("an untracked file in profiles/ is not embedded", () => {
@@ -51,7 +53,7 @@ test("an untracked file in profiles/ is not embedded", () => {
   } finally {
     rmSync(stray, { force: true });
   }
-}, 120_000);
+}, COMPILE_TIMEOUT_MS);
 
 test("release.sh builds in release mode and never publishes by itself", () => {
   const sh = readFileSync(join(root, "scripts/release.sh"), "utf8");
