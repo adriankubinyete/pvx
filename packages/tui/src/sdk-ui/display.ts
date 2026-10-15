@@ -2,7 +2,7 @@
 import type { DetailItem } from "@pvx/sdk";
 import { WIDE_COLS } from "../layout.ts";
 import { fixedPercent } from "../fixed.ts";
-import { graph } from "../tabs/machine-card.ts";
+import { graph } from "../graph.ts";
 import type { Glyphs } from "../theme.ts";
 
 const cellsOf = (text: string): number => [...text].length;

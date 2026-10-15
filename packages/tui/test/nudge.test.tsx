@@ -53,33 +53,35 @@ test("↓ at the end of a list nudges; ↑ at the top goes to the bar without a 
   expect(footer(t)).toContain("↓/enter entra na aba");
 });
 
+/** The numbers of the sections that carry the `▌` gutter: the active one. */
+const activeSections = (t: TuiHarness) => t.frame().split("\n").flatMap((l) => /▌ (\d) /.exec(l)?.[1] ?? []);
+
 test("Início: arrows are spatial; nothing on a side nudges; the numbers jump and stay as labels", async () => {
   const t = await mount();
-  expect(t.frame()).toContain("› [1] conformidade ●");
-  expect(t.frame()).toContain("› [2] atividade");
-  expect(t.frame()).not.toMatch(/› \d máquina/); // the non-navigable panel has no number
-  await t.press("ARROW_RIGHT"); // conformidade is the rightmost of its row
-  await gone(t, "nada aqui");
-  await t.press("ARROW_LEFT"); // máquina, on the left
-  expect(t.frame()).toContain("› máquina ●");
-  await t.press("RETURN"); // nothing to select in it
-  await gone(t, "nada para selecionar");
-  expect(t.frame()).toContain("› máquina ●");
+  expect(activeSections(t)).toEqual(["1"]);
+  expect(t.frame()).toContain("2 Atividade");
+  await t.press("ARROW_RIGHT"); // the sections are stacked: nothing on the right
+  expect(footer(t)).toContain("nada aqui");
+  await t.press("ARROW_LEFT");
+  expect(footer(t)).toContain("nada aqui");
   await t.press("ARROW_DOWN");
-  expect(t.frame()).toContain("› [2] atividade ●");
+  expect(activeSections(t)).toEqual(["2"]);
+  await t.press("RETURN"); // atividade has nothing to select
+  await gone(t, "nada para selecionar");
+  expect(activeSections(t)).toEqual(["2"]);
   await t.press("1");
-  expect(t.frame()).toContain("› [1] conformidade ●");
+  expect(activeSections(t)).toEqual(["1"]);
   await t.press("2");
-  expect(t.frame()).toContain("› [2] atividade ●");
+  expect(activeSections(t)).toEqual(["2"]);
 });
 
-test("Início: inside a panel the list edges wrap without a nudge; esc leaves", async () => {
+test("Início: inside a section the list edges wrap without a nudge; esc leaves", async () => {
   const t = await mount();
   await session.run("demo greet");
   await session.run("demo remember");
   await t.flush();
   await t.press("1");
-  await t.press("RETURN"); // the list of conformidade (module items)
+  await t.press("RETURN"); // the list of atenção (the module items)
   expect(footer(t)).toContain("esc sai");
   await t.press("ESCAPE");
   await t.press("2");
@@ -91,11 +93,11 @@ test("Início: inside a panel the list edges wrap without a nudge; esc leaves", 
   expect(t.frame()).toMatch(/» . demo remember/);
   expect(footer(t)).not.toContain("início da lista");
   expect(footer(t)).not.toContain("fim da lista");
-  expect(t.frame()).toContain("› [2] atividade ●"); // never jumped to another panel
+  expect(activeSections(t)).toEqual(["2"]); // never jumped to another section
   await t.press("ESCAPE");
   await Bun.sleep(150);
   await t.flush();
-  expect(footer(t)).toContain("enter entra");
+  expect(footer(t)).toContain("enter abre");
 });
 
 test("`/` from the focused tab bar opens Comando", async () => {

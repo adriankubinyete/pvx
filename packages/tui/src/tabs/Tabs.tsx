@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { type MachineSampler, type Pending, type Registry } from "@pvx/core";
+import type { SessionInfo } from "@pvx/sdk";
 import { matchKey } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
 import { createMenuNav, Menu, type MenuNav } from "../menu/Menu.tsx";
@@ -110,7 +111,7 @@ function BarRule() {
  * for completing); with the bar focused, left/right switch and down enters the tab. The tab handler is `base`, so
  * content that consumes a key (a form's `tab`) wins.
  */
-export function Tabs({ store, registry, nav, version, profile, modules, now = Date.now, logsMs, sampler }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null; modules?: ModulesDeps; now?: () => number; logsMs?: number; sampler?: MachineSampler }) {
+export function Tabs({ store, registry, nav, version, profile, modules, now = Date.now, logsMs, sampler, session }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null; modules?: ModulesDeps; now?: () => number; logsMs?: number; sampler?: MachineSampler; session?: SessionInfo }) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const update = (p: Partial<TabsNav>) => (Object.assign(nav, p), bump());
   const nudge = useNudge();
@@ -166,7 +167,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
         <BarRule />
         {/* A mouse down anywhere in the content moves the keyboard in; it bubbles up after the clicked element has handled it. */}
         <box flexGrow={1} minHeight={0} flexDirection="column" onMouseDown={api.focusContent}>
-          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} /> : null}
+          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} session={session} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {CORE.includes(active) ? <CoreTab key={active} store={store} line={active} cache={nav.core} refreshMs={logsMs} /> : null}
           {active === "sistema" ? <SistemaTab store={store} registry={registry} version={version} /> : null}

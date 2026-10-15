@@ -92,7 +92,7 @@ test("Conformidade shows the cached results; r there and r in Início refresh th
   const { t, calls } = await mount(await load());
   await t.press("r"); // Início: runs the check
   await t.flush();
-  expect(t.frame()).toMatch(/1 de 5/);
+  expect(t.frame()).toContain("[ rodar o plano (3 passos) ]");
   expect(calls.sort()).toEqual(["conformidade", "plano"]); // one refresh = both
   await open(t);
   expect(t.frame()).toContain("[✓] fine: em ordem");
@@ -107,7 +107,7 @@ test("Conformidade shows the cached results; r there and r in Início refresh th
   await t.flush();
   expect(calls).toHaveLength(4);
   await t.press("ESCAPE"); // ... back to the tabs: Início reads the same cache
-  expect(t.frame()).toMatch(/1 de 5/);
+  expect(t.frame()).toContain("[ rodar o plano (3 passos) ]");
   expect(calls).toHaveLength(4);
 });
 
@@ -118,8 +118,26 @@ test("the first visit to the page checks; Início sees the result without checki
   await t.flush();
   expect(t.frame()).toContain("cap-fixture.a: pendente");
   await t.press("ESCAPE");
-  expect(t.frame()).toMatch(/1 de 5/);
+  expect(t.frame()).toContain("[ rodar o plano (3 passos) ]");
   expect(calls).toHaveLength(2);
+});
+
+test("Início: `p` and the plan button open the plan page of the module that has the role", async () => {
+  const { t } = await mount(await load());
+  expect(t.frame()).not.toContain("rodar o plano"); // nothing to run before the first check
+  await t.press("r");
+  await t.flush();
+  await t.press("p");
+  await t.flush();
+  expect(t.frame()).toContain("1 Resultados");
+  expect(t.frame()).toContain("1. cap-fixture fix-a para cap-fixture.a");
+  await t.press("ESCAPE");
+  await t.press("RETURN"); // inside atenção
+  for (let i = 0; i < 5; i++) await t.press("ARROW_DOWN"); // down to the actions row: the plan is its first button
+  await t.press("ARROW_LEFT");
+  await t.press("RETURN");
+  await t.flush();
+  expect(t.frame()).toContain("1 Resultados");
 });
 
 test("the plan panel lists the steps in order and the manual items", async () => {

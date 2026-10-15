@@ -193,7 +193,7 @@ test("Comando: esc focuses the last block, up on the first block focuses the bar
 
 test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", async () => {
   const { t } = await mount();
-  expect(t.frame()).toContain("› [1] conformidade");
+  expect(t.frame()).toContain("▌ 1 Atenção");
   await t.press("TAB");
   expect(t.frame()).toContain("instalados");
     await t.press("TAB"); // Logs
@@ -205,7 +205,7 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   await t.press("TAB"); // Sistema
   expect(t.frame()).toContain("[1] aparência");
   await t.press("TAB"); // wraps to Início
-  expect(t.frame()).toContain("› [1] conformidade"); // the Início panel
+  expect(t.frame()).toContain("1 Atenção"); // the Início section
 });
 
 test("tabs: up on the first row focuses the bar, right switches at once, down enters the first row", async () => {
@@ -354,7 +354,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   const foot = () => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
   const expectScope = (scope: "tabs" | "modules" | "home") => {
     for (const s of footerFor(scope)) expect(foot()).toContain(`${s.keys} ${s.label}`);
-    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : scope === "home" ? "↑↓←→ painel" : "↑↓←→ cartão");
+    expect(foot()).toContain(scope === "tabs" ? "↓/enter entra na aba" : scope === "home" ? "enter abre" : "↑↓←→ cartão");
     expect(foot()).not.toContain(scope === "tabs" ? "↑↓ move" : "troca aba");
   };
   expectScope("home");
@@ -378,7 +378,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[2]).toMatch(/^ ╭─› máquina.*╭─› \[1\] conformidade ●─/); // row 0 is the bar, row 1 the rule
+  expect(t.frame().split("\n")[2]).toMatch(/^\s+\S+\s+.* · ligado há /); // row 0 is the bar, row 1 the rule, then the content: no frame, no repeated title
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[2]).toMatch(/^\s+instalados \d+\s+catálogo\s+c alterna/); // the switch: Módulos has cards, not a panel
@@ -415,7 +415,7 @@ test("? help fits 80x24 from every main context and esc returns to the same focu
   await t.press("TAB", { shift: true });
   await check("tabs", "↓/enter entra na aba"); // bar on Início
   await t.press("ARROW_DOWN");
-  await check("home", "r atualiza");
+  await check("home", "r verifica");
   await t.type("/demo greet ana"); // `/` goes to Comando
   await t.press("RETURN");
   await t.flush();

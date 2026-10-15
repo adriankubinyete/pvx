@@ -95,7 +95,7 @@ export default (sdk: Sdk) => {
 
   const COPY_ROWS = [
     { label: "acesso web", value: "https://10.0.0.1", tone: "ip" as const },
-    { label: "senha web", value: "xxxx-xxxx-xxxx" },
+    { label: "senha web", value: "senha-exemplo" },
   ];
 
   function Copy() {

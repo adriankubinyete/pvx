@@ -21,7 +21,8 @@ interface Entry {
   next: number;
 }
 
-const isList = (slot: SlotId) => slot !== "home.summary";
+const TEXT_SLOTS: readonly SlotId[] = ["home.summary", "home.product"];
+const isList = (slot: SlotId) => !TEXT_SLOTS.includes(slot);
 /** Home slots have fixed shapes: anything else is a broken widget. */
 const validShape = (slot: SlotId, d: unknown) => (slot === "home.panel" ? true : isList(slot) ? Array.isArray(d) : typeof d === "string");
 

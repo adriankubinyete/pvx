@@ -461,7 +461,7 @@ Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui
 
 ```text
    acesso web   https://10.0.0.1
-   senha web    xxxx-xxxx-xxxx
+   senha web    senha-exemplo
 
    copiar acesso
 ```
@@ -485,7 +485,7 @@ Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui
 
 ```text
   13:31:02  ❯ firewall apply                                              ✓ 41ms
-      [✓] regras aplicadas: 40 · failsafe 203.0.113.5
+      [✓] regras aplicadas: 40 · failsafe 198.51.100.7
       [i] confirme o acesso em 60 s: firewall confirm
 ```
 

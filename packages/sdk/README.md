@@ -455,6 +455,7 @@ export default (sdk: Sdk) => {
 | `home.chips` | `{ label, level, detail? }[]` |
 | `home.attention`, `home.configured` | `{ level, title, fix? }[]` |
 | `home.summary` | `string` |
+| `home.product` | `string`: o produto da central, na linha da máquina do Início (`Issabel 5`) |
 | `home.notes` | `string[]` |
 | `home.panel` | forma ainda em definição |
 
@@ -1145,7 +1146,7 @@ export default (sdk: Sdk) => {
             copyLabel="copiar acesso"
             rows={[
               { label: "acesso web", value: "https://10.0.0.1", tone: "ip" },
-              { label: "senha web", value: "xxxx-xxxx-xxxx" },
+              { label: "senha web", value: "senha-exemplo" },
             ]}
           />
         </Panel>

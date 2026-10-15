@@ -41,7 +41,7 @@ test("widgets fill their slots by priority; the throwing and the hanging ones ar
   expect(f).toContain("widget quebrou: widget-demo.hang");
   expect(readFileSync(join(logsDir(), "core.log"), "utf8")).toMatch(/widget widget-demo\.boom quebrou: widget explodiu[\s\S]*widget widget-demo\.hang quebrou: passou de 60 ms/);
   await t.press("ARROW_DOWN"); // the home keeps responding: atividade is below
-  expect(t.frame()).toContain("› [2] atividade ●");
+  expect(t.frame()).toMatch(/▌ 2 Atividade/);
 });
 
 test("home.attention combines the profile's pending items with a module item; enter puts the fix in the draft", async () => {
@@ -53,8 +53,8 @@ test("home.attention combines the profile's pending items with a module item; en
   expect(at("cap-fixture.a: pendente")).toBeGreaterThan(0);
   expect(at("demo: revisar o painel")).toBeGreaterThan(at("cap-fixture.a: pendente")); // host first, then module
   expect(at("widget quebrou: widget-demo.hang")).toBeGreaterThan(at("demo: revisar o painel"));
-  expect(t.frame()).toMatch(/1 de 5/); // home.summary
-  await t.press("RETURN"); // enter the panel
+  expect(t.frame()).toMatch(/1 capacidade em dia/);
+  await t.press("RETURN"); // enter the section
   for (let i = 0; i < 4; i++) await t.press("ARROW_DOWN"); // 4 pending items from the profile, then the module's
   await t.press("RETURN");
   expect(t.frame()).toContain("❯ widget-demo read home.chips");
@@ -76,17 +76,16 @@ test("refreshMs re-renders the home through the single scheduler", async () => {
   expect(seen.size).toBeGreaterThan(2);
 });
 
-test.each([[80, 24], [230, 24]] as const)("chips line sits alone under the bar at %ix%i", async (cols, rows) => {
+test.each([[80, 24], [230, 24]] as const)("chips line sits alone under the machine block at %ix%i", async (cols, rows) => {
   const { t } = await mount({ cols, rows });
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Início");
-  expect(lines[2]).toContain("✓ demo"); // row 1 is the rule
   expect(lines.filter((l) => l.includes("✓ demo"))).toHaveLength(1);
+  const swap = lines.findIndex((l) => l.includes("swap"));
+  expect(lines[swap + 2]).toContain("✓ demo"); // a blank row between the gauges and the chips
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
-  expect(lines.filter((l) => l.includes("› máquina"))).toHaveLength(1);
-  expect(lines.filter((l) => l.includes("› [1] conformidade"))).toHaveLength(1);
-  expect(lines.filter((l) => l.includes("› [2] atividade"))).toHaveLength(1);
-  expect(lines[rows - 1]).toContain("↑↓←→ painel");
+  expect(lines.filter((l) => l.includes("▌ 1 Atenção"))).toHaveLength(1);
+  expect(lines[rows - 1]).toContain("enter abre");
 });
 
 test("Início drops the widget items of a module whose widgets the user hid; the others stay", async () => {

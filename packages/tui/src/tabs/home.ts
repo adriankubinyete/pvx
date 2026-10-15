@@ -6,9 +6,6 @@ import type { CoreResult } from "./CoreTab.tsx";
 
 export type Level = "ok" | "warn" | "error";
 
-/** Meter color: above 85% error, above 70% warn. */
-export const levelOf = (pct: number): Level => (pct > 85 ? "error" : pct > 70 ? "warn" : "ok");
-
 /** `▰▰▰▱▱▱▱▱▱▱` as two halves, so the caller can color the filled part. */
 export function meter(pct: number, width: number, g: Glyphs): [filled: string, empty: string] {
   const n = Math.max(0, Math.min(width, Math.round((pct / 100) * width)));

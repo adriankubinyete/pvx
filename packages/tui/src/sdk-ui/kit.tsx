@@ -33,16 +33,25 @@ export function headerParts(title: string, activeGlyph: string): { number?: stri
   return { number: numbered?.[1], label: label.charAt(0).toUpperCase() + label.slice(1) };
 }
 
-/** One header line: the number and the label in the tone when the section is active (bold), dim otherwise. */
-function SectionHeader({ title, color, active }: { title: string; color: string; active: boolean }) {
-  const { g } = useTheme();
+/** One header line: the number and the label in the tone when the section is active (bold), dim otherwise; `aside` is a dim note at the right end. */
+function SectionHeader({ title, color, active, aside }: { title: string; color: string; active: boolean; aside?: string }) {
+  const { c, g } = useTheme();
   const { number, label } = headerParts(title, g.active);
   return (
-    <text wrapMode="none" flexShrink={0} fg={color}>
-      {number ? `${number} ` : ""}
-      {active ? <b>{label}</b> : label}
-    </text>
+    <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
+      <text wrapMode="none" flexShrink={0} fg={color}>
+        {number ? `${number} ` : ""}
+        {active ? <b>{label}</b> : label}
+      </text>
+      {aside ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(aside)}</text> : null}
+    </box>
   );
+}
+
+/** What the host's own pages add to a `Panel`; a module never sets it. */
+export interface SectionExtras {
+  /** A dim note at the right end of the header line (`perfil: Issabel produção`). */
+  aside?: string;
 }
 
 /**
@@ -50,14 +59,14 @@ function SectionHeader({ title, color, active }: { title: string; color: string;
  * With `tone` the section is the active one (or needs attention): the header takes the tone and a `▌` gutter runs down its side;
  * without it the gutter is blank, so the content does not move. A Panel with neither `title` nor `tone` is a plain container.
  */
-export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, children }: Props<"Panel">) {
+export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, children }: Props<"Panel"> & SectionExtras) {
   const { c, g } = useTheme();
   const section = title !== undefined || t !== undefined;
   const active = t !== undefined;
   const gutter = section ? { border: ["left" as const], borderColor: active ? tone(c, t) : c.bg, customBorderChars: { ...GUTTER_CHARS, vertical: active ? g.gutter : " " }, paddingLeft: 1 } : {};
   return (
     <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined ? { marginTop: 1 } : {})} {...gutter}>
-      {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} /> : null}
+      {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} aside={aside} /> : null}
       {children as ReactNode}
     </box>
   );

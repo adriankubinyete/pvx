@@ -227,7 +227,7 @@ test("copyText aligns the labels and trims the line ends", () => {
 for (const [cols, rows] of SIZES) {
   test(`CopyBlock: rows on the panel fill without a border, and the button copies the formatted text (${cols}x${rows})`, async () => {
     const got: string[] = [];
-    const rowsData = [{ label: "acesso web", value: "https://10.0.0.1", tone: "ip" as const }, { label: "senha web", value: "xxxx-xxxx-xxxx" }];
+    const rowsData = [{ label: "acesso web", value: "https://10.0.0.1", tone: "ip" as const }, { label: "senha web", value: "senha-exemplo" }];
     h = await renderTui(
       <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><HostCtx.Provider value={bareHost()}>
         <CopyProvider clipboard={async (text) => (got.push(text), { ok: true })}>
@@ -237,7 +237,7 @@ for (const [cols, rows] of SIZES) {
       { cols, rows },
     );
     expect(h.frame()).toContain("acesso web  https://10.0.0.1");
-    expect(h.frame()).toContain("senha web   xxxx-xxxx-xxxx");
+    expect(h.frame()).toContain("senha web   senha-exemplo");
     expect(h.frame()).not.toMatch(/[╭╮╰╯│]/); // no border
     expect(spanOf(h, "acesso web").bg.equals(color(tokens.panel))).toBe(true); // the subtle fill
     expect(spanOf(h, "https://10.0.0.1").fg.equals(color(tokens.ip))).toBe(true);
@@ -245,7 +245,7 @@ for (const [cols, rows] of SIZES) {
     expect(spanOf(h, "[ copiar acesso ]").fg.equals(color(tokens.accent))).toBe(true);
     await h.click(columnOf(h, "[ copiar acesso ]") + 2, rowIndex(h, "[ copiar acesso ]"));
     await h.flush();
-    expect(got).toEqual(["acesso web  https://10.0.0.1\nsenha web   xxxx-xxxx-xxxx"]);
+    expect(got).toEqual(["acesso web  https://10.0.0.1\nsenha web   senha-exemplo"]);
   });
 }
 

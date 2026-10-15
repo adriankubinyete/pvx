@@ -697,12 +697,12 @@ export interface FieldOption {
  * Home slots. The data shape of each slot is fixed by the core; a widget that returns another shape is removed as broken.
  * Lower `priority` comes first. `home.panel` is reserved: accepted but not rendered yet (free `render()` is deferred).
  */
-export type SlotId = "home.chips" | "home.attention" | "home.configured" | "home.summary" | "home.notes" | "home.panel";
+export type SlotId = "home.chips" | "home.attention" | "home.configured" | "home.summary" | "home.product" | "home.notes" | "home.panel";
 
 export type SlotData =
   | { label: string; level: Level; detail?: string }[] // home.chips
   | { level: Level; title: string; fix?: string }[] // home.attention, home.configured
-  | string // home.summary
+  | string // home.summary, home.product
   | string[]; // home.notes (home.panel is reserved)
 
 export interface WidgetDef {

@@ -26,6 +26,9 @@ describe("SlotHub", () => {
     hub.add("m", "s2", { slot: "home.summary", priority: 1, data: () => "um" });
     await hub.refresh();
     expect(hub.read("home.summary")).toBe("um · dois");
+    hub.add("m", "p", { slot: "home.product", priority: 0, data: () => "Issabel 5" });
+    await hub.refresh();
+    expect(hub.read("home.product")).toBe("Issabel 5"); // a text slot, like the summary
   });
 
   test("a widget that throws, times out or returns the wrong shape is removed, logged, and the others stay", async () => {

@@ -47,32 +47,35 @@ const goNotas = async (t: TuiHarness) => {
   await t.flush();
 };
 
-test("Início shows the notes panel only when the slot has data: pinned notes and the count of new ones", async () => {
+test("Início shows the notes section with `+ nova nota` and, when the slot has data, the pinned notes and the count of new ones", async () => {
   const { t } = await mount();
-  expect(t.frame()).not.toContain("notas");
+  expect(t.frame()).toContain("2 Notas");
+  expect(t.frame()).toContain("+ nova nota");
+  expect(t.frame()).not.toContain("carlos:");
   t.destroy();
   note("a1a1a1", "carlos", "token trocado: feito relogin");
   pin("a1a1a1");
   note("b2b2b2", "carlos", "solta, nao fixada");
   const m = await mount();
   const f = m.t.frame();
-  expect(f).toContain("› [3] notas");
+  expect(f).toContain("2 Notas");
+  expect(f).toContain("+ nova nota");
   expect(f).toContain("2 novas");
   expect(f).toContain("carlos: token trocado: feito relogin");
   expect(f).not.toContain("solta, nao fixada");
 });
 
-test("80x24: the notes panel fits in one column and each fixed line stays alone on its line", async () => {
+test("80x24: the notes section fits in one column and each fixed line stays alone on its line", async () => {
   note("a1a1a1", "carlos", "token trocado");
   pin("a1a1a1");
   const { t } = await mount({ cols: 80, rows: 24 });
   const lines = t.frame().split("\n");
   expect(lines[0]).toMatch(/^\s*Início\s+Módulos/);
-  expect(lines.filter((l) => l.includes("› [3] notas"))).toHaveLength(1);
-  expect(lines.some((l) => l.includes("carlos: token trocado"))).toBe(true);
+  expect(lines.filter((l) => l.includes("2 Notas"))).toHaveLength(1);
   expect(lines.filter((l) => l.trim()).at(-1)).toContain("? ajuda"); // the footer line is intact
-  await t.press("3");
-  expect(t.frame()).toContain("› [3] notas ●");
+  await t.press("2");
+  expect(t.frame()).toContain("▌ 2 Notas");
+  expect(t.frame()).toContain("carlos: token trocado"); // the section is scrolled into view
 });
 
 test("a note with ANSI shows as inert text in the Notas page and in Início", async () => {

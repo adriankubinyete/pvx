@@ -64,39 +64,37 @@ test("a click on a tab label still switches tab and keeps the bar focused", asyn
   expect(f).toContain("aparência");
 });
 
-/** Click inside a Início panel, on its empty area (below the title and its two header lines). */
-const clickPanel = async (t: TuiHarness, title: string) => {
+/** Click inside a Início section, on the blank row under its header. */
+const clickSection = async (t: TuiHarness, title: string) => {
   const lines = t.frame().split("\n");
   const y = lines.findIndex((l) => l.includes(title));
   expect(y).toBeGreaterThan(-1);
-  await t.click(lines[y]!.indexOf(title) + 4, y + 4);
+  await t.click(lines[y]!.indexOf(title) + 4, y);
 };
-const focusedPanels = (t: TuiHarness) => ["[1] conformidade", "[2] atividade"].filter((p) => t.frame().includes(`${p} ●`));
+/** The numbers of the sections that carry the `▌` gutter: the active one. */
+const focusedPanels = (t: TuiHarness) => t.frame().split("\n").flatMap((l) => /▌ (\d) /.exec(l)?.[1] ?? []);
 
-test("Início, bar focused: a click inside panel 1 focuses panel 1 (not the last one, panel 2)", async () => {
+test("Início, bar focused: a click on section 1 focuses section 1 (not the last one, section 2)", async () => {
   const t = await mount();
-  expect(focusedPanels(t)).toEqual([]);
   await t.press("ARROW_DOWN");
-  await t.press("2"); // panel 2 is the last focused
-  await t.press("ARROW_UP");
-  await t.press("ARROW_UP"); // up from panel 2 goes to máquina/conformidade then the bar
+  await t.press("2"); // section 2 is the last focused
   await t.press("ARROW_UP");
   await t.press("ARROW_UP");
   expect(t.frame()).toContain(BAR_FOOTER);
-  await clickPanel(t, "[1] conformidade");
+  await clickSection(t, "1 Atenção");
   expect(t.frame()).not.toContain(BAR_FOOTER);
-  expect(focusedPanels(t)).toEqual(["[1] conformidade"]);
+  expect(focusedPanels(t)).toEqual(["1"]);
 });
 
-test("Início, tab focused on panel 2: a click on panel 1 moves the focus to panel 1", async () => {
+test("Início, tab focused on section 2: a click on section 1 moves the focus to section 1", async () => {
   const t = await mount();
   await t.press("ARROW_DOWN");
   await t.press("2");
-  expect(focusedPanels(t)).toEqual(["[2] atividade"]);
-  await clickPanel(t, "[1] conformidade");
-  expect(focusedPanels(t)).toEqual(["[1] conformidade"]);
-  await clickPanel(t, "[2] atividade");
-  expect(focusedPanels(t)).toEqual(["[2] atividade"]);
+  expect(focusedPanels(t)).toEqual(["2"]);
+  await clickSection(t, "1 Atenção");
+  expect(focusedPanels(t)).toEqual(["1"]);
+  await clickSection(t, "2 Atividade");
+  expect(focusedPanels(t)).toEqual(["2"]);
 });
 
 test("Comando: with the bar focused, hovering a block still tints it and a click focuses the block", async () => {
