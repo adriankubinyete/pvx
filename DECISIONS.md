@@ -78,6 +78,10 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Scrollback do Comando com a hora na linha do comando e resultado com recuo fixo de 4 colunas → [Primitivos de leitura (etapa 1 do redesenho)](#2026-10-15--primitivos-de-leitura-etapa-1-do-redesenho)
 - Nenhuma página prende o teclado: `Fields` só pega as teclas enquanto a página as tem, `esc` sai do campo e depois chega à barra, `tab` nas pontas vai para o host, `expectNoKeyboardTrap` → [Nenhuma página prende o teclado, cards, sucesso e largura fixa](#2026-10-15--nenhuma-página-prende-o-teclado-cards-sucesso-e-largura-fixa)
 - Sucesso e concluído usam o token `ok`, nunca o acento; rodando é o `info` → [Nenhuma página prende o teclado, cards, sucesso e largura fixa](#2026-10-15--nenhuma-página-prende-o-teclado-cards-sucesso-e-largura-fixa)
+- Páginas do host (etapa 2 do redesenho): Início no estilo do htop (`BarMeter` por núcleo, fatos à direita, Atenção com botões, Notas e Atividade de uma linha), Sistema em três seções com prévia ao vivo e editor inline do tema personalizado, aba Tarefas escondida por padrão, Logs com todos os logs mesclados, Comando com modo shell, paleta de uma borda, chips de filtro em Módulos → [Páginas do host: etapa 2 do redesenho](#2026-10-15--páginas-do-host-etapa-2-do-redesenho)
+- Seção vazia continua selecionável (número, setas, clique; estado ativo e linha de vazio); navegação nunca a pula → [Páginas do host: etapa 2 do redesenho](#2026-10-15--páginas-do-host-etapa-2-do-redesenho)
+- Logs lê todos os logs (núcleo, módulos, jobs), não só `core.log`; `FilterChips` é a fileira de filtros de Logs e Módulos → [Páginas do host: etapa 2 do redesenho](#2026-10-15--páginas-do-host-etapa-2-do-redesenho)
+- Modo shell do Comando: `!` como primeiro caractere é o modo, não o texto; o scrollback mostra o marcador `!` e os resultados na margem esquerda → [Páginas do host: etapa 2 do redesenho](#2026-10-15--páginas-do-host-etapa-2-do-redesenho)
 - Valor ao vivo tem largura fixa (`fixedNumber`, `fixedRate`, `fixedPercent`, `fixedClock`) → [Nenhuma página prende o teclado, cards, sucesso e largura fixa](#2026-10-15--nenhuma-página-prende-o-teclado-cards-sucesso-e-largura-fixa)
 
 - Colar funciona em todo campo de texto: o `KeyRouter` entrega o paste com colchetes só a quem registra `paste: true`; uma linha, sem escapes, controles nem quebras (juntado, não recusado); segredo mascarado e nunca ecoado → [Colar em todo campo](#2026-10-15--colar-em-todo-campo)
@@ -1472,3 +1476,32 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o dono enviava o formulário e ainda movia o cursor, sem sinal de que algo rodava.
 
 **Limite:** não há cancelamento do comando (precisaria de abort no contrato).
+
+## 2026-10-15 — Páginas do host: etapa 2 do redesenho
+
+**Status:** vigente. Substitui o desenho do Início em painéis com moldura ("Início em grade", "Painel máquina estilo btop"), a aba Sistema em duas seções, o formulário de `Logs` como saída de `pvx logs` e o scrollback com recuo (a regra do recuo de 4 colunas em "Primitivos de leitura").
+
+**Decisão:** as páginas do próprio host seguem os mockups aprovados (`pvx-design/telas`), com os primitivos da etapa 1.
+
+- **Início.** Duas colunas no alto: à esquerda uma `BarMeter` (nova no `sdk.ui`) por núcleo, `mem`, `swp` e `dsk`; à direita o hostname, `ligado`, `carga`, `processos N · M rodando`, `rede`, `sessão` e os 3 processos mais pesados. Uma coluna de barras até 8 núcleos, outra a cada 8 a mais, com as barras encurtando antes de as colunas diminuírem; a coluna da direita desce quando não cabe ao lado. `1 Atenção` reúne os itens do perfil, os avisos dos módulos e do host (a faixa de `▲` acima das seções saiu), a memória acima de 90% e a conformidade não verificada, cada um com o seu botão numa coluna; `2 Notas` e `3 Atividade` são uma linha até o `enter` abri-las. O produto da central vem do novo slot de texto `home.product`. O amostrador de máquina lê `procs_running` e o `rss` dos processos.
+- **Sistema.** Uma página, três seções (`pvx`, `Aparência`, `Avançado`). O tema, os símbolos, a moldura e o resultado são fileiras de botões; o acento é um seletor de `●` (o escolhido é `(●) nome`, o `tema` é `◌`). A prévia ao vivo mostra os primitivos reais no tema que valeria se a opção sob o mouse, o swatch sob o teclado ou o hex digitado fosse escolhido (`ThemePreview`), ao lado a partir de 120 colunas e embaixo abaixo disso. O tema `Personalizado` esconde as opções de predefinição e traz o editor inline sob `tema`. `Avançado` tem a caixa `aba Tarefas` (`showTasksTab` no estado da TUI, desligada por padrão).
+- **Correção do editor de tema.** Numa linha de cor personalizada, `↓` voltava ao seletor `moldura`: a cor `border` e o eixo `border` tinham o mesmo id na mesma lista, e o índice achava o primeiro. As linhas de cor ganharam ids próprios (`token:<cor>`), e o teste anda por todas as linhas em ordem.
+- **Tarefas.** Aba núcleo escondida até ligar em Sistema, entre as abas de módulo e Logs, com a contagem das que rodam. Lê os jobs e as fases de todos os módulos (`listTasks`): em andamento, e terminadas nas últimas 24 h, com o fim do log da selecionada. `JobStatus` ganhou `origin` e `stoppedBy` (`cron` sem terminal, `manual` com terminal). `x` para pelo `jobs stop`, `c` continua pelo novo `jobs resume` (só quando o job guarda fases a continuar e não recebeu segredos), `l` abre `jobs log`. Cada nome de job guarda só a última execução.
+- **Logs.** Causa de a aba mostrar uma linha só: ela rodava `pvx logs` sem argumento, que lê só o `core.log`, com 50 entradas. Agora lê todos os arquivos (núcleo, módulos, rotacionados), mescla por hora e mostra as linhas dos jobs (já espelhadas no log do módulo). As entradas viraram dados (`readLogEntries`, `readAuditEntries`, `jobOfEntry`). Ordem do mais antigo ao mais novo, para o `end` ser o fim ao vivo (o mockup lista o mais novo primeiro).
+- **Comando.** Resultados na margem esquerda, sem recuo; blocos sem fundo e sem linha em branco entre eles; o campo é uma linha preenchida. O modo shell (`!` como primeiro caractere, digitado ou colado) consome o `!`, usa o prompt `!` em `warn`, tem rodapé próprio e sai com o backspace numa linha vazia ou `esc`; o histórico guarda o `!` e `↑` o traz no modo. O marcador `!` substitui `$ !cmd` no scrollback.
+- **Paleta.** Diálogo de uma borda só, resultados em grupos com as letras casadas em negrito (a busca casa palavras em ordem), uma linha de dicas. Comportamento mantido: favoritos, formulário de argumentos, fila, ocupado e colar.
+- **Módulos.** `instalados`/`catálogo` viraram `FilterChips` navegável (a mesma peça de Logs); `c` segue como atalho. A faixa de detalhe perdeu a régua de cima.
+- **Seção vazia.** Continua selecionável (UI.md, seção 1); Tarefas tem um ponto de parada por seção vazia.
+- **Dados de exemplo.** Docs e testes usam IPs de documentação (RFC 5737), hostnames como `central-01` e senhas como `senha-exemplo`; nenhum dado real do dono entra no repositório.
+
+**Motivo:** terminar a troca do desenho das telas do núcleo, que ficaram para trás dos primitivos da etapa 1, e dar ao dono a visão das tarefas e dos logs que o pvx já produzia mas não mostrava.
+
+**Desvios dos mockups.**
+
+- Tarefas: só a última execução de cada nome de job (o arquivo do job guarda uma); a barra de progresso é do token `info` (rodando), não do acento.
+- Logs: do mais antigo ao mais novo.
+- Início: os botões das linhas de Atenção são `[ corrigir ]` (o item não diz o verbo); Atividade lista comandos, não eventos.
+- Sistema: o título da seção `pvx` sai capitalizado (`Pvx`) porque o cabeçalho de seção capitaliza.
+- Comando: o resultado segue o formato do tema (`[✓]`), não o `✓` do mockup.
+
+**Limite:** não há ação de ver processos por módulo (`[ ver processos ]` abre `!top` no Comando); a prévia do Sistema não repinta o fundo do terminal.

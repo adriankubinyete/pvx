@@ -30,6 +30,8 @@ barra de abas  ──↓/enter──▶  página  ──enter──▶  painel  
 - Um formulário só pega o teclado enquanto o técnico está nele. Numa página com vários blocos, o formulário não nasce "ativo": o técnico entra (`enter` ou clique) e `esc` devolve à página (`Fields active`, `onCancel`).
 - Teste: `expectNoKeyboardTrap(page)` (`@pvx/testing`; monte a página com `renderTab`) falha se até três `esc` não levam à barra de abas. Chame-o em todo teste de página que tenha formulário, `textarea` ou captura de teclas.
 
+**Uma seção vazia continua selecionável.** Lista vazia, nada para agir: a seção ainda recebe o foco, para a tela não parecer travada. A tecla do número, as setas e o clique chegam nela; ela mostra o estado ativo (cabeçalho em acento e a calha `▌`) e a sua linha de vazio, apagada e curta (`nenhuma tarefa em andamento`). `enter` numa seção vazia não faz nada de ruim (sem itens, avisa "nada para selecionar"). Se a seção tem uma ação principal (`+ nova nota`), a linha da ação existe e recebe o foco. A navegação nunca pula uma seção vazia. Em código: um ponto de parada por seção vazia (`Tarefas`), ou o painel com `panelRef` mesmo sem linhas (`usePanels`).
+
 Exemplos no código:
 
 - `packages/tui/src/panelnav.ts` (`pickPanel`, `panelStep`).
@@ -263,7 +265,7 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `Notice` | aviso que fica na tela ("precisa aplicar") | bloco em linha `[✓]`/`[!]`/`[✗]`/`[i]` na cor do nível (`[i]` é azul); `action` põe um botão no fim da linha; só tokens do tema |
 | `Card`, `CardGrid` | blocos que representam coisas (módulos, hosts, serviços) | seção 20 |
 | `ConfirmPreview` | mostrar numa folha ou ajuda como é a pergunta | o diálogo da seção 18 desenhado no lugar, sem fundo escurecido nem teclas |
-| `Badge`, `Details`, `Meter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `Row fit` | leitura de estado e valores | seção 19 |
+| `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `FilterChips`, `Row fit` | leitura de estado e valores | seção 19 |
 | `Loading`, `useAsync` | toda espera visível | spinner e texto |
 | `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
 
@@ -448,6 +450,13 @@ Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui
   memória  ━━━━━━━━━━━━━━━━━───   86%
 ```
 
+**Barra de monitor.** `BarMeter` é a barra no estilo do htop: `0  [|||||||           54.0%]` e, depois do `]`, um tamanho apagado (`7,9/8G`). O rótulo vai no token `info`; os `|` no acento (e no aviso acima de 80%); os colchetes e a porcentagem, apagados. A largura entre os colchetes é fixa (padrão 30; a porcentagem ocupa as 6 últimas células), então a coluna não pula.
+
+```text
+  0  [|||||||||||||           54.0%]
+  mem[||||||||||||||||||||||| 99.0%] 7,9/8G
+```
+
 **Escolha única, várias e caixa** num formulário (seção 7): rádio e fileira de botões para uma opção, fileira de caixas para várias. `←` `→` movem a escolha, o mouse escolhe:
 
 ```text
@@ -475,19 +484,30 @@ Peças do framework para mostrar estado e valores. O módulo as usa pelo `sdk.ui
     ★ gama    ok          ← mouse por cima: só o fundo
 ```
 
-**Chips de filtro.** O escolhido cheio no destaque, os outros no fundo `panel`; o módulo guarda o filtro:
+**Chips de filtro.** `FilterChips` é a fileira: o escolhido cheio no destaque, os outros no fundo `panel`, o clique escolhe, e a que tem o teclado vai sublinhada (`cursor`). Quem a usa guarda o filtro e as teclas: `←→` movem, `enter` escolhe. Logs e Módulos usam a mesma peça. Em Módulos a fileira (`instalados 3`, `catálogo`) tem foco próprio: `↑` da primeira linha de cartões vai a ela, `←→` andam, `enter` ou o clique escolhem, `↓` volta aos cartões, `↑` ou `esc` vão à barra de abas; `c` continua como atalho. Em Logs, `←→` escolhem na hora (o cursor é o escolhido).
 
 ```text
    todos   lorem   ipsum   dolor      ● ao vivo   / buscar
 ```
 
-**Scrollback do Comando.** A hora vem na linha do comando e as linhas de resultado têm um recuo fixo e pequeno, sem se alinhar à coluna da hora:
+**Seletor de acento.** Um `●` colorido por predefinição, dois espaços entre eles. O escolhido é `(●) roxo`, com os parênteses na cor normal e o nome em negrito; o `tema` (o acento segue o tema) é um `◌` apagado. O swatch sob o teclado ou o mouse, quando não é o escolhido, vem sublinhado no fundo `panel`, e a prévia já mostra o resultado: `←→` movem, `enter` escolhe.
+
+```text
+  acento   (◌) tema  ●  ●  ●  ●           ← tema escolhido
+  acento   ◌  ●  ●  ●  (●) roxo           ← roxo escolhido
+```
+
+**Scrollback do Comando.** A hora vem na linha do comando e as linhas de resultado começam na margem esquerda, na mesma coluna da hora, sem recuo. Um comando do shell mostra o marcador `!` (token `warn`) no lugar do prompt, e o `!` não faz parte do texto do comando. Os blocos ficam um sob o outro, sem fundo e sem linha em branco entre eles:
 
 ```text
   13:31:02  ❯ firewall apply                                              ✓ 41ms
-      [✓] regras aplicadas: 40 · failsafe 198.51.100.7
-      [i] confirme o acesso em 60 s: firewall confirm
+  [✓] regras aplicadas: 40 · failsafe 198.51.100.7
+  [i] confirme o acesso em 60 s: firewall confirm
+  17:20:25  ! echo wasd                                                   ✓ 12ms
+  wasd
 ```
+
+**Modo shell do Comando.** `!` como primeiro caractere (digitado, ou no começo de um colado) liga o modo shell: o `!` é consumido, o prompt vira `!` no token `warn`, o texto aparece em `warn` e o rodapé diz `esc sai do shell`. Apagar com o backspace numa linha vazia, ou `esc`, volta ao prompt do pvx. `enter` roda no shell do host como antes (sem root); o histórico guarda a entrada com o `!`, e `↑` a traz de volta já no modo shell. O campo do Comando é uma linha preenchida (`selected`) sem borda em volta.
 
 **Página mais alta que a tela.** `Scroll` rola com `↑` `↓`, `pgup` `pgdn`, `home`, `end` e a roda do mouse.
 
@@ -516,6 +536,18 @@ Exemplos no código: `packages/tui/src/sdk-ui/display.tsx` (`Badge`, `Details`, 
 - **Em página de módulo.** Uma folha que mostra estados desenha `Card state="selected" | "inactive" | "normal"`; uma página que navega entre cards usa `CardGrid` e a regra da seção 17 (o foco entra por `enter` ou clique).
 
 Exemplos no código: `packages/tui/src/sdk-ui/card.tsx` (`CardFace`, `CardGrid`, `Card`), `packages/tui/src/sdk-ui/card-layout.ts` (`gridCols`, `cardWidth`), `packages/tui/src/menu/CardGrid.tsx` (os módulos da aba Módulos), `pvx-kitdemo` (a folha).
+
+## 21. As páginas do host
+
+As abas do núcleo seguem o desenho aprovado (`pvx-design/telas`). Resumo do que cada uma mostra e das teclas; os testes de quadro em `packages/tui/test` fixam 80x24 e 120x40.
+
+- **Início.** No alto, dois blocos no estilo do htop: à esquerda uma `BarMeter` por núcleo (uma coluna até 8 núcleos, outra a cada 8 a mais, com as barras encurtando antes de as colunas diminuírem), depois `mem`, `swp` e `dsk` com o tamanho apagado; à direita o hostname em negrito e o sistema, `ligado`, `carga` (o primeiro valor em negrito), `processos N · M rodando`, `rede ↓ … ↑ …`, `sessão <ip>` e os 3 `mais pesados` (nome, cpu, memória). Em terminal estreito, ou com muitos núcleos, a coluna da direita desce para baixo das barras. Embaixo, `1 Atenção` (uma linha por item: glifo do nível, texto curto e, quando há o que fazer, o botão `[ corrigir ]` numa coluna só; a memória acima de 90% vira `memória em 99%` com `[ ver processos ]`, e a conformidade nunca verificada vira `[ ] conformidade não verificada` com `[ verificar ]`; os avisos dos módulos e do host entram aqui, não numa faixa acima), com `[ rodar o plano (N passos) ]` e `[ verificar de novo ]` depois da verificação. `2 Notas` e `3 Atividade` são uma linha cada (`nenhuma · + nova nota`, o resumo apagado dos comandos recentes) até o `enter` abri-las em linhas; continuam selecionáveis vazias. Teclas: `1 2 3` seção, `enter` abre ou age, `p` plano, `r` verifica, `n` nota, `esc` sobe.
+- **Sistema.** Uma página, três seções: `1 pvx` (versão, atualização com `[ atualizar ] [ verificar ]`, plataforma, dados, embutidos, a dica apagada de desinstalar), `2 Aparência` e `3 Avançado` (a caixa `aba Tarefas · mostrar`, desligada por padrão, guardada no estado da TUI). Aparência tem o `tema` como fileira de botões, o seletor de acento (seção 19) e `símbolos`, `moldura` e `resultado` como fileiras de botões; ao lado (a partir de 120 colunas, com cerca de 36% da largura) ou embaixo (abaixo disso) fica a prévia ao vivo: os primitivos reais (cabeçalho de seção ativo e inativo, linha selecionada, os quatro avisos, dois botões, um campo, um selo, uma barra e uma etapa `✓` no token `ok`) no tema que estaria valendo se a opção sob o mouse, o swatch sob o teclado ou o hex que se digita fosse escolhido. Com o tema `Personalizado`, as opções de predefinição somem e o editor (`começar de` e uma linha por cor, `enter` edita o hex) toma o lugar sob `tema`; o cursor fica em `tema`. Teclas: `↑↓` andam pelas linhas, `←→` mudam a opção, `enter` escolhe, `u` atualiza, `1 2 3` seção.
+- **Tarefas.** Aba escondida até ligar em Sistema; fica entre as abas de módulo e Logs, com a contagem das que rodam (`Tarefas 1`). `1 Em andamento` (tarefa, módulo, início com cron ou você, tempo e a barra com a fase) e `2 Terminadas` das últimas 24 h (`✓ concluída` no token `ok`, `✗ falhou` com a fase e a causa, `■ parada` com quem parou), e o fim do log da tarefa selecionada. Cada tarefa mostra a última execução do nome. Teclas: `x` para (pergunta antes), `c` continua da fase (só quando ela guarda fases e não recebeu segredos), `l` log inteiro no Comando, `enter` abre a aba do módulo.
+- **Logs.** Todos os logs mesclados (o do núcleo e o de cada módulo, com as linhas dos jobs), do mais antigo ao mais novo, agrupados por dia (`hoje`, `ontem`, a data) com a hora local, a coluna do módulo e a palavra do nível só para `aviso` e `erro`. No alto, `FilterChips` (`todos`, `pvx`, um por módulo), o chip de nível (`info+`), `/ buscar` e `● ao vivo`. A linha selecionada mostra as linhas que a continuam e, se é de um job, `↳ fase … · tarefa … · enter mostra o log da tarefa`. Teclas: `←→` módulo, `n` nível, `/` buscar, `enter` detalhes (ou o log do job), `c` copia, `end` ao vivo, `a` alterna para o audit.
+- **Comando.** O scrollback e o modo shell da seção 19; o campo é uma linha preenchida; `tab` completa, `↑` histórico.
+- **Paleta.** Diálogo flutuante de uma borda só: o campo no alto, uma régua, os resultados em grupos (`favoritos` e `recentes` com a busca vazia, depois `comandos` e `páginas`) com as letras casadas em negrito no acento (cada palavra da busca casa em ordem), a nota apagada e, à direita, as marcas (`★`, `!`) e a tecla `enter` na linha selecionada; embaixo uma régua e uma linha apagada de dicas. O formulário de argumentos e a fila aparecem sob a lista.
+- **Módulos.** A grade de cartões de sempre, com a fileira de `FilterChips` (seção 19) em cima e a faixa de detalhe do cartão selecionado embaixo (sem régua).
 
 ## Checklist antes de entregar uma tela
 

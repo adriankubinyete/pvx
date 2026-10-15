@@ -12,7 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/adriankubinyete/pvx/main/install.sh
 
 O instalador baixa a última release, confere o SHA-256 e instala o binário em `/usr/local/lib/pvx/pvx`, com links em `/usr/local/bin` e `/usr/bin` (assim `sudo pvx` funciona mesmo com o `secure_path` do RHEL e do Rocky). Para uma versão específica: `PVX_VERSION=v0.1.0`.
 
-Rode `pvx` sem argumentos para abrir a TUI, ou `pvx --help` para a lista de comandos. `pvx --version` mostra a versão. A aba Sistema da TUI reúne a aparência (temas) e o que é do próprio pvx: versão, caminhos, verificação de atualização e o comando de desinstalação.
+Rode `pvx` sem argumentos para abrir a TUI, ou `pvx --help` para a lista de comandos. `pvx --version` mostra a versão. A aba Sistema da TUI reúne o que é do próprio pvx (versão, caminhos, verificação de atualização e o comando de desinstalação), a aparência (tema, acento, prévia ao vivo) e, em Avançado, a caixa `aba Tarefas`. A aba Tarefas fica escondida até você ligá-la ali: ela lista os jobs em segundo plano de todos os módulos (em andamento e terminados nas últimas 24 h) e deixa parar (`x`), continuar da fase (`c`) e ver o log (`l`). A aba Logs junta o log do núcleo e o de cada módulo; `a` mostra o audit.
 
 ## Atualizar
 
