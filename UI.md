@@ -137,30 +137,46 @@ Exemplos no código:
 
 ## 7. Formulários
 
-Use `ui.Fields` (`packages/sdk/src/index.ts`).
-
-- `salvar` e `cancelar` estão sempre presentes.
-- `remover` é opcional (`onDelete`) e pede confirmação antes de agir.
-- `↑↓` e `Tab` andam entre campos e botões; `enter` avança e, no último campo, salva.
-- `espaço` marca uma caixa (`toggle`) ou uma opção (`multi`) e escolhe uma opção (`choice`); `↑↓` andam pelas opções e, nas pontas, passam ao campo vizinho.
-- `secret` mostra `●` no lugar do texto; a tecla `generate` do campo vai para o rodapé e o `?`.
-- Erro inline sob o campo, via `validate` (o primeiro campo com erro recebe o foco e bloqueia o envio).
-- Na edição, o valor enviado é gravado como está: campo vazio limpa o valor.
-- `ctrl+s` salva e `esc` cancela.
+Use `ui.Fields` (campos próprios) ou `ui.Form` (os argumentos de um comando do módulo). Os dois desenham o mesmo formulário, que é o padrão do pvx. A regra de linguagem está na seção 16; aqui está o desenho.
 
 ```text
- nome     [ ssh              ]
- origem   [ 10.0.0            ]
-          ✗ IP inválido
- ativa    [x]
- [ salvar ] [ cancelar ] [ remover ]
+ Criar o usuário no UOE                                    ← título em negrito
+ Cria o usuário e já entra                                 ← descrição, apagada, uma linha
+
+ › Usuário *     ░admin░░░░░░░░░░░░░░░░░░░░░  Nome do novo usuário
+                                                           ← uma linha em branco entre campos
+   Senha *       ░••••••••░░░░░░░░░░░░░░░░░░░  Mínimo de 8 caracteres
+                 ✗ preencha este campo                     ← erro: vermelho, abaixo do valor
+   ID do cliente ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+   Pasta no UOE  ░clientes/12-3-acme░░░░░░░░░░
+   Ativa         [x] enviar também as de ontem
+
+   [ criar e entrar ]  [ cancelar ]                        ← primário cheio (fundo de acento)
+
+ ↑↓ tab campo   enter avança   ctrl+s salva   ctrl+d ver o comando   esc voltar   ? ajuda
 ```
+
+O desenho, sem exceção:
+
+- **Título e descrição.** O título (negrito) vem de `title` (em `Form`: o `title` do comando, senão o `help`); a descrição apagada, de uma linha, vem de `description`. O título aparece uma só vez: um `Panel` em volta com o mesmo título é erro.
+- **Rótulo e obrigatório.** Rótulos alinhados numa coluna. O obrigatório é um `*` vermelho (token `error`) logo depois do rótulo, nunca verde nem de acento. Campo opcional não leva marca.
+- **Célula de valor.** Todo campo de texto tem uma célula com fundo preenchido (token `panel`), de largura fixa (30 colunas), mesmo vazia. A célula do campo em foco tem fundo mais forte (`selected`) e o cursor. Em temas sem fundo próprio (Terminal) o cursor continua visível.
+- **Marcador de foco.** O `›` do campo em foco mora numa coluna própria de 2 células: ele nunca desloca rótulo nem valor.
+- **Espaço entre campos.** Uma linha em branco entre campos. Se o terminal for baixo, a área dos campos rola (acompanha o foco) e mantém o espaço; os botões ficam fixos embaixo.
+- **Dica.** Dica só quando ajuda a preencher; nada de explicar o óbvio. Uma dica é uma restrição que o técnico precisa saber ("letras, números e hífen"), ou a descrição curta de uma opção que não se explica sozinha. Não explique o motivo de um desenho ("nunca as de hoje: o dia ainda não acabou", "sorteado entre 01h e 05h"), nem repita o rótulo. Ela fica apagada à direita do valor, curta (corta com `…` e some se não couber). Nada de `stdin`, `PVX_SECRET_*`, "prompt" ou "(segredo)".
+- **Erro.** Vermelho, na linha abaixo do valor, começando com `✗`. `required` vazio mostra "preencha este campo"; `validate` põe o resto.
+- **Segredo.** `secret` mostra `••••` (`g.mask`); `ctrl+r` mostra ou oculta; a tecla `generate` do campo gera e mostra.
+- **Botões.** O primário vem cheio (fundo de acento): `[ criar e entrar ]` (`submitLabel`, padrão `salvar`); `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`) e pergunta no diálogo da seção 18. O botão em foco ganha sublinhado e o `›` da linha. Todos clicáveis.
+- **Comando.** O formulário de um comando não mostra a linha `$ pvx …` nem "segredo fora da linha". `ctrl+d` (e `?`, fora de campo de texto) mostra a linha, apagada, numa só linha.
+- **Campo derivado.** `derive(values)` faz o campo seguir os outros enquanto o técnico não o editou. Editar para de seguir e guarda o texto; apagar até ficar vazio volta a seguir. A tela não diz nada sobre isso: o campo só mostra o valor, e ele continua editável. Exemplo: `Pasta no UOE` vira `clientes/<id-cliente>-<id-contrato>-<empresa>` conforme se digita.
+- **Teclas.** `↑↓` e `Tab` andam entre campos e botões; `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` cancela. Nas pontas de `choice` e `multi`, `↑↓` passam ao campo vizinho.
+- **Erro e envio.** O primeiro campo com erro recebe o foco e bloqueia o envio. Na edição, o valor enviado é gravado como está: campo vazio limpa o valor.
 
 Exemplos no código:
 
-- `packages/tui/src/sdk-ui/fields.tsx`.
-- `packages/tui/src/menu/MenuForm.tsx`.
-- `packages/tui/src/menu/AddBox.tsx`.
+- `packages/tui/src/sdk-ui/fields.tsx` (o formulário), `packages/tui/src/sdk-ui/command-form.tsx` e `packages/tui/src/sdk-ui/labels.ts` (rótulos e dicas dos argumentos).
+- `packages/tui/src/sdk-ui/derive.ts` (campo derivado).
+- `packages/tui/src/menu/MenuForm.tsx` (o mesmo formulário na aba Módulos).
 
 ## 8. Retorno de ações
 
@@ -218,11 +234,12 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 
 | Componente | Quando usar | Comportamento |
 | --- | --- | --- |
-| `Panel`, `Row`, `Text`, `Chip`, `Meter`, `KeyHint`, `Table`, `Spacer` | tela comum | tons do tema; `Panel` na raiz da página é a moldura da página |
+| `Panel`, `Row`, `Text`, `Chip`, `Meter`, `KeyHint`, `Table`, `Spacer` | tela comum | tons do tema; `Panel` é uma seção (linha de cabeçalho, sem borda; seção 15), na raiz é só o contêiner da página |
 | `List` | linhas navegáveis, com colunas | seção 4; seleção por id, hover, letreiro |
-| `Fields` | qualquer formulário | seção 7 |
+| `Fields`, `Form` | qualquer formulário | seção 7 (o formulário padrão) |
+| `useConfirm` | confirmar algo | diálogo centralizado, seção 18 |
 | `Conversation` | perguntas guiadas, uma por vez (instalador, assistente) | a respondida vira `✓ título   resumo`; a próxima aparece como `○ título`; `↑` no topo da pergunta sobe para as respondidas; `enter` ou clique reabre no lugar e volta ao ponto onde estava; depois da última vem a confirmação com todas as respostas (as puladas marcadas "(padrão)"), as notas "antes de instalar" e o botão principal; nada se aplica antes dele |
-| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável; `primary` em acento e negrito; `keys` põe a tecla no rodapé e no `?` |
+| `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável; `primary` em acento e negrito; `keys` põe a tecla no rodapé e no `?`; precisa de `keys` ou `focused` (seção 17) |
 | `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo; com `useRun` o tempo da fase em curso avança sozinho, e a barra anda dentro de uma fase longa por `phase.progress`; mostre uma espera (`Loading`) enquanto `run.loading` |
 | `RunPanel` | a tela de uma execução em fases (backup, instalação) | a barra e a palavra do estado, `Steps`, a falha (`Notice`, comando, código, saída, causa) com `[ continuar daqui ]`, os `children` do módulo e o log; `x` para, `c` copia o erro, `esc` sai; espera (`Loading`) até haver execução |
 | `ProgressBar` | progresso global de uma tarefa | `━` na largura toda, `%` e tempos; falha pinta o ponto de parada de vermelho, colado ao preenchido |
@@ -260,6 +277,106 @@ Exemplos no código:
 - `packages/sdk/README.md` (`Notice`, `List onAction`).
 - `packages/tui/src/sdk-ui/kit.tsx` (`Notice`).
 
+## 14. A aba já nomeia a página
+
+A barra de abas diz onde o técnico está. A página não repete o nome numa moldura.
+
+- Uma página mostrada como aba não desenha moldura nem título: o conteúdo começa logo abaixo da barra.
+- Uma página empilhada (aberta por `#página`, `push` ou pela palette) não tem aba própria: mostra uma linha apagada de migalhas, sem caixa.
+- Uma tela de várias etapas dentro da aba (formulário, resultado) usa a mesma linha de migalhas.
+
+```text
+  Início  Módulos  Issabel  Logs  Comando  Sistema          ← a aba já nomeia a página
+ 
+  1 Rotinas                                                  ← conteúdo, sem moldura "Issabel"
+  ...
+```
+
+```text
+ Autobackup › nova rotina                                    ← página empilhada: uma linha, sem caixa
+ ...
+```
+
+Exemplos no código: `packages/tui/src/sdk-ui/pages.tsx` (`PageContent`, `Breadcrumb`), `packages/tui/src/menu/Crumb.tsx`.
+
+## 15. No máximo uma borda
+
+Uma borda por cima de outra é proibida. Seção de página é cabeçalho e espaço, não caixa.
+
+- Seção (`Panel`): linha de cabeçalho numerada (`1 Rotinas`) em acento e negrito quando ativa, apagada nas outras, com uma linha em branco acima. O indicador de ativa é a calha `▌` em acento ao lado do conteúdo; sem foco a calha fica em branco e o conteúdo não se move.
+- `Panel` sem `title` nem `tone` é só um contêiner (a raiz da página).
+- Formulário dentro de uma seção: sem caixa em volta (seção 7).
+- Uma grade de cartões é permitida: cada cartão é um item da grade (a aba Módulos), com uma borda só, e nada o envolve. Caixa dentro de caixa não é.
+- Diálogos e menus que flutuam (confirmação, menu de ações, palette) têm uma borda só, porque flutuam sobre a tela.
+- Um campo `area` (texto de várias linhas) tem a própria borda: é o campo, não uma moldura.
+
+```text
+ Antes (3 níveis)                         Depois
+ ╭ Autobackup ──────────────────╮
+ │ ╭ rotinas ─────────────────╮ │         1 Rotinas
+ │ │ ╭ tabela ───────────────╮│ │         ▌ NOME     AGENDA    ÚLTIMA
+ │ │ │ ...                   ││ │         ▌ diaria   02:10     ok
+ │ │ ╰───────────────────────╯│ │
+ │ ╰──────────────────────────╯ │         2 Autenticação
+ ╰──────────────────────────────╯           token válido
+```
+
+Exemplos no código: `packages/tui/src/sdk-ui/kit.tsx` (`Panel`, `headerParts`).
+
+## 16. Formulário fala a língua do técnico
+
+- Rótulo humano em pt-BR (`label` do argumento ou do campo). Sem `label`, o formulário mostra o nome humanizado (`id-cliente` vira "Id cliente"; escreva `label: "ID do cliente"` quando a capitalização importa).
+- Dica só quando ajuda a preencher; nada de explicar o óbvio (detalhe na seção 7).
+- A dica descreve o valor, não o CLI. O framework corta parênteses sobre `stdin`, `PVX_SECRET_*`, prompt e "(segredo)", mas o `help` do argumento já deve estar escrito para o técnico.
+- Nunca mostre o nome cru do argumento (`admin-password`), a linha do comando nem a explicação de como o segredo chega ao comando.
+- O título do formulário vem do título do comando (`title`), escrito uma vez.
+- O botão primário diz o que acontece (`[ criar e entrar ]`), não `[ executar ]`, quando o módulo sabe.
+
+## 17. Todo controle alcançável pelo teclado
+
+Todo botão, ação ou linha clicável tem um caminho pelo teclado. "Só com o mouse" é defeito.
+
+- Ação de página (`[ rodar agora ]`): é uma linha na seção a que pertence, alcançável por `↑↓` (a "linha de ações" no fim da lista, como `+ adicionar rotina…`), e/ou tem uma tecla (`keys`) que aparece no rodapé. Use as duas quando fizer sentido.
+- `Button` precisa de `keys` (tecla no rodapé) ou de `focused` (a página navega até ele e o desenha em foco). Um botão sem nenhum dos dois só responde ao mouse e é erro.
+- Botões de um formulário (`Fields`) andam por `Tab` e `↑↓` junto com os campos.
+- Teste: `expectButtonsReachable()` (`@pvx/testing`) falha se um botão montado não tem teclado. Chame-o depois de montar a tela, em todo teste de página.
+
+```text
+ 1 Rotinas
+   NOME       AGENDA
+ › diaria     02:10
+   + adicionar rotina…
+   ▶ rodar agora                  ← a ação é uma linha: ↑↓ chega nela, enter age
+```
+
+Exemplos no código: `packages/tui/src/sdk-ui/flow.tsx` (`Button`, `unreachableButtons`), `packages/testing/src/reachable.ts`.
+
+## 18. Confirmação
+
+Toda confirmação (comando destrutivo, `remover` de um formulário, uma ação do módulo) abre um diálogo centralizado, com a página ao fundo escurecida.
+
+- Título em negrito numa linha só; descrição apagada, de uma ou mais linhas, opcional.
+- Tudo centralizado dentro da caixa (título, linhas da descrição e a linha de botões), cada bloco separado do seguinte por uma linha `─` apagada.
+- Sem linha de dicas de teclas dentro do diálogo: as teclas são óbvias.
+- Dois botões, com rótulo próprio quando ajuda: `[ remover IP ]  [ manter ]`, `[ aplicar sem failsafe ]  [ voltar ]`. Padrão: `[ confirmar ]  [ cancelar ]`.
+- Ação destrutiva: o botão de confirmar usa o token `error`.
+- O foco começa na opção segura (a de cancelar). `←` `→` e `Tab` andam entre os botões, `enter` ativa, `esc` cancela, os dois botões são clicáveis.
+- Uma borda só (o diálogo flutua). O fundo e o diálogo são irmãos, porque `opacity` vale para a subárvore.
+- No módulo: `useConfirm()({ title, description?, confirmLabel?, cancelLabel?, destructive? })` devolve `Promise<boolean>`. A CLI mantém o prompt de texto.
+
+```text
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░╭────────────────────────────────────╮░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░│        Remover o IP 10.0.0.1?      │░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░│────────────────────────────────────│░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░│   A regra deixa de valer agora.    │░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░│────────────────────────────────────│░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░│    [ remover IP ]  [ manter ]      │░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░╰────────────────────────────────────╯░░░░░░░░░░░░░░░░░░
+```
+
+Exemplos no código: `packages/tui/src/session/ConfirmDialog.tsx`, `packages/tui/src/session/Modals.tsx`, `packages/sdk/src/index.ts` (`useConfirm`).
+
 ## Checklist antes de entregar uma tela
 
 - [ ] Setas, `enter`, `esc` e `↑` para a barra seguem os quatro níveis de foco.
@@ -268,7 +385,8 @@ Exemplos no código:
 - [ ] A lista dá a volta nas pontas, alinha colunas e rola só a linha selecionada; a seleção é por id.
 - [ ] O rodapé tem até ~5 atalhos; ações vivem num menu com `enter`; o resto está no `?`.
 - [ ] Estado tem cor e palavra; vazio é `—`; só tokens do tema; sem texto explicativo fixo.
-- [ ] Formulário tem `salvar` e `cancelar`, erro inline e confirmação em `remover`.
+- [ ] Formulário segue a seção 7 (rótulos humanos, `*` vermelho, célula de valor, uma linha entre campos, erro `✗` sob o valor, primário cheio) e a confirmação de `remover` é o diálogo da seção 18.
+- [ ] A aba já nomeia a página (sem moldura repetida), no máximo uma borda e todo controle alcançável pelo teclado (seções 14, 15 e 17).
 - [ ] Sucesso volta para a lista com `✓`; erro mostra a tela de resultado.
 - [ ] Se o salvo pode diferir do aplicado, a tela mostra `precisa aplicar` (seção 13).
 - [ ] Usei um componente do framework onde ele existe (seção 12); nenhuma espera passa de ~300 ms sem `Loading`.

@@ -72,6 +72,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Aba Sistema, a última: seção Aparência (temas) e seção pvx (sobre, atualização, desinstalar) → [Ajustes vira Sistema](#2026-10-14--ajustes-vira-sistema)
 - Matar `!cmd` com `x` ou `ctrl+c` → [Matar um comando em execução com `x` ou `ctrl+c`](#2026-10-13--matar-um-comando-em-execução-com-x-ou-ctrlc)
 - Aviso "nada aqui" para movimento inválido → [Aviso de movimento inválido, painéis numerados, `/` da barra e ordem das abas](#2026-10-09--aviso-de-movimento-inválido-painéis-numerados--da-barra-e-ordem-das-abas)
+- A aba já nomeia a página (página de aba sem moldura nem título; página empilhada com uma linha apagada de migalhas), no máximo uma borda (seção é cabeçalho numerado com a calha `▌`, `Panel` sem caixa; grade de cartões é permitida, caixa dentro de caixa não), todo controle alcançável pelo teclado (`Button` com `keys` ou `focused`, `expectButtonsReachable`) → [Sem caixa dentro de caixa](#2026-10-15--sem-caixa-dentro-de-caixa-aba-nomeia-a-página-no-máximo-uma-borda-formulário-padrão-e-diálogo-de-confirmação)
 
 ### SDK e módulos
 
@@ -103,6 +104,8 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `useCommand(linha).run({ args, stdin, secrets })`: o segredo vai ao comando pelo ambiente da execução (como o `Form`), nunca por argv nem pela linha do scrollback → [useCommand().run aceita secrets](#2026-10-14--usecommand-run-aceita-secrets)
 - `sdk.cron` (`validate`, `describe`, `normalize`), `sdk.crontab.block(id)` (leitura com "no crontab for", fusão do bloco marcado, escrita conferida e volta) e `sdk.validate.firstProblem` → [SDK: sdk.cron, sdk.crontab e sdk.validate](#2026-10-14--sdk-sdk-cron-sdk-crontab-e-sdk-validate)
 - `sdk.ui.RunPanel` (barra e palavra do estado, `Steps`, falha com comando, código, saída, causa e `continuar daqui`, `children` do módulo, log, `x` para, `c` copia o erro) desenhado a partir do `run` do `useRun` → [RunPanel: a tela de uma execução em fases no framework](#2026-10-14--runpanel-a-tela-de-uma-execução-em-fases-no-framework)
+- Formulário padrão em `Fields` e `Form` (título e descrição, `*` vermelho, célula de valor com fundo e largura fixa, uma linha entre campos com rolagem, dica à direita só quando ajuda, erro `✗` abaixo do valor, primário cheio, `label`/`required`/`help`/`derive`, sem linha de comando, `ctrl+d` mostra) → [Sem caixa dentro de caixa](#2026-10-15--sem-caixa-dentro-de-caixa-aba-nomeia-a-página-no-máximo-uma-borda-formulário-padrão-e-diálogo-de-confirmação)
+- Confirmação em diálogo centralizado (`useConfirm`, `ConfirmOptions`; título, descrição, dois botões, foco na opção segura, destrutivo no tom de erro, uma borda), usada pelo comando `destructive`, por ações do host e pelo `onDelete` de `Fields` → [Sem caixa dentro de caixa](#2026-10-15--sem-caixa-dentro-de-caixa-aba-nomeia-a-página-no-máximo-uma-borda-formulário-padrão-e-diálogo-de-confirmação)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -441,7 +444,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 ## 2026-10-09 — Início vira painel de informação; o menu de módulos vai para Módulos
 
-**Status:** substituída em parte por 2026-10-09 — Início em grade, versão fixa na barra, sem cabeçalho e por 2026-10-13 — Painel máquina estilo btop (o cabeçalho e a leitura da máquina de 5 s saíram; as setas `←`/`→` entre painéis hoje são espaciais, ver 2026-10-13 — Navegação espacial entre painéis, rolagem ao fim e hover; o resto vale)
+**Status:** substituída em parte por 2026-10-09 — Início em grade, versão fixa na barra, sem cabeçalho e por 2026-10-13 — Painel máquina estilo btop (o cabeçalho e a leitura da máquina de 5 s saíram; as setas `←`/`→` entre painéis hoje são espaciais, ver 2026-10-13 — Navegação espacial entre painéis, rolagem ao fim e hover; o resto vale) O Início mantém os painéis com borda (um nível, sem moldura em volta); a regra de uma borda só vale para ele como está (2026-10-15 — Sem caixa dentro de caixa: aba nomeia a página, no máximo uma borda, formulário padrão e diálogo de confirmação).
 
 **Decisão:** O Início passa a ser um painel de informação, e o menu de módulos vai para a aba Módulos.
 
@@ -590,7 +593,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 ## 2026-10-09 — Fecha a Fase 3: `useKey`, moldura única, módulos embutidos e Conformidade como módulo (3D)
 
-**Status:** substituída em parte por 2026-10-09 — Plano dentro de Conformidade, sem Diário, built-ins sem aba, relógio na barra (as abas Conformidade e Plano do item 4 e a ordem de abas saíram; `useKey`, moldura única, embutidos e o hook `useConformity` valem)
+**Status:** substituída em parte por 2026-10-09 — Plano dentro de Conformidade, sem Diário, built-ins sem aba, relógio na barra (as abas Conformidade e Plano do item 4 e a ordem de abas saíram; `useKey`, moldura única, embutidos e o hook `useConformity` valem); e por 2026-10-15 — Sem caixa dentro de caixa: aba nomeia a página, no máximo uma borda, formulário padrão e diálogo de confirmação (a "moldura única" desenhada pelo host saiu: a página de aba não tem moldura; `RootPanelCtx` saiu e o `Panel` é uma seção sem borda)
 
 **Decisão:** A Fase 3 fecha com `ui.useKey`, uma moldura única desenhada pelo host, módulos embutidos e a Conformidade como módulo.
 
@@ -839,7 +842,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 ## 2026-10-09 — Plano dentro de Conformidade, sem Diário, built-ins sem aba, relógio na barra (substitui partes de 3D, 6B e 6C)
 
-**Status:** vigente
+**Status:** vigente (em parte): os painéis `[1] resultados` e `[2] plano` continuam, mas o título passou a ser o cabeçalho de seção `1 Resultados`, com a calha `▌` no painel ativo, no lugar da moldura e do `●` (ver 2026-10-15 — Sem caixa dentro de caixa: aba nomeia a página, no máximo uma borda, formulário padrão e diálogo de confirmação)
 
 **Decisão:** O plano vira um painel da página de Conformidade, o Diário sai, os built-ins deixam de ser abas e a barra ganha um relógio.
 
@@ -1088,7 +1091,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - CLI do núcleo: `pvx jobs [list]`, `pvx jobs log <módulo> <nome> [--tail N] [-f]`, `pvx jobs stop <módulo> <nome>`; `jobs run` é interno. `jobs` entra nas palavras reservadas.
 - Log: o arquivo do job guarda o rastro cru (alimenta `useJob().lines`) e o log normal do módulo recebe o mesmo fluxo com `[job <nome>]`, sem linhas info que só mudam nos dígitos (barras de progresso); início e parada também vão ao `core.log`.
 - UI: `useQuery(nome, args, { refreshMs })` (mínimo 500 ms, mantém os dados e só renderiza se o resultado mudou), `useJob(nome)` (polling de 1 s, só renderiza se algo mudou), `Steps` e `LogTail` (reusa `follow.ts`; só a roda do mouse sai do fim).
-- `Fields`: `secret` (mascarado com `●`, tecla `generate` que gera 24 caracteres alfanuméricos e mostra o valor até o foco sair), `choice` (`(●)`/`( )`) e `multi` (`[x]`/`[ ]`; valor separado por vírgula, como `repeat`). `↑↓` andam pelas opções e, nas pontas, passam ao campo vizinho.
+- `Fields`: `secret` (mascarado com `••••` desde 2026-10-15; era `●`, tecla `generate` que gera 24 caracteres alfanuméricos e mostra o valor até o foco sair), `choice` (`(●)`/`( )`) e `multi` (`[x]`/`[ ]`; valor separado por vírgula, como `repeat`). `↑↓` andam pelas opções e, nas pontas, passam ao campo vizinho.
 
 **Motivo:** O instalador precisa sobreviver à queda da SSH e mostrar fases e log ao vivo; o SDK não tinha streaming, cancelamento, execução separada nem polling.
 
@@ -1354,3 +1357,18 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 
 **Limite:** o `dev-link` e o `modules link` seguem sendo o caminho do dia a dia na máquina de quem desenvolve. O embutido não recarrega. Um módulo embutido que falha ao registrar aparece com erro e ainda esconde a cópia instalada. No Windows o build gera o `.exe` e o `.BUILD.txt` lado a lado, sem tar. `applies` e `os` do manifest não são conferidos no build.
 
+## 2026-10-15 — Sem caixa dentro de caixa: aba nomeia a página, no máximo uma borda, formulário padrão e diálogo de confirmação
+
+**Status:** vigente. Substitui em parte "Fecha a Fase 3 (moldura única)" e o desenho de painéis do Início e da Conformidade (títulos `[n] nome ●` com borda); o formulário e a confirmação substituem o `Fields` simples da entrada "SDK: exec em streaming, jobs em segundo plano e kit de instalador" no que toca ao desenho (rótulo, botões, máscara `●`) e a confirmação `confirmar \`cmd\`? s/N` da TUI.
+
+**Decisão:** o dono testou o build dev numa central e achou "card dentro de card dentro de card". O framework passa a seguir quatro regras (UI.md, seções 14 a 18), e todo módulo as herda.
+
+- **A aba já nomeia a página.** `PageContent` não desenha moldura nem título. Uma página empilhada mostra uma linha apagada de migalhas (`Autobackup › nova rotina`: a aba do módulo, senão o id, e o título da página). As telas empilhadas da aba Módulos (formulário, adicionar, resultado, lista de comandos) usam a mesma linha (`Crumb`). A aba Logs perde a moldura e o título `logs`; a aba Sistema perde a moldura de `aparência` e de `pvx` (a faixa de seções `[1] aparência  [2] pvx` já as nomeia) e a prévia vira cabeçalho mais uma caixa de foco só. `RootPanelCtx` saiu.
+- **No máximo uma borda.** `Panel` é uma seção sem caixa: cabeçalho numerado (`[1] rotinas` vira `1 Rotinas`; um `●` final é descartado), uma linha em branco acima (o cabeçalho mais a linha em branco gastam as 2 linhas que a borda gastava, então as contas de altura dos módulos valem) e, com `tone`, o cabeçalho no tom e a calha `▌` (`g.gutter`) ao lado do conteúdo; sem `tone` a calha fica em branco. Um `Panel` sem `title` e sem `tone` é só o contêiner e cede altura (`shrink` implícito), para um formulário alto rolar em vez de empurrar o rodapé. A grade de cartões da aba Módulos fica como está (o dono gostou): o que se proíbe é caixa dentro de caixa. O Início mantém os painéis com borda e o cartão da máquina (cada um é um nível só). Diálogos, menus flutuantes, a palette e os painéis de revisão e de log têm uma borda só.
+- **Formulário padrão.** `Fields` e `Form` desenham o mesmo formulário, aprovado pelo dono como o padrão do pvx: título em negrito e descrição apagada; rótulos alinhados com `*` vermelho (token `error`) nos obrigatórios; célula de valor de largura fixa (30) com fundo `panel`, e `selected` mais o cursor no foco; marcador `›` em coluna própria de 2 células (nada se desloca); uma linha em branco entre campos, com a área dos campos rolando e os botões fixos; dica apagada à direita do valor; erro vermelho `✗` abaixo do valor; primário cheio (`submitLabel`, padrão `salvar`), `[ cancelar ]` e `[ remover ]` opcional. A máscara é `•` (`g.mask`; `*` em ASCII) e `ctrl+r` mostra e oculta. `ArgSpec.label`, `CommandDef.title`, `FieldSpec.required`, `help` e `derive` são novos e opcionais. `Form` vira um `Fields` gerado do `ArgSpec` (`CommandForm`, também na aba Módulos, no lugar do `MenuForm` com a linha `$ pvx`): sem linha de comando nem "segredo fora da linha"; `ctrl+d` (e `?` fora de campo de texto) mostra a linha, apagada. O framework corta da dica os parênteses sobre `stdin`, `PVX_SECRET_*`, prompt e "(segredo)". Dica só quando ajuda a preencher: o campo derivado (`derive`) segue os outros até ser editado, apagar volta a seguir, e a tela não diz nada sobre isso. O `Form` da palette (que mostra a linha do comando de propósito) só ganha a máscara nova e a dica limpa.
+- **Todo controle alcançável pelo teclado.** `Button` sem `keys` e sem `focused` só responde ao mouse: `unreachableButtons()` (host) e `expectButtonsReachable()` (`@pvx/testing`) o apontam nos testes. Uma ação de página é uma linha no fim da lista da seção (alcançada por `↑↓`) e/ou tem uma tecla no rodapé. Os módulos precisam migrar o `[ rodar agora ]` solto do topo (relatório de migração).
+- **Confirmação em diálogo.** `useConfirm()` e `SessionApi.confirm(opts)`: diálogo centralizado, fundo escurecido (irmãos, por causa da `opacity`), uma borda, título em negrito e linhas `─` entre título, descrição e botões, tudo centralizado e sem linha de teclas. Dois botões (`confirmLabel`, `cancelLabel`, padrão `confirmar` e `cancelar`); o foco começa em cancelar; `←` `→` `tab` movem, `enter` ativa, `esc` cancela, os botões respondem ao clique; `destructive` pinta o confirmar em `error`. O comando `destructive` (`rodar <cmd>?`), as ações do host (`act` com `confirm`), o `choice` (as opções são os botões, a primeira é a segura) e o `onDelete` de `Fields` (`deleteConfirm`) usam o mesmo diálogo. A CLI mantém o prompt de texto. Sai o atalho `s`/`N`: não havia como rotular dois botões com ele.
+
+**Motivo:** uma moldura repetindo a aba, uma caixa por seção e uma caixa em volta do formulário comiam largura e altura em 80x24 e deixavam a tela pesada; o formulário mostrava o CLI (nomes crus, `stdin`, a linha do comando) a um técnico; um botão no topo só respondia ao mouse.
+
+**Limite:** o rodapé do host junta `tecla rótulo` com três espaços e tem `esc voltar` e `? ajuda` globais: o formulário não consegue escrever `tab ↑↓ campo · enter … · esc cancelar · ? ver o comando` exatamente (`?` é do host e é texto num campo; o formulário usa `ctrl+d` e, fora de campo de texto, `?`). O Início segue com painéis em caixa. Em tema sem fundo próprio (Terminal) a célula de valor não tem fundo distinto: só o cursor marca o foco. As telas de revisão e de log continuam com a borda delas (um nível). Os módulos pvx-dummy, pvx-issabel e pvx-firewall ainda têm `Panel` aninhado, `[ rodar agora ]` solto e args sem `label`; migram depois.
