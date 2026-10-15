@@ -1,141 +1,109 @@
 import type { MachineSnap } from "@pvx/core";
-import { fixedPercent } from "../fixed.ts";
-import { Meter, Spark } from "../sdk-ui/display.tsx";
-import { meterBar, meterTone, percentText } from "../sdk-ui/display.ts";
-import { toneColor } from "../sdk-ui/tones.ts";
+import { BarMeter } from "../sdk-ui/display.tsx";
 import { useTheme } from "../theme-context.tsx";
-import { coreGrid, coreRows, coresText, GAUGE_GAP_W, GAUGE_INDENT_W, GAUGE_LABEL_W, loadText, machineHeadline, rateText, usedOfText, usedOfWidth, type CoreGrid } from "./home-view.ts";
+import { BAR_LABEL_W, coreColumns, heaviestLines, loadParts, machineLayout, processesText, rateText, sizeText, sizeWidth, uptimeText, type MachineLayout } from "./home-view.ts";
 
-const CPU_SPARK_W = 14;
-/** Cells between the two columns of gauges. */
-const GAUGE_COLUMNS_GAP_W = 4;
-const MIN_GAUGE_BAR_W = 4;
-const MAX_GAUGE_BAR_W = 20;
-/** Cells a `Meter` takes besides its bar and its suffix: label, gap, the two spaces and the percentage. */
-const METER_CHROME_W = GAUGE_LABEL_W + GAUGE_GAP_W + 2 + 4;
-const SUFFIX_GAP_W = 2;
-const GAUGE_UNAVAILABLE = "—";
+/** Cells of the dim label of a fact on the right (`processos` is the longest) and the space after it. */
+const FACT_LABEL_W = 9;
+const SUB_GAP_W = 3;
+const COLUMNS_GAP_W = 4;
+const SIZE_UNAVAILABLE = "—";
 
 type Used = { used: number; total: number };
 
-function Headline({ machine, product, sessionIp, width }: { machine: MachineSnap; product?: string; sessionIp?: string; width: number }) {
-  const { c } = useTheme();
-  const head = machineHeadline(machine, product, sessionIp, width);
-  const details = (
-    <>
-      <span fg={c.dim}>{head.details}</span>
-      {head.sessionIp ? <span fg={c.ip}>{head.sessionIp}</span> : null}
-    </>
-  );
-  if (head.oneRow) {
-    return (
-      <text wrapMode="none" flexShrink={0}>
-        <span fg={c.text}><b>{head.host}</b></span>
-        <span>{"   "}</span>
-        {details}
-      </text>
-    );
-  }
-  return (
-    <>
-      <text wrapMode="none" flexShrink={0} fg={c.text}><b>{head.host}</b></text>
-      <text wrapMode="none" flexShrink={0}>{details}</text>
-    </>
-  );
+function Bar({ label, value, inner, size }: { label: string; value: number; inner: number; size?: string }) {
+  return <BarMeter label={label} labelWidth={BAR_LABEL_W} value={value} width={inner} suffix={size} />;
 }
 
-function CpuLine({ machine }: { machine: MachineSnap }) {
-  const { c } = useTheme();
+/** One bar per core, in columns of up to eight (as htop does), each short. */
+function CoreBars({ cores, layout }: { cores: readonly number[]; layout: MachineLayout }) {
   return (
-    <box flexDirection="row" flexShrink={0}>
-      <Spark values={machine.cpu.history} width={CPU_SPARK_W} label={"cpu".padEnd(GAUGE_LABEL_W)} suffix={fixedPercent(machine.cpu.total)} />
-      <text wrapMode="none" flexShrink={0} fg={c.dim}>{`  ${coresText(machine.cpu.cores.length)} · carga ${loadText(machine.cpu.load)}`}</text>
+    <box flexDirection="row" columnGap={SUB_GAP_W} flexShrink={0}>
+      {coreColumns(cores, layout.rows).map((column) => (
+        <box key={column[0]!.index} flexDirection="column" flexShrink={0}>
+          {column.map(({ index, value }) => <Bar key={index} label={String(index)} value={value / 100} inner={layout.inner} />)}
+        </box>
+      ))}
     </box>
   );
 }
 
-/** Every core as a small meter: its index, a bar that turns to the warn color above 80%, and its percentage. */
-function CoreCells({ cores, grid }: { cores: readonly number[]; grid: CoreGrid }) {
-  const { c, g } = useTheme();
+function UsedBar({ label, usage, inner }: { label: string; usage?: Used; inner: number }) {
+  if (!usage) return <Bar label={label} value={0} inner={inner} size={SIZE_UNAVAILABLE} />;
+  if (!usage.total) return <Bar label={label} value={0} inner={inner} size="0/0" />;
+  return <Bar label={label} value={usage.used / usage.total} inner={inner} size={sizeText(usage.used, usage.total)} />;
+}
+
+/** The bars of the left column: every core, then memory, swap and disk. */
+function Bars({ machine, layout }: { machine: MachineSnap; layout: MachineLayout }) {
   return (
-    <>
-      {coreRows(cores.map((pct) => pct / 100), grid.perRow).map((row) => (
-        <text key={row[0]!.index} wrapMode="none" flexShrink={0}>
-          <span>{" ".repeat(GAUGE_INDENT_W)}</span>
-          {row.map(({ index, value }, position) => {
-            const { filled, empty } = meterBar(value, grid.barWidth, g);
-            return (
-              <span key={index}>
-                {position > 0 ? " ".repeat(grid.gap) : ""}
-                <span fg={c.dim}>{`${String(index).padStart(grid.idxWidth)} `}</span>
-                <span fg={toneColor(c, meterTone(value))}>{filled}</span>
-                <span fg={c.dim}>{empty}</span>
-                <span fg={c.text}>{percentText(value)}</span>
-              </span>
-            );
-          })}
-        </text>
-      ))}
-    </>
+    <box flexDirection="column" flexShrink={0}>
+      <CoreBars cores={machine.cpu.cores} layout={layout} />
+      <UsedBar label="mem" usage={machine.mem} inner={layout.inner} />
+      <UsedBar label="swp" usage={machine.swap} inner={layout.inner} />
+      <UsedBar label="dsk" usage={machine.disk} inner={layout.inner} />
+    </box>
   );
 }
 
-/** The bar width that lets every meter of a column end at the same cell, whatever its suffix. */
-function barWidthFor(columnWidth: number, totals: readonly number[]): number {
-  const suffixWidth = Math.max(0, ...totals.map(usedOfWidth));
-  const room = columnWidth - METER_CHROME_W - SUFFIX_GAP_W - suffixWidth;
-  return Math.max(MIN_GAUGE_BAR_W, Math.min(MAX_GAUGE_BAR_W, room));
-}
-
-function UsageMeter({ label, usage, barWidth }: { label: string; usage?: Used; barWidth: number }) {
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   const { c } = useTheme();
-  const padded = label.padEnd(GAUGE_LABEL_W);
-  if (!usage?.total) {
-    return <text wrapMode="none" flexShrink={0}><span fg={c.dim}>{`${padded}${" ".repeat(GAUGE_GAP_W)}`}</span><span fg={c.dim}>{GAUGE_UNAVAILABLE}</span></text>;
-  }
-  return <Meter value={usage.used / usage.total} width={barWidth} label={padded} suffix={usedOfText(usage.used, usage.total)} />;
-}
-
-function NetLine({ net }: { net: MachineSnap["net"] }) {
-  const { c, g } = useTheme();
-  const label = "rede".padEnd(GAUGE_LABEL_W);
   return (
     <text wrapMode="none" flexShrink={0}>
-      <span fg={c.dim}>{`${label}${" ".repeat(GAUGE_GAP_W)}`}</span>
-      <span fg={net ? c.text : c.dim}>{net ? rateText(net, g) : GAUGE_UNAVAILABLE}</span>
+      <span fg={c.dim}>{`${label.padEnd(FACT_LABEL_W)} `}</span>
+      {children}
     </text>
   );
 }
 
-/** Memory and swap on the left, disk and network on the right. */
-function Gauges({ machine, width }: { machine: MachineSnap; width: number }) {
-  const columnWidth = Math.floor((width - GAUGE_COLUMNS_GAP_W) / 2);
-  const left = barWidthFor(columnWidth, [machine.mem.total, machine.swap?.total ?? 0]);
-  const right = barWidthFor(columnWidth, [machine.disk?.total ?? 0]);
+/** The hostname and what it runs, then the facts of the machine and the heaviest processes. */
+function Facts({ machine, product, sessionIp }: { machine: MachineSnap; product?: string; sessionIp?: string }) {
+  const { c, g } = useTheme();
+  const load = loadParts(machine.cpu.load);
+  const heaviest = heaviestLines(machine.top);
   return (
-    <box flexDirection="row" columnGap={GAUGE_COLUMNS_GAP_W} flexShrink={0}>
-      <box width={columnWidth} flexShrink={0} flexDirection="column">
-        <UsageMeter label="memória" usage={machine.mem} barWidth={left} />
-        <UsageMeter label="swap" usage={machine.swap} barWidth={left} />
-      </box>
-      <box flexGrow={1} flexDirection="column">
-        <UsageMeter label="disco /" usage={machine.disk} barWidth={right} />
-        <NetLine net={machine.net} />
-      </box>
+    <box flexDirection="column" flexShrink={0}>
+      <text wrapMode="none" flexShrink={0}>
+        <span fg={c.text}><b>{machine.host}</b></span>
+        <span fg={c.dim}>{`  ${[machine.os, product].filter(Boolean).join(" · ")}`}</span>
+      </text>
+      <Fact label="ligado"><span fg={c.text}>{uptimeText(machine.uptime)}</span></Fact>
+      <Fact label="carga"><span fg={c.text}><b>{load.first}</b>{` ${load.rest}`}</span></Fact>
+      {machine.procs === undefined ? null : <Fact label="processos"><span fg={c.text}>{processesText(machine.procs, machine.running)}</span></Fact>}
+      <Fact label="rede"><span fg={machine.net ? c.text : c.dim}>{machine.net ? rateText(machine.net, g) : SIZE_UNAVAILABLE}</span></Fact>
+      {sessionIp ? <Fact label="sessão"><span fg={c.ip}>{sessionIp}</span></Fact> : null}
+      {heaviest.length ? (
+        <>
+          <text wrapMode="none" flexShrink={0}> </text>
+          <text wrapMode="none" flexShrink={0} fg={c.dim}>mais pesados</text>
+          {heaviest.map((line) => <text key={line} wrapMode="none" flexShrink={0} fg={c.dim}>{`  ${line}`}</text>)}
+        </>
+      ) : null}
     </box>
   );
 }
 
-/** The top of Início: what the machine is, the cpu with every core, and the gauges. `width` is the page's inner width. */
+/**
+ * The top of Início, in the style of htop: the bars on the left (every core, memory, swap, disk) and the facts of the machine on the right.
+ * When the width does not fit both, the facts go under the bars. `width` is the page's inner width.
+ */
 export function MachineBlock({ machine, product, sessionIp, width }: { machine: MachineSnap; product?: string; sessionIp?: string; width: number }) {
-  const grid = coreGrid(machine.cpu.cores.length, width - GAUGE_INDENT_W);
+  const sizeW = Math.max(sizeWidth(machine.mem.total), sizeWidth(machine.swap?.total ?? 0), sizeWidth(machine.disk?.total ?? 0));
+  const layout = machineLayout(width, machine.cpu.cores.length, sizeW);
+  const facts = <Facts machine={machine} product={product} sessionIp={sessionIp} />;
+  if (layout.beside) {
+    return (
+      <box flexDirection="row" columnGap={COLUMNS_GAP_W} flexShrink={0}>
+        <Bars machine={machine} layout={layout} />
+        {facts}
+      </box>
+    );
+  }
   return (
     <box flexDirection="column" flexShrink={0}>
-      <Headline machine={machine} product={product} sessionIp={sessionIp} width={width} />
+      <Bars machine={machine} layout={layout} />
       <text wrapMode="none" flexShrink={0}> </text>
-      <CpuLine machine={machine} />
-      <CoreCells cores={machine.cpu.cores} grid={grid} />
-      <Gauges machine={machine} width={width} />
+      {facts}
     </box>
   );
 }

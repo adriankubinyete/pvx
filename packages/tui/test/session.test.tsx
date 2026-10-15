@@ -117,7 +117,7 @@ test("ctrl+k opens the palette from the log screen too", async () => {
   await t.press("l");
   expect(t.frame()).toContain("log demo");
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
 });
 
 test("destructive asks in a centered dialog: focus starts on cancelar, esc cancels, ← then enter confirms", async () => {
@@ -188,11 +188,11 @@ test("full flow without mouse: type, complete, run, fail, repeat, palette, queue
   await t.press("ESCAPE"); // standalone Session: no tab bar to go up to
 
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   expect(t.frame()).toContain("enfileira"); // the palette's footer replaces the session's
   await t.type("cap-fixture fix"); // a space inside the query is typed, it does not enqueue
   expect(t.frame()).toContain("› cap-fixture fix");
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   await t.press("n", { ctrl: true });
   await t.press("ARROW_DOWN");
   await t.press("ARROW_DOWN");
@@ -251,7 +251,7 @@ test("layout at 80x24 and 120x40: last block, input and footer stay visible", as
     expect(t.frame()).toContain("esc fecha");
     await t.press("ESCAPE");
     await t.press("k", { ctrl: true });
-    expect(t.frame()).toContain("fila vazia");
+    expect(t.frame()).toContain("ctrl+f favorito");
     expect(t.frame().split("\n").filter((l) => l.trim()).at(-1)).toContain("enter roda");
     await t.press("ESCAPE");
     t.destroy();

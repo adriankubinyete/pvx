@@ -101,7 +101,7 @@ export function pvxInfoRows(facts: PvxFacts): { version: InfoRow; platform: Info
   };
 }
 
-/** `firewall 0c94e67 · issabel 7971725`: the modules a dev build carries, with their commits; nothing in a release. */
+/** `alfa 0c94e67 · beta 7971725`: the modules a dev build carries, with their commits; nothing in a release. */
 export function embeddedSummary(facts: PvxFacts): string | undefined {
   if (!facts.embedded.length) return undefined;
   return facts.embedded.map((info) => `${info.id} ${commitLabel(info)}`).join(" · ");

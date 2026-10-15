@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cpuPct, createMachineSampler, parseMeminfo, parseNetDev, parsePidStat, parseStat, pickNet, topProcs, type ProcFs } from "../../src/index.ts";
+import { cpuPct, createMachineSampler, parseMeminfo, parseNetDev, parsePidStat, parseRunning, parseStat, pickNet, topProcs, type ProcFs } from "../../src/index.ts";
 
 const stat = (a: number[], cores: number[][]) =>
   [a, ...cores].map((f, i) => `${i ? `cpu${i - 1}` : "cpu "} ${f.join(" ")} 0 0 0`).join("\n") + "\nintr 1 2 3\n";
@@ -35,14 +35,14 @@ test("net picks the interface with the most traffic since the last reading, neve
   expect(pickNet(a, parseNetDev(dev({ lo: [1, 1] })), 2)).toBeUndefined();
 });
 
-const pid = (name: string, u: number, s: number) => `1 (${name}) S 1 1 1 0 -1 0 0 0 0 0 ${u} ${s} 0 0 20 0 1 0 5 0 0\n`;
+const pid = (name: string, u: number, s: number, rssPages = 0) => `1 (${name}) S 1 1 1 0 -1 0 0 0 0 0 ${u} ${s} 0 0 20 0 1 0 5 0 ${rssPages}\n`;
 
 test("top processes use the tick delta over the machine's ticks; new pids are skipped; names may hold parentheses", () => {
-  expect(parsePidStat(pid("a (b) c", 7, 3))).toEqual({ name: "a (b) c", ticks: 10 });
+  expect(parsePidStat(pid("a (b) c", 7, 3))).toEqual({ name: "a (b) c", ticks: 10, rss: 0 });
   expect(parsePidStat("garbage")).toBeUndefined();
   const prev = new Map([["1", 100], ["2", 50], ["9", 10]]);
   const cur = new Map([["1", { name: "asterisk", ticks: 160 }], ["2", { name: "mysqld", ticks: 60 }], ["3", { name: "new", ticks: 999 }]]); // 9 vanished
-  expect(topProcs(prev, cur, 100, 3)).toEqual([{ name: "asterisk", pct: 60 }, { name: "mysqld", pct: 10 }]);
+  expect(topProcs(prev, cur, 100, 3)).toEqual([{ name: "asterisk", pct: 60 }, { name: "mysqld", pct: 10 }]); // no `rss` in the readings: no `mem`
   expect(topProcs(prev, cur, 0, 3)).toEqual([]);
 });
 
@@ -76,7 +76,7 @@ test("the sampler reads fixtures, keeps a ring of history, and survives a vanish
   const b = s.sample();
   expect(b.cpu.total).toBe(60);
   expect(b.cpu.cores).toEqual([60]);
-  expect(b.top).toEqual([{ name: "asterisk", pct: 40 }]);
+  expect(b.top).toEqual([{ name: "asterisk", pct: 40, mem: 0 }]);
   expect(b.net).toEqual({ iface: "eth0", rx: 1000, tx: 500 });
   fs.files["/proc/stat"] = stat([60, 0, 0, 140, 0, 0, 0, 0], [[60, 0, 0, 140, 0, 0, 0, 0]]);
   expect(s.sample().cpu.history).toEqual([60, 0]); // ring of 2
@@ -89,4 +89,12 @@ test("without /proc the sampler falls back to os and leaves net, procs and top o
   expect(m.mem).toEqual({ used: 75, total: 100 });
   expect(m.os).toBe("Darwin 25.0");
   expect([m.net, m.procs, m.top, m.swap]).toEqual([undefined, undefined, undefined, undefined]);
+});
+
+test("the resident size of a process is in pages (4 KiB) and reaches the top list; the run queue comes from /proc/stat", () => {
+  expect(parsePidStat(pid("httpd", 1, 1, 100))).toMatchObject({ rss: 100 * 4096 });
+  const prev = new Map([["1", 0]]);
+  expect(topProcs(prev, new Map([["1", { name: "httpd", ticks: 10, rss: 55 * 1024 * 1024 }]]), 100, 3)).toEqual([{ name: "httpd", pct: 10, mem: 55 * 1024 * 1024 }]);
+  expect(parseRunning("cpu  1 2 3\nprocs_running 3\nprocs_blocked 0\n")).toBe(3);
+  expect(parseRunning("cpu  1 2 3\n")).toBeUndefined();
 });

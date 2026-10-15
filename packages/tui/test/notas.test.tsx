@@ -60,9 +60,12 @@ test("Início shows the notes section with `+ nova nota` and, when the slot has 
   const f = m.t.frame();
   expect(f).toContain("2 Notas");
   expect(f).toContain("+ nova nota");
-  expect(f).toContain("2 novas");
-  expect(f).toContain("carlos: token trocado: feito relogin");
-  expect(f).not.toContain("solta, nao fixada");
+  expect(f).toContain("2 Notas   2 novas"); // one line until enter opens it
+  expect(f).not.toContain("carlos: token trocado");
+  await m.t.press("2");
+  await m.t.press("RETURN");
+  expect(m.t.frame()).toContain("carlos: token trocado: feito relogin");
+  expect(m.t.frame()).not.toContain("solta, nao fixada");
 });
 
 test("80x24: the notes section fits in one column and each fixed line stays alone on its line", async () => {
@@ -75,6 +78,9 @@ test("80x24: the notes section fits in one column and each fixed line stays alon
   expect(lines.filter((l) => l.trim()).at(-1)).toContain("? ajuda"); // the footer line is intact
   await t.press("2");
   expect(t.frame()).toContain("▌ 2 Notas");
+  await t.press("RETURN"); // opens the notes
+  await Bun.sleep(30);
+  await t.flush();
   expect(t.frame()).toContain("carlos: token trocado"); // the section is scrolled into view
 });
 
@@ -82,6 +88,8 @@ test("a note with ANSI shows as inert text in the Notas page and in Início", as
   note("c3c3c3", "carlos", "\u001b[31mvermelho\u001b[0m \u001b]0;x\u0007ok", { tags: ["t\u001b[2J"] });
   pin("c3c3c3");
   const { t } = await mount();
+  await t.press("2");
+  await t.press("RETURN"); // opens the notes of Início
   expect(t.frame()).toContain("vermelho ok");
   await goNotas(t);
   expect(t.frame()).toContain("vermelho ok");

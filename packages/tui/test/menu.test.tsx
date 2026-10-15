@@ -167,9 +167,9 @@ test("/ goes to the Comando tab, esc with an empty input focuses the bar, tab st
   await t.type("x");
   expect(t.frame()).toContain("❯ x");
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   await t.press("ESCAPE");
-  expect(t.frame()).not.toContain("fila vazia");
+  expect(t.frame()).not.toContain("ctrl+f favorito");
 });
 
 test("Comando: esc focuses the last block, up on the first block focuses the bar, down from the bar enters the input", async () => {
@@ -306,7 +306,7 @@ test("form footer comes from the form scope: no tab bar hint, and every key show
   await t.type("x");
   expect(t.frame()).toMatch(/Addr \*\s+x/);
   await t.press("k", { ctrl: true }); // ctrl+k palette
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   await t.press("ESCAPE");
   await t.press("ESCAPE"); // esc volta
   expect(t.frame()).toContain("módulos › net");
@@ -342,7 +342,7 @@ test("log screen footer comes from the log scope and its keys work", async () =>
   const foot = t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
   for (const s of footerFor("log")) expect(foot).toContain(`${s.keys} ${s.label}`);
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   await t.press("ESCAPE");
   await t.press("ESCAPE");
   expect(selectedName(t)).toBe("throws-on-load");
@@ -378,7 +378,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[2]).toMatch(/^\s+\S+\s+.* · ligado há /); // row 0 is the bar, row 1 the rule, then the content: no frame, no repeated title
+  expect(t.frame().split("\n")[2]).toMatch(/^\s+0\s+\[/); // row 0 is the bar, row 1 the rule, then the content (the first core): no frame, no repeated title
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[2]).toMatch(/^\s+instalados \d+\s+catálogo/); // the filter chips: Módulos has cards, not a panel
@@ -492,17 +492,17 @@ test("direct shortcuts work on the selected card without the menu; the ones that
 test("ctrl+k opens the palette from the cards view, with the bar focused or not, and closes an open action menu first", async () => {
   const { t } = await mount({ cols: 120, rows: 30, modules: true });
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   await t.press("ESCAPE");
   await t.press("ARROW_UP"); // bar focused
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   await t.press("ESCAPE");
   await t.press("ARROW_DOWN");
   await t.press("RETURN"); // action menu of the first card (a failed module)
   expect(t.frame()).toContain("ver o log");
   await t.press("k", { ctrl: true });
-  expect(t.frame()).toContain("fila vazia");
+  expect(t.frame()).toContain("ctrl+f favorito");
   expect(t.frame()).not.toContain("ver o log");
   await t.press("ESCAPE");
   expect(t.frame()).toContain("instalados");

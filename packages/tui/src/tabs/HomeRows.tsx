@@ -52,7 +52,7 @@ export function HomeRowView({ row, on, lit, width, idPrefix, onOver, onOut, onPi
         <text wrapMode="none">
           {cursor}
           {marker ? <span fg={marker.color}>{marker.text}</span> : null}
-          <span fg={row.action ? c.accent : c.text}>{truncate(row.text, room)}</span>
+          <span fg={row.action ? c.accent : row.dim ? c.dim : c.text}>{truncate(row.text, room)}</span>
           <span fg={c.dim}>{note}</span>
         </text>
       </box>

@@ -23,7 +23,7 @@ interface Props {
   onPick: (line: LogLine) => void;
 }
 
-/** One entry: `13:00:41  autobackup  aviso  text`. Only a warning or an error says its level; the current line shows the lines that continue it and, for a job, where it is. */
+/** One entry: `13:00:41  alfa  aviso  text`. Only a warning or an error says its level; the current line shows the lines that continue it and, for a job, where it is. */
 export function LogRowView({ line, on, current, lit, opened, hint, sourceWidth, onOver, onOut, onPick }: Props) {
   const { c, g } = useTheme();
   const { entry } = line;

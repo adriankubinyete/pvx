@@ -2,17 +2,11 @@
 import type { MachineSnap } from "@pvx/core";
 import { fixedNumber, fixedRate } from "../fixed.ts";
 import type { Glyphs } from "../theme.ts";
-import { fmtUptime } from "./home.ts";
-
-/** Cells of the dim label before a gauge (`memória` is the longest) and of the gap after it. */
-export const GAUGE_LABEL_W = 7;
-export const GAUGE_GAP_W = 2;
-/** Cells from the left edge to where a gauge starts: the core grid lines up under the cpu line. */
-export const GAUGE_INDENT_W = GAUGE_LABEL_W + GAUGE_GAP_W;
 
 const GIB = 2 ** 30;
+const MIB = 2 ** 20;
 const BIG_TOTAL_GIB = 10;
-/** Cells of one load average (`1,8`, `12,3`). */
+/** Cells of one load average (`1,8`, `12,3`, `4,00`). */
 const LOAD_W = 4;
 
 /** The decimal mark of the technician's language. */
@@ -24,93 +18,141 @@ function totalText(totalGib: number): string {
   return decimalComma(String(Number(totalGib.toFixed(1))));
 }
 
-/** `2,7 de 4 GB`, the used part padded to the widest it gets, so the text keeps its width as the use grows. */
-export function usedOfText(used: number, total: number): string {
+/** `7,9/8G`, the used part padded to the widest it gets, so the text keeps its width as the use grows. */
+export function sizeText(used: number, total: number): string {
   const totalGib = total / GIB;
   const usedGib = used / GIB;
   const totalLabel = totalText(totalGib);
   const big = totalGib >= BIG_TOTAL_GIB;
   const usedLabel = big ? String(Math.round(usedGib)) : decimalComma(usedGib.toFixed(1));
   const usedWidth = big ? totalLabel.length : Math.max(totalLabel.length, String(Math.floor(totalGib)).length + 2);
-  return `${usedLabel.padStart(usedWidth)} de ${totalLabel} GB`;
+  return `${usedLabel.padStart(usedWidth)}/${totalLabel}G`;
 }
 
-/** Cells `usedOfText` takes for a total (the width of its widest form). */
-export const usedOfWidth = (total: number): number => usedOfText(total, total).length;
+/** Cells `sizeText` takes for a total (the width of its widest form). */
+export const sizeWidth = (total: number): number => sizeText(total, total).length;
 
-/** `↓   2,1 MB/s  ↑ 340 KB/s`: both rates in a fixed width. */
+/** `↓   2,1 MB/s  ↑   340 KB/s`: both rates in a fixed width. */
 export function rateText(net: NonNullable<MachineSnap["net"]>, g: Pick<Glyphs, "down" | "up">): string {
   return decimalComma(`${g.down} ${fixedRate(net.rx)}  ${g.up} ${fixedRate(net.tx)}`);
 }
 
-/** `1,8  2,1  1,9` */
-export const loadText = (load: readonly number[]): string =>
-  load.map((value) => decimalComma(fixedNumber(value, { width: LOAD_W, decimals: 1 }))).join(" ");
-
-/** `8 núcleos`, `1 núcleo`. */
-export const coresText = (count: number): string => `${count} ${count === 1 ? "núcleo" : "núcleos"}`;
-
-/** The hostname, then what the machine is, in two parts: the dim text up to the session and the session IP in its own color. */
-export interface MachineHeadline {
-  host: string;
-  /** `Rocky Linux 8.10 · Issabel 5 · ligado há 3d 4h`, with ` · sessão ` after it when there is a session. */
-  details: string;
-  sessionIp?: string;
-  /** The whole thing fits one row beside the hostname. */
-  oneRow: boolean;
+/** The three load averages as strings of one width, the first one apart because the page draws it in bold. */
+export function loadParts(load: readonly number[]): { first: string; rest: string } {
+  const [first = 0, ...rest] = load.map((value) => decimalComma(fixedNumber(value, { width: LOAD_W, decimals: 2 })));
+  return { first: String(first), rest: rest.join(" ") };
 }
 
-const HEADLINE_GAP_W = 3;
-
-export function machineHeadline(machine: MachineSnap, product: string | undefined, sessionIp: string | undefined, width: number): MachineHeadline {
-  const facts = [machine.os, product, `ligado há ${fmtUptime(machine.uptime)}`].filter(Boolean).join(" · ");
-  const details = sessionIp ? `${facts} · sessão ` : facts;
-  const detailsCells = [...details].length + [...(sessionIp ?? "")].length;
-  const oneRow = [...machine.host].length + HEADLINE_GAP_W + detailsCells <= width;
-  return { host: machine.host, details, sessionIp, oneRow };
+/** `1d 6h 42m`, `6h 42m`, `42m`. */
+export function uptimeText(seconds: number): string {
+  const minutes = Math.floor(seconds / 60) % 60;
+  const hours = Math.floor(seconds / 3600) % 24;
+  const days = Math.floor(seconds / 86400);
+  if (days) return `${days}d ${hours}h ${minutes}m`;
+  if (hours) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }
 
-/** How the cores of the cpu are laid out: `perRow` cells per row, each `idxWidth` of index, a space, `barWidth` of bar and a percentage. */
-export interface CoreGrid {
-  perRow: number;
-  gap: number;
-  idxWidth: number;
-  barWidth: number;
+/** `88 · 1 rodando`: the counts in a fixed width. Without the run queue, only the total. */
+export function processesText(procs: number, running: number | undefined): string {
+  const total = fixedNumber(procs, { width: 4 });
+  if (running === undefined) return total;
+  return `${total} · ${fixedNumber(running, { width: 3 })} rodando`;
 }
 
-const CORES_PER_ROW = 4;
-const CORES_PER_ROW_WIDE = 8;
-const GAP_W = 3;
-const GAP_WIDE_W = 2;
-const MANY_CORES = 8;
-const MIN_BAR_W = 4;
-/** Cells of a core's percentage (` 18%`). */
-const CORE_PERCENT_W = 4;
-
-/** Cells of one core: its index, a space, the bar and the percentage. */
-const cellWidth = (idxWidth: number, barWidth: number): number => idxWidth + 1 + barWidth + CORE_PERCENT_W;
-
-/** Whether eight cells with the smallest bar fit in `width`. */
-const fitsWide = (width: number, idxWidth: number): boolean =>
-  width >= CORES_PER_ROW_WIDE * cellWidth(idxWidth, MIN_BAR_W) + GAP_WIDE_W * (CORES_PER_ROW_WIDE - 1);
-
-/** Four cores per row; eight when there are many and the terminal is wide enough, so 64 cores stay in eight rows. `width` is what is left after the indent. */
-export function coreGrid(cores: number, width: number): CoreGrid {
-  const idxWidth = String(Math.max(0, cores - 1)).length;
-  const wide = cores > MANY_CORES && fitsWide(width, idxWidth);
-  const perRow = wide ? CORES_PER_ROW_WIDE : CORES_PER_ROW;
-  const gap = wide ? GAP_WIDE_W : GAP_W;
-  const cell = Math.floor((width - gap * (perRow - 1)) / perRow);
-  const barWidth = Math.max(MIN_BAR_W, cell - idxWidth - 1 - CORE_PERCENT_W);
-  return { perRow, gap, idxWidth, barWidth };
+/** `55 MB`, `1,2 GB`, in a fixed 7 cells. */
+export function memoryText(bytes: number): string {
+  const text = bytes >= GIB ? `${decimalComma((bytes / GIB).toFixed(1))} GB` : `${Math.round(bytes / MIB)} MB`;
+  return text.padStart(7);
 }
 
-/** The cores by index, `perRow` to a row. */
-export function coreRows(cores: readonly number[], perRow: number): { index: number; value: number }[][] {
-  const rows: { index: number; value: number }[][] = [];
-  cores.forEach((value, index) => {
-    if (index % perRow === 0) rows.push([]);
-    rows[rows.length - 1]!.push({ index, value });
+const TOP_NAME_W = 10;
+const TOP_SHOWN = 3;
+
+/** The heaviest processes, one line each: the name, the cpu share and the resident memory, in fixed widths. */
+export function heaviestLines(top: MachineSnap["top"]): string[] {
+  return (top ?? []).slice(0, TOP_SHOWN).map((proc) => {
+    const name = [...proc.name].slice(0, TOP_NAME_W).join("").padEnd(TOP_NAME_W);
+    const share = `${decimalComma(fixedNumber(proc.pct, { width: 4, decimals: 1 }))}%`;
+    return `${name} ${share}${proc.mem === undefined ? "" : ` ${memoryText(proc.mem)}`}`;
   });
-  return rows;
+}
+
+/** Cells of a label before a bar (`mem`, `swp`, `dsk` and the index of a core up to 999). */
+export const BAR_LABEL_W = 3;
+/** The brackets of a bar. */
+const BRACKETS_W = 2;
+/** Cells of a bar with its label: the label, the brackets and what is between them. */
+export const barCellWidth = (inner: number): number => BAR_LABEL_W + BRACKETS_W + inner;
+
+const INNER_MAX = 30;
+const INNER_MIN = 10;
+const CORES_PER_COLUMN = 8;
+const SUB_GAP_W = 3;
+const COLUMNS_GAP_W = 4;
+/** The widest line of the right column: the network rates. */
+export const RIGHT_W = 36;
+/** Lines of the right column when it has everything: the host, six facts, a blank, the heading and three processes. */
+const FACT_LINES = 11;
+/** Rows of memory, swap and disk under the cores. */
+const USED_ROWS = 3;
+/** Cells between the bar and its size (`dsk[...] 177/228G`). */
+const SIZE_GAP_W = 1;
+
+export interface MachineLayout {
+  /** The right column sits beside the bars; otherwise it goes under them. */
+  beside: boolean;
+  /** Columns of core bars. */
+  columns: number;
+  /** Rows of core bars in each column. */
+  rows: number;
+  /** Cells between the brackets of every bar. */
+  inner: number;
+}
+
+/** The bars of `width` cells: `columns` of up to eight cores, each `inner` wide (16 to 30), shrinking the width before the count. */
+function barsIn(width: number, cores: number, sizeW: number): MachineLayout | undefined {
+  const needed = Math.max(1, Math.ceil(cores / CORES_PER_COLUMN));
+  const maxColumns = Math.floor((width + SUB_GAP_W) / (barCellWidth(INNER_MIN) + SUB_GAP_W));
+  if (maxColumns < 1) return undefined;
+  const columns = Math.min(needed, maxColumns);
+  const share = Math.floor((width - SUB_GAP_W * (columns - 1)) / columns) - BAR_LABEL_W - BRACKETS_W;
+  const withSize = width - BAR_LABEL_W - BRACKETS_W - SIZE_GAP_W - sizeW; // the first column also carries a size
+  const inner = Math.min(INNER_MAX, share, withSize);
+  if (inner < INNER_MIN) return undefined;
+  return { beside: false, columns, rows: Math.ceil(cores / columns), inner };
+}
+
+/** The height of the block for a layout: beside, the taller of the two columns; stacked, the bars, a blank row and the facts. */
+const heightOf = (layout: MachineLayout): number => {
+  const bars = layout.rows + USED_ROWS;
+  return layout.beside ? Math.max(bars, FACT_LINES) : bars + 1 + FACT_LINES;
+};
+
+/** Up to eight cores in a column; with more, another column (the bars get shorter before the columns get fewer). */
+const columnsNeeded = (cores: number): number => Math.max(1, Math.ceil(cores / CORES_PER_COLUMN));
+
+/**
+ * Bars on the left and the facts on the right when the bars keep their columns of eight there; else the facts go under the bars, if that keeps them;
+ * else the shorter of the two (a machine with too many cores for any width gets columns longer than eight).
+ */
+export function machineLayout(width: number, cores: number, sizeW: number): MachineLayout {
+  const needed = columnsNeeded(cores);
+  const beside = barsIn(width - COLUMNS_GAP_W - RIGHT_W, cores, sizeW);
+  const stacked = barsIn(width, cores, sizeW) ?? { beside: false, columns: 1, rows: cores, inner: INNER_MIN };
+  const side: MachineLayout | undefined = beside && { ...beside, beside: true };
+  if (side && side.columns === needed) return side;
+  if (stacked.columns === needed) return stacked;
+  if (!side) return stacked;
+  return heightOf(side) <= heightOf(stacked) ? side : stacked;
+}
+
+/** The cores by column: column-major, `rows` to a column. */
+export function coreColumns(cores: readonly number[], rows: number): { index: number; value: number }[][] {
+  const columns: { index: number; value: number }[][] = [];
+  cores.forEach((value, index) => {
+    const column = Math.floor(index / rows);
+    (columns[column] ??= []).push({ index, value });
+  });
+  return columns;
 }

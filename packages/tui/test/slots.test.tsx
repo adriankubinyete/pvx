@@ -35,7 +35,7 @@ async function mount(opts: { cols?: number; rows?: number } = {}) {
 test("widgets fill their slots by priority; the throwing and the hanging ones are marked, logged, and the home still works", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
   const f = t.frame();
-  expect(f).toContain("✓ demo tudo certo");
+  expect(f).toContain("[i] demo: tudo certo"); // the notices of a module are rows of Atenção
   expect(f).toContain("widget quebrou: widget-demo.boom"); // in home.chips
   expect(f).toContain("demo: revisar o painel"); // home.attention
   expect(f).toContain("widget quebrou: widget-demo.hang");
@@ -76,15 +76,17 @@ test("refreshMs re-renders the home through the single scheduler", async () => {
   expect(seen.size).toBeGreaterThan(2);
 });
 
-test.each([[80, 24], [230, 24]] as const)("chips line sits alone under the machine block at %ix%i", async (cols, rows) => {
+test.each([[80, 40], [230, 40]] as const)("the notices of the modules are rows of Atenção, with no strip above the sections, at %ix%i", async (cols, rows) => {
   const { t } = await mount({ cols, rows });
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Início");
-  expect(lines.filter((l) => l.includes("✓ demo"))).toHaveLength(1);
-  const swap = lines.findIndex((l) => l.includes("swap"));
-  expect(lines[swap + 2]).toContain("✓ demo"); // a blank row between the gauges and the chips
+  const header = lines.findIndex((l) => l.includes("▌ 1 Atenção"));
+  const notice = lines.findIndex((l) => l.includes("[i] demo: tudo certo"));
+  expect(header).toBeGreaterThan(-1);
+  expect(notice).toBeGreaterThan(header); // under the header, as a row with the glyph of its level
+  expect(lines.filter((l) => l.includes("demo: tudo certo"))).toHaveLength(1);
+  expect(lines.some((l) => /^\s*[✓▲] /.test(l))).toBe(false); // the old strip of glyphs is gone
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
-  expect(lines.filter((l) => l.includes("▌ 1 Atenção"))).toHaveLength(1);
   expect(lines[rows - 1]).toContain("enter abre");
 });
 

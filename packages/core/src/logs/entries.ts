@@ -21,7 +21,7 @@ export interface LogEntry {
   raw: string;
 }
 
-/** `2026-10-15T13:39:04.123Z WARN firewall: text`: the timestamp, the level and the name of the logger, then the message. */
+/** `2026-10-15T13:39:04.123Z WARN alfa: text`: the timestamp, the level and the name of the logger, then the message. */
 const ENTRY = /^(\S+) (DEBUG|INFO|WARN|ERROR) ([a-z0-9-]+): (.*)$/;
 const LEVEL_OF: Record<string, LogLevel> = { DEBUG: "debug", INFO: "info", WARN: "warn", ERROR: "error" };
 
@@ -54,7 +54,7 @@ interface AuditEvent {
   text?: string;
 }
 
-/** `firewall apply · saiu 1`, `login de operador (192.0.2.10)`, or the text of a module or job event. */
+/** `alfa apply · saiu 1`, `login de operador (192.0.2.10)`, or the text of a module or job event. */
 function auditMessage(event: AuditEvent): string {
   if (event.kind === "login") return `login de ${event.user ?? "?"}${event.from ? ` (${event.from})` : ""}`;
   if (event.kind === "cmd") return `${event.user ?? "?"}: ${event.line ?? ""}${event.exit ? ` · saiu ${event.exit}` : ""}`;
@@ -78,7 +78,7 @@ export interface JobRef {
 
 /** A job's own lines in its module's log (`[job backup] ...`), and the start and stop the host writes there (`job backup iniciado: ...`). */
 const MODULE_JOB_LINE = /^(?:\[job ([a-z0-9-]+)\]|job ([a-z0-9-]+)(?: iniciado|: parada pedida))/;
-/** The same start and stop in the core log, which names the module (`job firewall: job revert iniciado: ...`). */
+/** The same start and stop in the core log, which names the module (`job alfa: job revert iniciado: ...`). */
 const CORE_JOB_LINE = /^job ([a-z0-9-]+): job ([a-z0-9-]+)(?: iniciado|: parada pedida)/;
 
 export function jobOfEntry(entry: Pick<LogEntry, "source" | "message">): JobRef | undefined {

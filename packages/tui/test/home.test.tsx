@@ -40,75 +40,98 @@ const lines = (t: TuiHarness) => t.frame().split("\n");
 const activeSections = (t: TuiHarness) => lines(t).flatMap((line) => /▌ (\d) /.exec(line)?.[1] ?? []);
 const BAR = "tab próxima aba";
 
-test("Início at 120x40 has the machine block, the sections and the footer, and 80x24 keeps the same content in one column", async () => {
+test("Início at 120x40 has the bars, the facts, the sections and the footer, and 80x24 keeps the same content with the facts under the bars when it must", async () => {
   const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
   const f = t.frame();
-  for (const s of ["central-sp-01", "Rocky Linux 8.10 · ligado há 41d 0h", "cpu ", "39%", "8 núcleos · carga  2,1  1,8  1,3", "memória", "3,1 de 6 GB", "disco /", "38 de 54 GB", "swap", "0,0 de 2 GB", "rede", "↓   1,2 MB/s", "1 Atenção", "perfil: Principal", "2 Atividade", "pvx 0.1.0"]) expect(f, s).toContain(s);
+  for (const s of ["central-sp-01", "Rocky Linux 8.10", "ligado", "41d 0h 0m", "carga", "2,14 1,80 1,32", "processos", "212 ·   3 rodando", "rede", "↓   1,2 MB/s", "mais pesados", "asterisk", "68,0%", "55 MB", "mem[", "3,1/6G", "swp[", "0,0/2G", "dsk[", "38/54G", "1 Atenção", "perfil: Principal", "2 Atividade", "pvx 0.1.0"]) expect(f, s).toContain(s);
+  const row = lines(t).find((l) => l.includes("central-sp-01"))!;
+  expect(row.indexOf("central-sp-01")).toBeGreaterThan(40); // the facts are beside the bars
   t.destroy();
 
   const small = await mount({ cols: 80, rows: 24 });
   for (const l of lines(small.t)) expect(l.length).toBeLessThanOrEqual(80);
-  for (const s of ["central-sp-01", "8 núcleos", "memória", "disco /", "swap", "rede", "1 Atenção", "sem perfil", "não verificado", "[ verificar ]"]) expect(small.t.frame(), s).toContain(s);
+  for (const s of ["central-sp-01", "ligado", "carga", "rede", "mem[", "swp[", "dsk[", "1 Atenção", "sem perfil", "conformidade não verificada", "[ verificar ]"]) expect(small.t.frame(), s).toContain(s);
 });
 
-test("the headline is the hostname in bold and one dim line; the session IP has its own color and the product comes from the slot", async () => {
+test("with the bars of eight cores the facts still fit beside them at 80 columns; with many cores they go under the bars", async () => {
+  const eight = await mount({ cols: 80, rows: 24 });
+  expect(lines(eight.t).find((l) => l.includes("central-sp-01"))!.indexOf("central-sp-01")).toBeGreaterThan(30);
+  eight.t.destroy();
+  const many = await mount({ cols: 80, rows: 24, cores: 32 });
+  const host = lines(many.t).findIndex((l) => l.includes("central-sp-01"));
+  const mem = lines(many.t).findIndex((l) => l.includes("mem["));
+  expect(host).toBeGreaterThan(mem); // under the bars
+  expect(lines(many.t)[host]!.indexOf("central-sp-01")).toBeLessThan(6);
+});
+
+test("the facts: hostname in bold, the session IP in its own color, the load with the first value bold, the product from the slot", async () => {
   registry.register({ id: "prod", version: "1.0.0", entry: "x" }, { widgets: { p: { slot: "home.product", priority: 0, data: () => "Issabel 5" } } });
   const { t } = await mount({ cols: 120, rows: 40, sessionIp: "198.51.100.7" });
   await Bun.sleep(200); // the first collection (the fixture's hanging widget times out at 60 ms)
   await t.flush();
   const row = lines(t).findIndex((l) => l.includes("central-sp-01"));
-  expect(lines(t)[row]).toMatch(/central-sp-01 {3}Rocky Linux 8\.10 · Issabel 5 · ligado há 41d 0h · sessão 198\.51\.100\.7/);
-  const spans = t.spans().lines[row]!.spans;
-  const ip = spans.find((span) => span.text.includes("198.51.100.7"))!;
-  expect(ip.fg.equals(RGBA.fromHex(tokens.ip))).toBe(true);
-  expect(spans.find((span) => span.text.includes("central-sp-01"))!.attributes & 1).not.toBe(0); // bold
+  expect(lines(t)[row]).toMatch(/central-sp-01 {2}Rocky Linux 8\.10 · Issabel 5/);
+  const spansOf = (text: string) => {
+    const y = lines(t).findIndex((l) => l.includes(text));
+    return t.spans().lines[y]!.spans.find((span) => span.text.includes(text))!;
+  };
+  expect(spansOf("central-sp-01").attributes & 1).not.toBe(0); // bold
+  expect(spansOf("198.51.100.7").fg.equals(RGBA.fromHex(tokens.ip))).toBe(true);
+  expect(lines(t).find((l) => l.includes("sessão"))).toContain("198.51.100.7");
+  expect(spansOf("2,14").attributes & 1).not.toBe(0); // the first load, bold
+  expect(spansOf("1,80").attributes & 1).toBe(0);
 });
 
-test("a headline too long for one row goes to a second, dim row", async () => {
-  const { t } = await mount({ cols: 80, rows: 24, sessionIp: "198.51.100.7", machine: { host: "central-01", os: "Rocky Linux 8.10 (Green Obsidian)" } });
-  const at = lines(t).findIndex((l) => l.includes("central-01"));
-  expect(lines(t)[at]).not.toContain("Rocky");
-  expect(lines(t)[at + 1]).toContain("Rocky Linux 8.10 (Green Obsidian) · ligado há 41d 0h · sessão 198.51.100.7");
+test("without a session there is no `sessão` line", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  expect(t.frame()).not.toContain("sessão");
 });
 
-test.each([1, 2, 4, 8, 16, 32, 64] as const)("every one of %i cores is a small meter, four per row (eight per row when many and wide)", async (cores) => {
-  for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
-    const { t } = await mount({ cols, rows, cores });
-    const coreRows = lines(t).filter((l) => /^\s{9,}\d+ [━─]+ +\d+%/.test(l));
-    const perRow = cores > 8 && cols >= 120 ? 8 : 4;
-    expect(coreRows, `${cores} cores at ${cols}`).toHaveLength(Math.ceil(cores / perRow));
-    const text = coreRows.join("\n");
-    for (let i = 0; i < cores; i++) expect(text, `core ${i}`).toMatch(new RegExp(`(^|\\s)${i} [━─]+ +\\d+%`, "m"));
+test.each([1, 2, 4, 8, 16, 32, 64] as const)("every one of %i cores is a bar, in columns of up to eight when there are many", async (cores) => {
+  for (const cols of [80, 120] as const) {
+    const { t } = await mount({ cols, rows: 80, cores }); // tall enough to see every bar: the page itself scrolls at 24 rows
+    const text = lines(t).join("\n");
+    for (let i = 0; i < cores; i++) expect(text, `core ${i} at ${cols}`).toMatch(new RegExp(`(^|\\s)${i} +\\[[| ]+\\d+\\.\\d%\\]`, "m"));
+    const first = lines(t).findIndex((l) => /^\s+0 +\[/.test(l));
+    const memRow = lines(t).findIndex((l) => l.includes("mem["));
+    const barsPerLine = (lines(t)[first]!.match(/\d+ +\[/g) ?? []).length;
+    if (cores <= 32) expect(barsPerLine, `${cores} cores at ${cols}`).toBe(Math.ceil(cores / 8)); // one column up to eight cores, another for each eight more
+    else expect(barsPerLine, `${cores} cores at ${cols}`).toBeGreaterThan(3);
+    expect(memRow).toBeGreaterThan(first);
     for (const l of lines(t)) expect(l.length).toBeLessThanOrEqual(cols);
     t.destroy();
   }
 });
 
-test("a core above 80% turns to the warn color; the others stay in the accent", async () => {
+test("a bar above 80% turns to the warn color; the others stay in the accent; the brackets and the percent are dim and the label is info", async () => {
   const { t } = await mount({ cols: 120, rows: 40 }); // the fixture's core 5 is at 85%, core 4 at 48%
-  const row = lines(t).findIndex((l) => /\s4 [━─]+ +48% +5 [━─]+ +85% +6 /.test(l));
-  expect(row).toBeGreaterThan(-1);
-  const bars = t.spans().lines[row]!.spans.filter((span) => span.text.includes("━"));
-  expect(bars.map((span) => span.fg.equals(RGBA.fromHex(tokens.warn)))).toEqual([false, true, false, false]); // cores 4 to 7
-  expect(bars[0]!.fg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
+  const row = (label: string) => lines(t).findIndex((l) => new RegExp(`^\\s+${label} +\\[`).test(l));
+  const spans = (label: string) => t.spans().lines[row(label)]!.spans;
+  const bar = (label: string) => spans(label).find((span) => span.text.includes("|"))!;
+  expect(bar("5").fg.equals(RGBA.fromHex(tokens.warn))).toBe(true);
+  expect(bar("4").fg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
+  expect(spans("4").find((span) => span.text.trim() === "4")!.fg.equals(RGBA.fromHex(tokens.info))).toBe(true);
+  expect(spans("4").find((span) => span.text === "[")!.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+  expect(spans("4").find((span) => span.text.includes("48.0%"))!.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
 });
 
-test("live values keep their width when they change: the gauges end in the same cell at any use", async () => {
+test("live values keep their width when they change: the bars and the facts end in the same cell at any use", async () => {
   const G = 2 ** 30;
-  const ends: number[] = [];
+  const ends: number[][] = [];
   for (const used of [0.2, 2.7, 3.9]) {
-    const { t } = await mount({ cols: 120, rows: 40, machine: { mem: { used: used * G, total: 4 * G }, cpu: { total: used * 10, cores: [10], load: [used, 1, 1], history: [used * 10] } } });
-    const mem = lines(t).find((l) => l.includes("memória"))!;
-    ends.push(mem.indexOf(" GB") + 3, lines(t).find((l) => l.includes("cpu "))!.indexOf("núcleo"));
+    const { t } = await mount({ cols: 120, rows: 40, machine: { mem: { used: used * G, total: 4 * G }, procs: used > 1 ? 1234 : 7, cpu: { total: 1, cores: [10], load: [used, 1, 1], history: [used * 10] } } });
+    const mem = lines(t).find((l) => l.includes("mem["))!;
+    const proc = lines(t).find((l) => l.includes("processos"))!;
+    ends.push([mem.indexOf("] ") + 1 + mem.slice(mem.indexOf("] ") + 2).trimEnd().length, proc.indexOf("rodando") + "rodando".length, lines(t).find((l) => l.includes("carga"))!.trimEnd().length]);
     t.destroy();
   }
-  expect(new Set(ends.filter((_, i) => i % 2 === 0)).size).toBe(1);
-  expect(new Set(ends.filter((_, i) => i % 2 === 1)).size).toBe(1);
+  for (let i = 0; i < 3; i++) expect(new Set(ends.map((e) => e[i])).size, `value ${i}`).toBe(1);
 });
 
 test("conformidade is not run on the first visit; r runs it and shows the pending items, each with its button", async () => {
   const { t, store } = await mount({ cols: 120, rows: 40 });
-  expect(t.frame()).toContain("não verificado");
+  expect(t.frame()).toContain("conformidade não verificada");
+  expect(t.frame()).toContain("[ verificar ]");
   expect(t.frame()).not.toContain("cap-fixture.a");
   await t.press("r");
   await t.flush();
@@ -157,8 +180,8 @@ test("the actions row is one stop: ← and → choose the button, enter presses 
   await t.press("r");
   await t.flush();
   await t.press("RETURN");
-  for (let i = 0; i < 6; i++) await t.press("ARROW_DOWN"); // the items, then the actions row
-  expect(t.frame().match(/» /g) ?? []).toHaveLength(0); // the buttons carry the cursor, not a row marker
+  for (let i = 0; i < 14 && lines(t).some((l) => /▌ »/.test(l)); i++) await t.press("ARROW_DOWN"); // the items, then the actions row
+  expect(t.frame().match(/▌ » /g) ?? []).toHaveLength(0); // the buttons carry the cursor, not a row marker
   const before = store.blocks.length;
   await t.press("ARROW_LEFT"); // wraps inside the row: never leaves it
   await t.press("ARROW_RIGHT");
@@ -233,8 +256,12 @@ test("a page taller than the screen scrolls to keep the cursor in view", async (
   await t.flush();
   expect(t.frame()).not.toContain("2 Atividade"); // below the fold
   await t.press("2");
+  await Bun.sleep(30); // the scroll follows on the next tick
+  await t.flush();
   expect(t.frame()).toContain("▌ 2 Atividade");
   await t.press("RETURN");
+  await Bun.sleep(30);
+  await t.flush();
   expect(t.frame()).toMatch(/» ★ demo greet/);
 });
 
@@ -345,7 +372,7 @@ test("mouse: the button of an item puts its fix in the Comando; `verificar` runs
 
 test("an empty section is still selectable: the arrows and the number land on it, it shows the gutter and its empty line, enter does no harm", async () => {
   const { t, store } = await mount({ cols: 120, rows: 40 });
-  expect(t.frame()).toContain("nada executado ainda");
+  expect(t.frame()).toContain("nenhuma");
   await t.press("ARROW_DOWN"); // atividade has no rows
   expect(activeSections(t)).toEqual(["2"]);
   await t.press("RETURN");
@@ -354,4 +381,38 @@ test("an empty section is still selectable: the arrows and the number land on it
   await t.press("1");
   await t.press("2");
   expect(activeSections(t)).toEqual(["2"]);
+});
+
+test("memory above 90% is a row of Atenção with the button that opens the process monitor in shell mode", async () => {
+  const G = 2 ** 30;
+  const { t } = await mount({ cols: 120, rows: 40, machine: { mem: { used: 7.9 * G, total: 8 * G } } });
+  expect(lines(t).find((l) => l.includes("memória em 99%"))).toMatch(/\[!\] memória em 99%\s+\[ ver processos \]/);
+  const bar = lines(t).findIndex((l) => l.includes("mem["));
+  expect(t.spans().lines[bar]!.spans.find((span) => span.text.includes("|"))!.fg.equals(RGBA.fromHex(tokens.warn))).toBe(true); // the bar is in the warn color
+  await t.press("RETURN"); // inside
+  for (let i = 0; i < 10 && !lines(t).find((l) => l.includes("memória em"))!.includes("»"); i++) await t.press("ARROW_DOWN");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("esc sai do shell"); // the Comando, in shell mode
+  expect(lines(t).find((l) => l.includes("host shell · enter roda"))).toMatch(/! top/); // with the `!` consumed
+});
+
+test("no memory row while the memory has room", async () => {
+  const { t } = await mount({ cols: 120, rows: 40 });
+  expect(t.frame()).not.toContain("memória em");
+});
+
+test("Notas and Atividade are one line each until enter opens them, and stay selectable when empty", async () => {
+  saveFavorites(["demo greet"]);
+  const { t, store } = await mount({ cols: 120, rows: 40 });
+  await store.run("demo remember");
+  await t.flush();
+  const line = lines(t).find((l) => l.includes("2 Atividade"))!;
+  expect(line).toMatch(/2 Atividade\s+demo greet · .*demo remember/); // the recent activity in one line
+  expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1);
+  await t.press("2");
+  await t.press("RETURN"); // opens: the rows
+  expect(lines(t).filter((l) => l.includes("demo greet")).length).toBeGreaterThan(0);
+  expect(t.frame()).toMatch(/» ★ demo greet/);
+  await t.press("ESCAPE"); // back to one line
+  expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1);
 });

@@ -42,6 +42,7 @@ async function mount(registry: Registry, opts: { cols?: number; rows?: number } 
 }
 /** Conformidade is a page, not a tab: pushed as a screen, as the Módulos list does on enter. */
 const open = async (t: TuiHarness) => (await cur!.run("#conformidade.conformidade"), await t.flush());
+const lines = (t: TuiHarness) => t.frame().split("\n");
 const lastLine = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).at(-1)!;
 
 test("the built-in module is a page, not a tab; without it the page is gone and the CLI still works", async () => {
@@ -113,7 +114,7 @@ test("Conformidade shows the cached results; r there and r in Início refresh th
 
 test("the first visit to the page checks; Início sees the result without checking", async () => {
   const { t, calls } = await mount(await load());
-  expect(t.frame()).toContain("não verificado");
+  expect(t.frame()).toContain("conformidade não verificada");
   await open(t);
   await t.flush();
   expect(t.frame()).toContain("cap-fixture.a: pendente");
@@ -133,7 +134,7 @@ test("Início: `p` and the plan button open the plan page of the module that has
   expect(t.frame()).toContain("1. cap-fixture fix-a para cap-fixture.a");
   await t.press("ESCAPE");
   await t.press("RETURN"); // inside atenção
-  for (let i = 0; i < 5; i++) await t.press("ARROW_DOWN"); // down to the actions row: the plan is its first button
+  for (let i = 0; i < 14 && lines(t).some((l) => /▌ »/.test(l)); i++) await t.press("ARROW_DOWN"); // down to the actions row: the plan is its first button
   await t.press("ARROW_LEFT");
   await t.press("RETURN");
   await t.flush();

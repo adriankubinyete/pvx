@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRenderer } from "@opentui/react";
 import { writeClipboard } from "../sdk-ui/copy.tsx";
 import type { Registry } from "@pvx/core";
@@ -66,8 +66,14 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   // The draft lives outside the component (memory only): the tab switch unmounts this screen.
   // Cursor in code points (`Infinity` = end, clamped on use). Any text set from outside typing (recall, completion, history) lands at the end.
   const [cur, setCur] = useState(Infinity);
-  const setInput = useCallback((v: string) => (setInputRaw(v), setCur(Infinity)), []);
-  useEffect(() => void (draft && (draft.draft = shell ? `!${input}` : input)), [draft, shell, input]);
+  // The draft is written as the line changes, not after the render: a command can leave the screen (a page it opens) before an effect would run.
+  const remembered = useRef({ shell, text: input });
+  const remember = (change: Partial<typeof remembered.current>) => {
+    Object.assign(remembered.current, change);
+    if (draft) draft.draft = remembered.current.shell ? `!${remembered.current.text}` : remembered.current.text;
+  };
+  const changeShell = (on: boolean) => (setShell(on), remember({ shell: on }));
+  const setInput = useCallback((v: string) => (setInputRaw(v), setCur(Infinity), remember({ text: v })), [draft]);
   const [hi, setHi] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
   const [search, setSearchRaw] = useState<string | null>(null);
@@ -108,7 +114,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     return () => clearInterval(t);
   }, [running]);
   /** Puts a line of the history in the input: a shell line goes back to shell mode, without its `!`. */
-  const load = useCallback((line: string) => (setShell(isShellLine(line)), setInput(textOfLine(line))), [setInput]);
+  const load = useCallback((line: string) => (changeShell(isShellLine(line)), setInput(textOfLine(line))), [setInput]);
   const recall = useCallback((line: string) => (load(line), setHi(null), setSel(0)), [load]);
 
   const pick = useCallback((b: Block) => (setFb(b.id), tabs?.focusContent()), [tabs]);
@@ -119,7 +125,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const edit = (text: string, at: number) => {
     if (text !== buffer) {
       if (searching) setSearchRaw(text);
-      else setInputRaw(text), setHi(null);
+      else setInputRaw(text), remember({ text }), setHi(null);
       setSel(0);
     }
     setCur(at);
@@ -146,7 +152,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   };
   const submit = () => {
     const line = shell ? `!${input}` : input;
-    setInput(""), setShell(false), setHi(null), setSel(0);
+    setInput(""), changeShell(false), setHi(null), setSel(0);
     follow.toBottom(); // a new command always shows its own output
     void store.run(line);
   };
@@ -158,10 +164,10 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   /** `!` as the first character (typed or at the start of a paste) switches to shell mode and is not kept in the text. */
   const enterShell = (k: RoutedKey): boolean => {
     if (shell || searching || input) return false;
-    if (k.sequence === "!") return setShell(true), true;
+    if (k.sequence === "!") return changeShell(true), true;
     if (k.paste === undefined || !k.paste.startsWith("!")) return false;
     const rest = editLine({ text: "", cursor: 0 }, { name: "paste", sequence: "", paste: k.paste.slice(1) });
-    setShell(true);
+    changeShell(true);
     if (rest) edit(rest.text, rest.cursor);
     return true;
   };
@@ -172,7 +178,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     if (k.name === "pageup" || k.name === "pagedown") return follow.page(k.name === "pageup" ? -1 : 1), true;
     if (matchKey(k, "ctrl+l")) return store.clear(), true;
     if (matchKey(k, "ctrl+r")) return setSearch(search ?? ""), setSel(0), true;
-    if (k.name === "escape" && (searching || input || shell)) return searching ? setSearch(null) : (setInput(""), setShell(false), setHi(null)), true;
+    if (k.name === "escape" && (searching || input || shell)) return searching ? setSearch(null) : (setInput(""), changeShell(false), setHi(null)), true;
     if (focus && !searching) {
       const i = blocks.indexOf(focus);
       if (k.name === "up") return i > 0 ? setFb(blocks[i - 1]!.id) : (setFb(null), tabs?.focusBar()), true;
@@ -205,7 +211,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     }
     if (k.sequence === "?" && !input && !searching) return;
     if (enterShell(k)) return true;
-    if (shell && !searching && !input && k.name === "backspace") return setShell(false), true; // backspace on an empty shell line leaves the mode
+    if (shell && !searching && !input && k.name === "backspace") return changeShell(false), true; // backspace on an empty shell line leaves the mode
     const r = editLine({ text: buffer, cursor }, k);
     if (r) return r.exit === "left" ? nudge() : edit(r.text, r.cursor), true; // `→` at the end is just the end of the line
 

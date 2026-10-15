@@ -19,7 +19,7 @@ import { useTabs } from "./context.ts";
 import { conformityOf, conformityView } from "./conformity.ts";
 import { MachineBlock } from "./HomeMachine.tsx";
 import { ActionsLine, HomeRowView } from "./HomeRows.tsx";
-import { actionButtons, ACTIONS_ROW_ID, activityRows, attentionRows, ignoredTexts, NEW_NOTE_ROW_ID, noteRows, upToDateText, type HomeAction, type HomeRow } from "./home-rows.ts";
+import { actionButtons, ACTIONS_ROW_ID, activityRows, activitySummary, attentionRows, chipRows, ignoredTexts, memoryRows, NEW_NOTE_ROW_ID, NEW_NOTE_TEXT, noteRows, notesSummary, unverifiedRow, upToDateText, VERIFY_ROW_ID, type HomeAction, type HomeRow } from "./home-rows.ts";
 import { parseConformity, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
@@ -43,6 +43,10 @@ const SAMPLE_MS = 2000;
 const FRAME_W = 4;
 /** Columns of a section's gutter (the `▌` and its padding). */
 const GUTTER_W = 2;
+/** Cells the label of a one-line section takes (`3 Atividade`) and the gap after it. */
+const SUMMARY_LABEL_W = 14;
+/** Cells of `   + nova nota`. */
+const NEW_NOTE_W = 14;
 let shared: MachineSampler | undefined;
 
 type RowsBySection = Record<HomePanel, HomeRow[]>;
@@ -53,8 +57,6 @@ interface HomeData {
   sections: readonly HomePanel[];
   upToDate?: string;
   ignored: string[];
-  chips: Chip[];
-  brokenChips: string[];
   done?: ReturnType<typeof parseConformity>;
   running: boolean;
   planSteps: number;
@@ -105,8 +107,11 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
 
   const attention = slotItems<Att>(slots, "home.attention", hidden);
   const notes = slotItems<string>(slots, "home.notes", hidden);
+  const checked = Boolean(snap.conformidade);
+  const chips = slotItems<Chip>(slots, "home.chips", hidden);
+  const notices = [...attentionRows(attention, slots.broken("home.attention", hidden)), ...chipRows(chips, slots.broken("home.chips", hidden)), ...memoryRows(sample.mem), ...(checked || snap.running ? [] : [unverifiedRow()])];
   const rows: RowsBySection = {
-    conformidade: [...attentionRows(attention, slots.broken("home.attention", hidden)), { id: ACTIONS_ROW_ID, text: "" }],
+    conformidade: [...notices, ...(checked ? [{ id: ACTIONS_ROW_ID, text: "" }] : [])],
     notas: noteRows(notes, canCompose),
     atividade: activityRows(history, blocks, favorites, now, g),
   };
@@ -115,8 +120,6 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     rows, sections, done, planSteps, running: snap.running,
     upToDate: upToDateText(slotItems<Att>(slots, "home.configured", hidden).length),
     ignored: ignoredTexts(done),
-    chips: slotItems<Chip>(slots, "home.chips", hidden),
-    brokenChips: slots.broken("home.chips", hidden),
   };
 
   const section = sections.includes(nav.home.panel) ? nav.home.panel : sections[0]!; // the notes section can go away
@@ -138,6 +141,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const act = (panel: HomePanel, row?: HomeRow) => {
     if (!row) return;
     if (row.id === ACTIONS_ROW_ID) return press(nav.home.action);
+    if (row.id === VERIFY_ROW_ID) return refresh();
     if (panel === "notas") return row.id === NEW_NOTE_ROW_ID ? (void registry.query(compose!), goNotes()) : goNotes();
     useCommand(row);
   };
@@ -171,7 +175,11 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   // Keep the cursor in view: the page scrolls when it is taller than the screen.
   const scroll = useRef<ScrollBoxRenderable>(null);
   const cursorId = nav.home.inside ? `home:${section}:${current(section)?.id}` : `home:${section}`;
-  useEffect(() => void scroll.current?.scrollChildIntoView(cursorId), [cursorId, focused]);
+  // The rows of a section that just opened are laid out on the next tick: scroll then.
+  useEffect(() => {
+    const timer = setTimeout(() => scroll.current?.scrollChildIntoView(cursorId), 0);
+    return () => clearTimeout(timer);
+  }, [cursorId, focused]);
 
   useKeys((key) => {
     if (!focused) return;
@@ -219,9 +227,11 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
       </>
     );
   };
+  const sectionTitle = (panel: HomePanel) => `[${sections.indexOf(panel) + 1}] ${SECTION_TITLES[panel]}`;
+  const sectionTone = (panel: HomePanel) => (focused && nav.home.panel === panel ? ("accent" as const) : undefined);
   const frame = (panel: HomePanel, children: React.ReactNode, aside?: string) => (
     <box key={panel} id={`home:${panel}`} flexShrink={0}>
-      <Panel panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={`[${sections.indexOf(panel) + 1}] ${SECTION_TITLES[panel]}`} tone={focused && nav.home.panel === panel ? "accent" : undefined} aside={aside}>
+      <Panel panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} tone={sectionTone(panel)} aside={aside}>
         {children}
       </Panel>
     </box>
@@ -230,37 +240,50 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const attentionBody = (
     <>
       {data.running ? <Loading label="verificando a conformidade…" /> : null}
-      {!data.running && !done ? <text fg={c.dim} flexShrink={0} wrapMode="none">{"  não verificado"}</text> : null}
       {!data.running && done?.message ? <text fg={c.dim} flexShrink={0} wrapMode="none">{`  ${done.message}`}</text> : null}
       {!data.running && !done?.message ? sectionRows("conformidade") : null}
       {!data.running && done && !done.message && data.upToDate ? <UpToDate text={data.upToDate} /> : null}
       {!data.running && !done?.message ? data.ignored.map((text) => <text key={text} fg={c.dim} flexShrink={0} wrapMode="none">{`    ${g.inactive} ${text}`}</text>) : null}
-      <ActionsLine buttons={buttons} current={focused && nav.home.panel === "conformidade" && nav.home.inside && current("conformidade")?.id === ACTIONS_ROW_ID ? nav.home.action : undefined} onPress={(action) => { rowHit.current = true; select("conformidade", ACTIONS_ROW_ID); press(action); }} />
+      {checked ? <ActionsLine buttons={buttons} current={focused && nav.home.panel === "conformidade" && nav.home.inside && current("conformidade")?.id === ACTIONS_ROW_ID ? nav.home.action : undefined} onPress={(action) => { rowHit.current = true; select("conformidade", ACTIONS_ROW_ID); press(action); }} /> : null}
     </>
   );
 
-  const chipColor = { ok: c.ok, warn: c.warn, error: c.error };
-  const chipGlyph = { ok: g.ok, warn: g.warn, error: g.error };
-  const chipLine = data.chips.length || data.brokenChips.length ? (
-    <text wrapMode="none" flexShrink={0} marginTop={1}>
-      {data.chips.map((chip) => (
-        <span key={chip.label}>
-          <span fg={chipColor[chip.level]}>{`${chipGlyph[chip.level]} ${chip.label}`}</span>
-          <span fg={c.dim}>{chip.detail ? ` ${chip.detail}  ` : "  "}</span>
-        </span>
-      ))}
-      {data.brokenChips.map((id) => <span key={id} fg={c.warn}>{`${g.warn} widget quebrou: ${id}  `}</span>)}
-    </text>
-  ) : null;
+  /** Notas and Atividade are one line until enter opens them (and while they are open they list their rows). */
+  const expanded = (panel: HomePanel) => nav.home.panel === panel && nav.home.inside;
+  const openSection = (panel: HomePanel) => {
+    rowHit.current = true;
+    nav.home.panel = panel;
+    nav.home.inside = rows[panel].length > 0;
+    bump();
+  };
+  const summaryRoom = Math.max(10, width - GUTTER_W - SUMMARY_LABEL_W - (canCompose ? NEW_NOTE_W : 0));
+  const summaries: Record<"notas" | "atividade", React.ReactNode> = {
+    notas: (
+      <text wrapMode="none" onMouseDown={() => openSection("notas")}>
+        <span fg={c.dim}>{notesSummary(rows.notas, summaryRoom)}</span>
+        {canCompose ? <span fg={c.accent}>{`   ${NEW_NOTE_TEXT}`}</span> : null}
+      </text>
+    ),
+    atividade: <text wrapMode="none" fg={c.dim} onMouseDown={() => openSection("atividade")}>{activitySummary(rows.atividade, summaryRoom)}</text>,
+  };
+  const oneLine = (panel: "notas" | "atividade") => {
+    const above = sections[sections.indexOf(panel) - 1];
+    const tight = panel === "atividade" && above === "notas" && !expanded("notas");
+    return (
+      <box key={panel} id={`home:${panel}`} flexShrink={0}>
+        <Panel panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} tone={sectionTone(panel)} inline={summaries[panel]} tight={tight} />
+      </box>
+    );
+  };
 
   return (
     <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
       <box flexDirection="column" paddingX={1} flexShrink={0}>
         <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={width} />
-        {chipLine}
         {sections.map((panel) => {
           if (panel === "conformidade") return frame(panel, attentionBody, profile ? `perfil: ${profile}` : "sem perfil");
-          return frame(panel, panel === "atividade" && !rows.atividade.length ? <text fg={c.dim} flexShrink={0} wrapMode="none">{"  nada executado ainda"}</text> : sectionRows(panel));
+          if (!expanded(panel)) return oneLine(panel);
+          return frame(panel, sectionRows(panel));
         })}
       </box>
     </scrollbox>

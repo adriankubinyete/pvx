@@ -34,15 +34,18 @@ export function headerParts(title: string, activeGlyph: string): { number?: stri
 }
 
 /** One header line: the number and the label in the tone when the section is active (bold), dim otherwise; `aside` is a dim note at the right end. */
-function SectionHeader({ title, color, active, aside }: { title: string; color: string; active: boolean; aside?: string }) {
+function SectionHeader({ title, color, active, aside, inline }: { title: string; color: string; active: boolean; aside?: string; inline?: ReactNode }) {
   const { c, g } = useTheme();
   const { number, label } = headerParts(title, g.active);
   return (
     <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-      <text wrapMode="none" flexShrink={0} fg={color}>
-        {number ? `${number} ` : ""}
-        {active ? <b>{label}</b> : label}
-      </text>
+      <box flexDirection="row" flexShrink={1}>
+        <text wrapMode="none" flexShrink={0} fg={color}>
+          {number ? `${number} ` : ""}
+          {active ? <b>{label}</b> : label}
+        </text>
+        {inline ? <box flexDirection="row" flexShrink={1} paddingLeft={INLINE_GAP_W}>{inline}</box> : null}
+      </box>
       {aside ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(aside)}</text> : null}
     </box>
   );
@@ -52,21 +55,28 @@ function SectionHeader({ title, color, active, aside }: { title: string; color: 
 export interface SectionExtras {
   /** A dim note at the right end of the header line (`perfil: Issabel produção`). */
   aside?: string;
+  /** Content on the header line, after the label (a collapsed section: `3 Atividade   17:20 alfa confirm`). */
+  inline?: ReactNode;
+  /** No blank row above: sections of one line sit one under the other. */
+  tight?: boolean;
 }
+
+/** Cells between the label of a section and its inline content. */
+const INLINE_GAP_W = 3;
 
 /**
  * A section of the page, never a box: a header line (`1 Rotinas`) with whitespace above it, and the content under it.
  * With `tone` the section is the active one (or needs attention): the header takes the tone and a `▌` gutter runs down its side;
  * without it the gutter is blank, so the content does not move. A Panel with neither `title` nor `tone` is a plain container.
  */
-export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, children }: Props<"Panel"> & SectionExtras) {
+export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, inline, tight, children }: Props<"Panel"> & SectionExtras) {
   const { c, g } = useTheme();
   const section = title !== undefined || t !== undefined;
   const active = t !== undefined;
   const gutter = section ? { border: ["left" as const], borderColor: active ? tone(c, t) : c.bg, customBorderChars: { ...GUTTER_CHARS, vertical: active ? g.gutter : " " }, paddingLeft: 1 } : {};
   return (
-    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined ? { marginTop: 1 } : {})} {...gutter}>
-      {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} aside={aside} /> : null}
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
+      {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} aside={aside} inline={inline} /> : null}
       {children as ReactNode}
     </box>
   );

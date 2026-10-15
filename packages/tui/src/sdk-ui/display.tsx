@@ -2,7 +2,7 @@ import type { Component, DetailItem, SdkUi } from "@pvx/sdk";
 import { useLayout } from "../layout.ts";
 import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
-import { columnWidth, DETAILS_GAP, detailColumnCount, detailColumns, meterBar, meterTone, percentText, sparkSuffix, sparkText, valueOffset, type DetailColumn } from "./display.ts";
+import { barMeterParts, columnWidth, DETAILS_GAP, detailColumnCount, detailColumns, meterBar, meterTone, percentText, sparkSuffix, sparkText, valueOffset, type DetailColumn } from "./display.ts";
 import { toneColor as tone } from "./tones.ts";
 
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
@@ -91,6 +91,25 @@ export function Spark({ values, width = DEFAULT_SPARK_WIDTH, label, suffix, max 
       <GaugeLabel label={label} />
       <span fg={c.accent}>{sparkText(values, width, max, g)}</span>
       {after ? <span fg={c.text}>{`  ${clean(after)}`}</span> : null}
+    </text>
+  );
+}
+
+const DEFAULT_BAR_METER_W = 30;
+
+/** The bar of a system monitor: `label[|||||        54.0%] suffix`. */
+export function BarMeter({ value, width = DEFAULT_BAR_METER_W, label, labelWidth, suffix, warnAbove }: Props<"BarMeter">) {
+  const { c } = useTheme();
+  const { filled, empty, percent } = barMeterParts(value, width);
+  const text = label === undefined ? "" : clean(label).padEnd(labelWidth ?? 0);
+  return (
+    <text wrapMode="none" flexShrink={0}>
+      <span fg={c.info}>{text}</span>
+      <span fg={c.dim}>{"["}</span>
+      <span fg={tone(c, meterTone(value, warnAbove))}>{filled}</span>
+      <span>{empty}</span>
+      <span fg={c.dim}>{`${percent}]`}</span>
+      {suffix ? <span fg={c.dim}>{` ${clean(suffix)}`}</span> : null}
     </text>
   );
 }

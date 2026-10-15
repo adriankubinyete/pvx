@@ -234,7 +234,7 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda; veja Páginas), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`), `Chip`, `Badge`, `Details`, `Meter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading`, `RunPanel` e `CommandResult` (veja Componentes de fluxo).
+- **Componentes:** `Panel` (`title`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda; veja Páginas), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`), `Chip`, `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ProgressBar`, `CellGrid`, `Loading`, `RunPanel` e `CommandResult` (veja Componentes de fluxo).
 - **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useConfirm()` (diálogo de confirmação, abaixo); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info` (azul), `accent`, `dim`, `text`, `ip` (rosa, para endereços IP). Nunca escreva cor hex: use os tons.
 
@@ -909,7 +909,7 @@ Um job é um comando **do próprio módulo** que continua rodando depois que o p
 | API | O que faz |
 | --- | --- |
 | `jobs.start(nome, linha, { secrets? })` | Inicia `pvx <módulo> <linha>` num processo separado: `systemd-run --unit pvx-<módulo>-<nome> --collect` quando existe; senão, uma sessão própria (`setsid`) sem terminal e com todos os descritores em `/dev/null`. `nome` é `[a-z0-9-]+`. Falha com mensagem clara se o job já roda. A linha de comando e o log começam do zero a cada início. |
-| `jobs.status(nome)` | `{ state: "running" \| "done" \| "failed" \| "stopped" \| "none", startedAt, endedAt?, exit?, pid? }`. Um job cujo processo morreu sem avisar aparece como `failed`. |
+| `jobs.status(nome)` | `{ state: "running" \| "done" \| "failed" \| "stopped" \| "none", startedAt, endedAt?, exit?, pid?, origin?, stoppedBy? }`. `origin` e `stoppedBy` dizem quem começou e quem parou: `cron` (sem terminal) ou `manual` (num terminal); a aba Tarefas os mostra como `cron` e `você`. Um job cujo processo morreu sem avisar aparece como `failed`. |
 | `jobs.stop(nome)` | SIGTERM no grupo inteiro (o host também derruba os `ctx.exec` com `signal` do job), SIGKILL depois de 3 s; o estado vira `stopped`. |
 | `jobs.list()` | Todos os jobs do módulo, com o mesmo formato de `status` mais `name`. |
 | `jobs.log(nome, { tail?, since? })` | Linhas do log. `since` pula essa quantidade de linhas (pergunte só pelas novas); `tail` devolve só as últimas N. |
@@ -1098,6 +1098,7 @@ Peças de leitura que uma tela monta com texto e números do módulo. Todas usam
 - **`Badge`**: um chip cheio de texto em negrito e maiúsculo, ` ATIVO `. `tone` é `ok` (padrão), `warn`, `error` ou `info`. É o estado de uma coisa de relance, ao lado do nome dela.
 - **`Details`**: uma grade de rótulo e valor. `items` é `{ label, value, tone?, note? }[]`: o rótulo fica apagado e alinhado, o valor no `tone` (inclusive `ip`) e a `note` apagada depois dele. Com `columns={2}` os itens se alternam entre duas colunas (o primeiro à esquerda, o segundo à direita) e abaixo de 100 colunas do terminal a grade vira uma coluna.
 - **`Meter`**: a barra fina de uso `━━━━────` com a porcentagem: `value` de 0 a 1, `width` (padrão 20), `label` apagado antes (alinhe os rótulos com espaços) e `suffix` apagado depois (`18 de 44 GB`). A barra é da cor de destaque, e do aviso acima de `warnAbove` (padrão 0,8).
+- **`BarMeter`**: a barra no estilo de um monitor de sistema, `0  [|||||||           54.0%]`: `value` de 0 a 1, `width` (as células entre os colchetes; padrão 30, e a porcentagem ocupa as 6 últimas), `label` no token `info` (preenchido até `labelWidth`) e `suffix` apagado depois do `]` (`7,9/8G`). Os `|` são da cor de destaque, e do aviso acima de `warnAbove` (padrão 0,8); os colchetes e a porcentagem ficam apagados. Use uma por linha para listar núcleos, memória ou discos; a largura fixa mantém a coluna parada.
 - **`Spark`**: uma série no tempo em blocos `▁▂▃▅`. `values` do mais antigo ao mais novo, esticados até `width` (padrão 14), de 0 a `max` (padrão 100). Depois da barra vem o último valor em porcentagem (ou o `suffix`).
 - **`CopyBlock`**: linhas de rótulo e valor num fundo discreto (o token `panel`, sem borda) e, embaixo, o botão `[ copiar ]` (`copyLabel`, tecla `keys`, padrão `c`). Ele copia as linhas como texto alinhado (`rótulo  valor`) por `useCopy`, com `title` no painel de cópia. É o bloco de "o que o técnico leva consigo" (a URL e a senha de uma instalação pronta).
 - **`Chip` com `state`**: `state="on"` ou `"off"` desenha o chip de filtro, ` todos ` cheio no acento quando `on` e no fundo `panel` quando `off`; `onPress` o torna clicável. O módulo guarda o filtro e as teclas.
@@ -1112,7 +1113,7 @@ Peças de leitura que uma tela monta com texto e números do módulo. Todas usam
 import type { Sdk } from "@pvx/sdk";
 
 export default (sdk: Sdk) => {
-  const { h, Panel, Text, Row, Badge, Chip, Details, Meter, Spark, CopyBlock, Notice, Scroll, useState } = sdk.ui;
+  const { h, Panel, Text, Row, Badge, Chip, Details, Meter, BarMeter, Spark, CopyBlock, Notice, Scroll, useState } = sdk.ui;
   const CPU = [8, 15, 10, 25, 18, 9, 8, 20, 32, 55, 30, 18, 10, 12];
 
   function Maquina() {
@@ -1137,6 +1138,7 @@ export default (sdk: Sdk) => {
           <Spark label="cpu     " values={CPU} />
           <Meter label="disco   " value={0.41} suffix="18 de 44 GB" />
           <Meter label="memória " value={0.86} />
+          <BarMeter label="mem" labelWidth={3} value={0.86} width={24} suffix="6,9/8G" />
           <Row fit gap={1}>
             {["todos", "ativos"].map((nome) => <Chip key={nome} label={nome} state={nome === filtro ? "on" : "off"} onPress={() => setFiltro(nome)} />)}
           </Row>
