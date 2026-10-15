@@ -15,14 +15,14 @@ async function load() {
   await loadModules(registry, { hostVersion: "0.1.0", makeLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }) });
   return registry;
 }
-async function mount(o: { isRoot?: boolean; shellTimeoutMs?: number } = {}) {
+async function mount(o: { isRoot?: boolean; shellTimeoutMs?: number; cols?: number; rows?: number } = {}) {
   if (!h) exits = 0;
   const registry = await load();
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   store = createSessionStore({ registry, makeLogger, historyPath: join(pvxHome(), "tui-history"), isRoot: o.isRoot ?? true, shellTimeoutMs: o.shellTimeoutMs });
   h = await renderTui(
     <App root={{ id: "sessao", element: <Session store={store} registry={registry} /> }} logger={makeLogger("core")} onExit={() => void exits++} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
-    { cols: 100, rows: 24 },
+    { cols: o.cols ?? 100, rows: o.rows ?? 24 },
   );
   return h;
 }
@@ -200,19 +200,73 @@ test("typing a core command prefix and tab completes it", async () => {
   expect(t.frame()).toContain("❯ modules ");
 });
 
-test("typing `!` switches the prompt to `$`, a shell block keeps the marker, backspace returns to normal", async () => {
+const inputRow = (t: TuiHarness) => t.frame().split("\n").find((l) => l.includes("host shell") || l.includes("tab completa"))!;
+
+test("typing `!` first enters shell mode: the `!` is consumed, the prompt is `!`, the footer says how to leave; backspace on an empty line leaves", async () => {
   const t = await mount();
-  expect(t.frame()).toContain("❯ ");
+  expect(inputRow(t)).toContain("❯ ");
   await t.type("!");
-  expect(t.frame()).toContain("$ !");
-  expect(t.frame()).toContain("host shell · enter roda");
+  expect(inputRow(t)).toContain("! "); // the shell prompt
+  expect(inputRow(t)).not.toContain("!!");
+  expect(inputRow(t)).not.toContain("❯");
+  expect(inputRow(t)).toContain("host shell · enter roda");
+  expect(t.frame()).toContain("esc sai do shell");
+  await t.type("ls");
+  expect(inputRow(t)).toMatch(/! ls/);
+  expect(inputRow(t)).not.toContain("!ls"); // the `!` is not part of the text
   await t.press("BACKSPACE");
-  expect(t.frame()).toContain("❯ ");
+  await t.press("BACKSPACE"); // the text is gone, still in shell mode
+  expect(inputRow(t)).toContain("host shell");
+  await t.press("BACKSPACE"); // on an empty line: back to the pvx prompt
+  expect(inputRow(t)).toContain("❯ ");
   expect(t.frame()).not.toContain("host shell ·");
-  await run(t, "!echo oi");
+});
+
+test("esc leaves shell mode and clears the line", async () => {
+  const t = await mount();
+  await t.type("!echo");
+  expect(t.frame()).toContain("esc sai do shell");
+  await t.press("ESCAPE");
+  expect(inputRow(t)).toContain("❯ ");
+  expect(t.frame()).not.toContain("echo");
+});
+
+test("a paste that starts with `!` enters shell mode without the `!`", async () => {
+  const t = await mount();
+  await t.paste("!echo colado");
+  expect(inputRow(t)).toMatch(/! echo colado/);
+  expect(inputRow(t)).not.toContain("!echo");
+  expect(t.frame()).toContain("esc sai do shell");
+  await t.press("ESCAPE");
+  await t.paste("sem bang");
+  expect(inputRow(t)).toContain("❯ sem bang");
+});
+
+test("submit runs the shell command; the scrollback line shows the marker `!` and the command without it, and the results start at the left margin", async () => {
+  const t = await mount();
+  await run(t, "!echo batata frita");
   await until(t, () => store.blocks[0]?.status === "ok");
   await t.flush();
-  expect(t.frame()).toContain("$ !echo oi");
+  expect(store.blocks[0]!.line).toBe("!echo batata frita"); // the history keeps the shell mark
+  const header = t.frame().split("\n").find((l) => l.includes("echo batata frita") && /\d\d:\d\d:\d\d/.test(l))!;
+  expect(header).toMatch(/^ {2}\d\d:\d\d:\d\d {2}! echo batata frita/);
+  expect(header).not.toContain("$");
+  const result = t.frame().split("\n").find((l) => l.trim() === "batata frita")!;
+  expect(result.indexOf("batata")).toBe(header.search(/\d/)); // the same column as the time
+  expect(inputRow(t)).toContain("❯ "); // the mode ends with the command
+});
+
+test("↑ recalls a shell entry in shell mode, and enter on a shell block puts it back that way", async () => {
+  const t = await mount();
+  await run(t, "!echo um");
+  await until(t, () => store.blocks[0]?.status === "ok");
+  await t.press("ARROW_UP");
+  expect(inputRow(t)).toMatch(/! echo um/);
+  expect(t.frame()).toContain("esc sai do shell");
+  await t.press("ESCAPE");
+  await t.press("ESCAPE"); // empty input: the last block
+  await t.press("RETURN");
+  expect(inputRow(t)).toMatch(/! echo um/);
 });
 
 test("with the input focused, no block shows the focus marker", async () => {
@@ -221,4 +275,21 @@ test("with the input focused, no block shows the focus marker", async () => {
   await until(t, () => store.blocks[0]?.status === "ok");
   await t.flush();
   expect(t.frame()).not.toContain("»");
+});
+
+test.each([[80, 24], [120, 40]] as const)("Comando at %ix%i: no frame around the input, no fill on the blocks, blocks one after the other, the input at the bottom", async (cols, rows) => {
+  const t = await mount({ cols, rows });
+  await run(t, "!echo um");
+  await until(t, () => store.blocks[0]?.status === "ok");
+  await run(t, "!echo dois");
+  await until(t, () => store.blocks[1]?.status === "ok");
+  await t.flush();
+  const all = t.frame().split("\n");
+  for (const l of all) expect(l.length).toBeLessThanOrEqual(cols);
+  expect(t.frame()).not.toMatch(/[╭╮╰╯]/); // the input is a field, not a box
+  const first = all.findIndex((l) => l.includes("! echo um"));
+  expect(all[first + 1]!.trim()).toBe("um");
+  expect(all[first + 2]).toContain("! echo dois"); // no blank row between blocks
+  const input = all.findLastIndex((l) => l.includes("tab completa"));
+  expect(input).toBe(rows - 2); // the row above the footer
 });

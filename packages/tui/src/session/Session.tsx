@@ -8,7 +8,7 @@ import { LineText } from "../LineText.tsx";
 import { useLayout } from "../layout.ts";
 import { followProps, useFollow } from "../follow.ts";
 import { useOver } from "../hover.ts";
-import { useKeys } from "../keys.tsx";
+import { useKeys, type RoutedKey } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { useTabs } from "../tabs/context.ts";
@@ -19,14 +19,19 @@ import { LogScreen } from "./LogScreen.tsx";
 import { SessionModals } from "./Modals.tsx";
 import type { Block, SessionApi } from "./store.ts";
 
+/** A line of the history that ran on the host shell: it starts with `!` (`!!` repeats the last line and is not one). */
+const isShellLine = (line: string): boolean => line.startsWith("!") && !line.startsWith("!!");
+/** The text of the input for a line: a shell line without its `!`. */
+const textOfLine = (line: string): string => (isShellLine(line) ? line.slice(1) : line);
+
 const printable = (s: string) => [...s].length === 1 && s >= " " && s !== "\x7f";
 
 /** The suggestion list. `active`: the input owns the keyboard, so hover moves the selection; otherwise hover only tints. A click accepts the row. */
 function Popup({ items, sel, active, onHover, onPick }: { items: Candidate[]; sel: number; active: boolean; onHover: (i: number) => void; onPick: (i: number) => void }) {
-  const { c, box, g } = useTheme();
+  const { c, g } = useTheme();
   const { over, enter, leave } = useOver<string>();
   return (
-    <box flexDirection="column" flexShrink={0} {...box()}>
+    <box flexDirection="column" flexShrink={0} backgroundColor={c.panel}>
       {items.map((it, i) => {
         const hot = !active && over === it.label && i !== sel;
         return (
@@ -50,17 +55,19 @@ function Popup({ items, sel, active, onHover, onPick }: { items: Candidate[]; se
 
 /** The command-first screen. State lives in `store` (the router mounts only the top screen). */
 export function Session({ store, registry, draft }: { store: SessionApi; registry: Registry; draft?: { draft: string } }) {
-  const { c, g, box, axes } = useTheme();
+  const { c, g } = useTheme();
   const router = useRouter();
   const tabs = useTabs();
   const renderer = useRenderer();
   const nudge = useNudge();
   const { blocks, history, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  const [input, setInputRaw] = useState(draft?.draft ?? "");
+  const [shell, setShell] = useState(() => isShellLine(draft?.draft ?? "")); // host shell mode: the `!` is the mode, not part of the text
+  const [input, setInputRaw] = useState(() => textOfLine(draft?.draft ?? ""));
   // The draft lives outside the component (memory only): the tab switch unmounts this screen.
   // Cursor in code points (`Infinity` = end, clamped on use). Any text set from outside typing (recall, completion, history) lands at the end.
   const [cur, setCur] = useState(Infinity);
-  const setInput = useCallback((v: string) => (setInputRaw(v), setCur(Infinity), draft && (draft.draft = v)), [draft]);
+  const setInput = useCallback((v: string) => (setInputRaw(v), setCur(Infinity)), []);
+  useEffect(() => void (draft && (draft.draft = shell ? `!${input}` : input)), [draft, shell, input]);
   const [hi, setHi] = useState<number | null>(null);
   const [sel, setSel] = useState(0);
   const [search, setSearchRaw] = useState<string | null>(null);
@@ -77,13 +84,13 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   if (searching) {
     const recent = [...new Set([...history].reverse())];
     items = rank(recent, (l) => l, search).slice(0, 6).map(({ item, range }) => ({ text: item, label: item, range }));
-  } else if (hi === null) ({ start, items } = complete(registry, input));
+  } else if (hi === null && !shell) ({ start, items } = complete(registry, input));
   const at = Math.min(sel, items.length - 1);
 
   const last = blocks.at(-1);
   const barFocused = tabs?.focused === false;
   const focus = barFocused ? undefined : blocks.find((b) => b.id === fb);
-  useScreenScope(barFocused ? "tabs" : focus ? "block" : searching ? "search" : "session", 1);
+  useScreenScope(barFocused ? "tabs" : focus ? "block" : searching ? "search" : shell ? "shell" : "session", 1);
   useEffect(() => {
     if (barFocused) setFb(null); // coming back from the bar lands in the input
   }, [barFocused]);
@@ -100,7 +107,9 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     const t = setInterval(() => setTick((n) => n + 1), 100);
     return () => clearInterval(t);
   }, [running]);
-  const recall = useCallback((line: string) => (setInput(line), setHi(null), setSel(0)), []);
+  /** Puts a line of the history in the input: a shell line goes back to shell mode, without its `!`. */
+  const load = useCallback((line: string) => (setShell(isShellLine(line)), setInput(textOfLine(line))), [setInput]);
+  const recall = useCallback((line: string) => (load(line), setHi(null), setSel(0)), [load]);
 
   const pick = useCallback((b: Block) => (setFb(b.id), tabs?.focusContent()), [tabs]);
   const pickInput = () => (setFb(null), tabs?.focusContent());
@@ -110,7 +119,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   const edit = (text: string, at: number) => {
     if (text !== buffer) {
       if (searching) setSearchRaw(text);
-      else setInputRaw(text), setHi(null), draft && (draft.draft = text);
+      else setInputRaw(text), setHi(null);
       setSel(0);
     }
     setCur(at);
@@ -118,7 +127,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
   /** The completion of the keyboard `tab`, also run by a click on a suggestion. */
   const accept = (i: number) => {
     if (!items[i]) return;
-    if (searching) setInput(items[i].text), setSearch(null);
+    if (searching) load(items[i].text), setSearch(null);
     else setInput(input.slice(0, start) + items[i].text);
     setSel(0);
   };
@@ -136,14 +145,25 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     return false;
   };
   const submit = () => {
-    const line = input;
-    setInput(""), setHi(null), setSel(0);
+    const line = shell ? `!${input}` : input;
+    setInput(""), setShell(false), setHi(null), setSel(0);
     follow.toBottom(); // a new command always shows its own output
     void store.run(line);
   };
   const browse = (to: number | null) => {
     setHi(to);
-    setInput(to === null ? "" : history[to] ?? "");
+    load(to === null ? "" : history[to] ?? "");
+  };
+
+  /** `!` as the first character (typed or at the start of a paste) switches to shell mode and is not kept in the text. */
+  const enterShell = (k: RoutedKey): boolean => {
+    if (shell || searching || input) return false;
+    if (k.sequence === "!") return setShell(true), true;
+    if (k.paste === undefined || !k.paste.startsWith("!")) return false;
+    const rest = editLine({ text: "", cursor: 0 }, { name: "paste", sequence: "", paste: k.paste.slice(1) });
+    setShell(true);
+    if (rest) edit(rest.text, rest.cursor);
+    return true;
   };
 
   useKeys((k) => {
@@ -152,7 +172,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     if (k.name === "pageup" || k.name === "pagedown") return follow.page(k.name === "pageup" ? -1 : 1), true;
     if (matchKey(k, "ctrl+l")) return store.clear(), true;
     if (matchKey(k, "ctrl+r")) return setSearch(search ?? ""), setSel(0), true;
-    if (k.name === "escape" && (searching || input)) return searching ? setSearch(null) : (setInput(""), setHi(null)), true;
+    if (k.name === "escape" && (searching || input || shell)) return searching ? setSearch(null) : (setInput(""), setShell(false), setHi(null)), true;
     if (focus && !searching) {
       const i = blocks.indexOf(focus);
       if (k.name === "up") return i > 0 ? setFb(blocks[i - 1]!.id) : (setFb(null), tabs?.focusBar()), true;
@@ -167,7 +187,7 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
     if (k.name === "escape") return last ? setFb(last.id) : tabs?.focusBar(), true; // empty input: last block, else the tab bar
     if (matchKey(k, "enter")) {
       if (!searching) return submit(), true;
-      if (items[at]) setInput(items[at].text);
+      if (items[at]) load(items[at].text);
       return setSearch(null), setHi(null), true;
     }
     if (matchKey(k, "tab")) {
@@ -184,29 +204,30 @@ export function Session({ store, registry, draft }: { store: SessionApi; registr
       return true;
     }
     if (k.sequence === "?" && !input && !searching) return;
+    if (enterShell(k)) return true;
+    if (shell && !searching && !input && k.name === "backspace") return setShell(false), true; // backspace on an empty shell line leaves the mode
     const r = editLine({ text: buffer, cursor }, k);
     if (r) return r.exit === "left" ? nudge() : edit(r.text, r.cursor), true; // `→` at the end is just the end of the line
 
   }, { paste: true });
 
-  const hint = note ?? (input.startsWith("!") && !input.startsWith("!!") && !searching ? "host shell · enter roda" : searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
+  const hint = note ?? (shell && !searching ? "host shell · enter roda" : searching ? hintText("search", "enter", "esc") : hintText("session", "tab", "enter"));
   const inputFocused = !barFocused && !focus;
-  const shell = !searching && input.startsWith("!") && !input.startsWith("!!"); // host shell mode: the `!` stays visible, deleting it leaves the mode
-  const mode = shell ? c.warn : c.accent;
+  const mode = c.accent;
   const lit = inHover.over !== undefined && !inputFocused; // hover on a resting input: subtle frame and prompt, never the focus accent
   const { cols } = useLayout();
   const room = Math.max(10, cols - 12 - [...hint].length - (searching ? 8 : 0));
   return (
-    <box flexGrow={1} minHeight={0} flexDirection="column" gap={1}>
-      <scrollbox ref={follow.ref} flexGrow={1} minHeight={0} {...followProps} focused={false} contentOptions={{ gap: 1 }}>
+    <box flexGrow={1} minHeight={0} flexDirection="column">
+      <scrollbox ref={follow.ref} flexGrow={1} minHeight={0} {...followProps} focused={false}>
         {blocks.map((b) => <BlockView key={b.id} b={b} focused={b === focus} tick={b.status === "running" ? tick : 0} onPick={pick} onAct={(blk, key) => blockAct(blk, key)} />)}
       </scrollbox>
       {items.length ? <Popup items={items} sel={at} active={inputFocused} onHover={setSel} onPick={(i) => (pickInput(), accept(i))} /> : null}
-      <box flexShrink={0} height={axes.border === "none" ? 1 : 3} flexDirection="row" justifyContent="space-between" paddingX={1} onMouseOver={() => inHover.enter("input")} onMouseOut={() => inHover.leave("input")} onMouseDown={pickInput} {...box(inputFocused ? mode : lit ? c.text : undefined)}>
+      <box flexShrink={0} height={1} flexDirection="row" justifyContent="space-between" paddingX={1} backgroundColor={inputFocused ? c.selected : lit ? c.panel : undefined} onMouseOver={() => inHover.enter("input")} onMouseOut={() => inHover.leave("input")} onMouseDown={pickInput}>
         <text>
-          <span fg={inputFocused ? mode : lit ? c.text : c.dim}><b>{`${shell ? g.shell : g.prompt} `}</b></span>
+          <span fg={shell && !searching ? c.warn : inputFocused ? mode : lit ? c.text : c.dim}><b>{`${shell && !searching ? g.shell : g.prompt} `}</b></span>
           {searching ? <span fg={c.text}>(busca) </span> : null}
-          {buffer || inputFocused ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} fg={shell ? c.warn : undefined} /> : <span fg={c.dim}>digite um comando · !ls para o shell · sem segredos</span>}
+          {buffer || inputFocused || shell ? <LineText line={{ text: buffer, cursor }} focused={inputFocused} width={room} fg={shell && !searching ? c.warn : undefined} /> : <span fg={c.dim}>digite um comando · !ls para o shell · sem segredos</span>}
         </text>
         <text fg={c.dim}>{hint}</text>
       </box>

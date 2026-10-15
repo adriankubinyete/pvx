@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "logs" | "logsearch" | "session" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "logs" | "logsearch" | "session" | "shell" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -122,6 +122,10 @@ const base: readonly Shortcut[] = [
   { keys: "tab", label: "completa", scope: "session" },
   { keys: "esc", label: "foca os blocos", scope: "session" }, // empty input; with no blocks it focuses the tab bar (shift+tab always does)
   { keys: "enter", label: "roda", scope: "session" },
+  { keys: "enter", label: "roda", scope: "shell", footer: true },
+  { keys: "esc", label: "sai do shell", scope: "shell", footer: true },
+  { keys: "↑", label: "histórico", scope: "shell" },
+  { keys: "ctrl+k", label: "palette", scope: "shell", footer: true },
   { keys: "enter", label: "escolhe", scope: "search", footer: true },
   { keys: "esc", label: "sai", scope: "search" },
   { keys: "enter", label: "envia", scope: "modal" },

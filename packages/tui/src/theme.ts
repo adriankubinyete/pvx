@@ -126,13 +126,13 @@ export function applyAccent(theme: ThemeName, base: Tokens, name: string): Token
 export const glyphs = {
   unicode: {
     ok: "✓", warn: "▲", warnTag: "!", error: "✗", info: "i", active: "●", inactive: "○",
-    meterFull: "▰", meterEmpty: "▱", prompt: "❯", shell: "$", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
+    meterFull: "▰", meterEmpty: "▱", prompt: "❯", shell: "!", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
     core: "■", page: "§", official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═", moreLeft: "‹", moreRight: "›",
     hline: "─", sep: "·", down: "↓", up: "↑", blocks: "▁▂▃▄▅▆▇█", braille: "1", barFull: "━", barEmpty: "─", progressFull: "█", progressEmpty: "░", cellOn: "■", cellOff: "■", gutter: "▌", mask: "•", radioOn: "•", sepBar: "│", auto: "◌",
   },
   ascii: {
     ok: "+", warn: "^", warnTag: "!", error: "x", info: "i", active: "*", inactive: "o",
-    meterFull: "#", meterEmpty: "-", prompt: ">", shell: "$", query: ">", cursor: ">", spinner: "|/-\\",
+    meterFull: "#", meterEmpty: "-", prompt: ">", shell: "!", query: ">", cursor: ">", spinner: "|/-\\",
     core: "=", page: "#", official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=", moreLeft: "<", moreRight: ">",
     hline: "-", sep: "-", down: "v", up: "^", blocks: "_.-:=+*#", braille: "", barFull: "=", barEmpty: "-", progressFull: "#", progressEmpty: ".", cellOn: "#", cellOff: ".", gutter: "|", mask: "*", radioOn: "*", sepBar: "|", auto: "~",
   },

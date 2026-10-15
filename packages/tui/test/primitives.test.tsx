@@ -403,7 +403,7 @@ test("barVersion keeps any label that is not a dev build", () => {
 
 // ---- The scrollback in Comando ----
 
-test("scrollback: the time sits inline before the command and the result lines have a small fixed indent", async () => {
+test("scrollback: the time sits inline before the command and the result lines start at the left margin, under the time", async () => {
   process.env.PVX_USERMODULES = join(import.meta.dir, "../../core/test/fixtures/usermodules");
   const registry: Registry = createRegistry();
   await loadModules(registry, { hostVersion: "0.1.0", makeLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }) });
@@ -417,6 +417,6 @@ test("scrollback: the time sits inline before the command and the result lines h
   const header = rowsOf(h).find((row) => row.includes("demo greet ana") && row.includes("❯"))!;
   expect(header).toMatch(/^ {2}\d\d:\d\d:\d\d {2}❯ demo greet ana/); // the page padding and the block padding, then the time
   const result = rowsOf(h).find((row) => row.includes("[✓] oi ana"))!;
-  expect(result.indexOf("[✓]")).toBe(6); // 2 of padding and a fixed indent of 4, not the command's column
-  expect(result.indexOf("[✓]")).toBeLessThan(header.indexOf("❯"));
+  expect(result.indexOf("[✓]")).toBe(2); // the page padding and the block padding: the column of the time
+  expect(result.indexOf("[✓]")).toBe(header.search(/\d/));
 });
