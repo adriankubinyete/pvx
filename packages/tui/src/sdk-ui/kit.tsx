@@ -5,15 +5,14 @@ import type { Component, ListItem, SdkUi, Tone } from "@pvx/sdk";
 import { followProps } from "../follow.ts";
 import { clean } from "../palette/search.ts";
 import { columnWidths, fit, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
-import { levelOf, meter } from "../tabs/home.ts";
 import { useTheme } from "../theme-context.tsx";
+import { toneColor as tone } from "./tones.ts";
+import { Button } from "./button.tsx";
 import { HostCtx, useKey } from "./host.tsx";
 import { windowStart } from "./window.ts";
-import type { Tokens } from "../theme.ts";
 
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
 
-const tone = (c: Tokens, t: Tone = "text") => ({ ok: c.accent, warn: c.warn, error: c.error, info: c.info, accent: c.accent, dim: c.dim, text: c.text })[t];
 const len = (s: string) => [...s].length;
 /** Module text never carries ANSI or control characters into `<text>`. */
 const textOf = (children: unknown) => clean(Children.toArray(children as ReactNode).map(String).join(""));
@@ -67,10 +66,13 @@ export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, childre
 /** A left border whose only drawn side is the vertical one; the other characters never show. */
 const GUTTER_CHARS = { topLeft: " ", topRight: " ", bottomLeft: " ", bottomRight: " ", horizontal: " ", vertical: " ", topT: " ", bottomT: " ", leftT: " ", rightT: " ", cross: " " };
 
-export function Row({ children }: Props<"Row">) {
+/** Children side by side. By default equal shares of the width; with `fit` each keeps its own width, `gap` cells apart, and the ones that do not fit go to the next line (a row of buttons, a line made of styled pieces). */
+export function Row({ fit, gap = 0, children }: Props<"Row">) {
+  const pieces = Children.toArray(children as ReactNode);
+  if (fit) return <box flexDirection="row" flexWrap="wrap" flexShrink={0} columnGap={gap}>{pieces.map((piece, i) => <box key={i} flexShrink={0}>{piece}</box>)}</box>;
   return (
     <box flexDirection="row" flexShrink={0}>
-      {Children.toArray(children as ReactNode).map((ch, i) => <box key={i} flexGrow={1} flexBasis={0} flexDirection="column">{ch}</box>)}
+      {pieces.map((ch, i) => <box key={i} flexGrow={1} flexBasis={0} flexDirection="column">{ch}</box>)}
     </box>
   );
 }
@@ -81,26 +83,23 @@ export function Text({ tone: t, bold, children }: Props<"Text">) {
   return <text fg={tone(c, t)} flexShrink={0}>{bold ? <b>{s}</b> : s}</text>;
 }
 
-export function Chip({ label, level = "ok" }: Props<"Chip">) {
+/** The fill of a filter chip: the chosen one in the accent, the others on the `panel` token. */
+function FilterChip({ label, on, onPress }: { label: string; on: boolean; onPress?: () => void }) {
+  const { c } = useTheme();
+  return (
+    <box flexShrink={0} onMouseDown={onPress ? () => onPress() : undefined}>
+      <text wrapMode="none" fg={on ? c.bg : c.text} bg={on ? c.accent : c.panel}>{` ${clean(label)} `}</text>
+    </box>
+  );
+}
+
+export function Chip({ label, level = "ok", state, onPress }: Props<"Chip">) {
   const { c, g } = useTheme();
+  if (state) return <FilterChip label={label} on={state === "on"} onPress={onPress} />;
   return (
     <text wrapMode="none" flexShrink={0}>
       <span fg={tone(c, level)}>{`${g.active} `}</span>
       <span fg={c.text}>{clean(label)}</span>
-    </text>
-  );
-}
-
-export function Meter({ value, width = 10, label }: Props<"Meter">) {
-  const { c, g } = useTheme();
-  const pct = Math.max(0, Math.min(1, value)) * 100;
-  const [full, empty] = meter(pct, width, g);
-  return (
-    <text wrapMode="none" flexShrink={0}>
-      {label ? <span fg={c.dim}>{`${clean(label)} `}</span> : null}
-      <span fg={tone(c, levelOf(pct))}>{full}</span>
-      <span fg={c.dim}>{empty}</span>
-      <span fg={c.text}>{` ${Math.round(pct)}%`}</span>
     </text>
   );
 }
@@ -148,9 +147,13 @@ function ActionKey({ label, selected, onAction }: { label: string; selected: str
   return null;
 }
 
+/** Cells of the marker column of a row: the glyph and a space. The selected `»`, the hover `›` and the blank of the other rows all take exactly this, so the columns never move. */
+const CURSOR_WIDTH = 2;
+
 export function List({ items, selected, columns, onPress, onHover, maxRows, onAction, actionLabel = DEFAULT_ACTION_LABEL, actionOnClick = true }: Props<"List">) {
   const { c, g } = useTheme();
   const [over0, setOver] = useState<string | undefined>(undefined); // the row under the mouse
+  const markWidth = Math.max(0, ...items.map((it) => (it.mark ? len(clean(it.mark.text)) : 0)));
   const marks = items.some((it) => it.mark);
   const cols = columns?.length ? columns : undefined;
   const box = useRef<{ width: number } | null>(null);
@@ -162,7 +165,7 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
     const v = it.cells?.[id];
     return { text: clean(typeof v === "string" ? v : v?.text ?? ""), tone: typeof v === "object" ? v.tone : undefined };
   };
-  const lead = 2 + (marks ? 2 : 0);
+  const lead = CURSOR_WIDTH + (marks ? markWidth + 1 : 0);
   const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, width - lead)) : [];
   const sel = cols ? items.find((it) => it.id === selected) : undefined;
   const over = cols && sel ? cols.map((col, i) => overflow(cell(sel, col.id).text, widths[i]!)) : [];
@@ -198,8 +201,8 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
         <box key={it.id} flexShrink={0} backgroundColor={it.id === selected ? c.selected : hot ? c.panel : undefined}
           onMouseOver={() => (setOver(it.id), onHover?.(it.id))} onMouseOut={() => (setOver((o) => (o === it.id ? undefined : o)), onHover?.(undefined))} onMouseDown={onPress || onAction ? () => pressRow(it.id) : undefined}>
           <text wrapMode="none">
-            {it.id === selected ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{hot ? `${g.query} ` : "  "}</span>}
-            {marks ? <span fg={it.mark ? tone(c, it.mark.tone) : c.dim}>{it.mark ? `${clean(it.mark.text)} ` : "  "}</span> : null}
+            {it.id === selected ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{hot ? `${g.query} ` : " ".repeat(CURSOR_WIDTH)}</span>}
+            {marks ? <span fg={it.mark ? tone(c, it.mark.tone) : c.dim}>{`${(it.mark ? clean(it.mark.text) : "").padEnd(markWidth)} `}</span> : null}
             {cols ? cols.map((col, i) => {
               const v = cell(it, col.id);
               const text = fit(v.text, widths[i]!, col.align, it.id === selected ? marqueeOffset(n, over[i]!, pause) : 0);
@@ -293,15 +296,34 @@ export function LogTail({ lines, follow = true, focused = false }: Props<"LogTai
   );
 }
 
-/** An inline result block: the level's marker and the text beside it. */
-export function Notice({ level, children }: Props<"Notice">) {
+/** A `Notice`'s action sits at the end of the line, apart from the text, so the text can wrap without moving it. */
+const NOTICE_ACTION_GAP = 2;
+
+/** An inline result block: the level's marker and the text beside it, and an optional button at the end of the line. */
+export function Notice({ level, action, children }: Props<"Notice">) {
   const { result, c } = useTheme();
   const { marker, color } = result(level);
   const text = textOf(children);
   return (
-    <text flexShrink={0}>
-      <span fg={color}>{`${marker} `}</span>
-      <span fg={c.text}>{text}</span>
-    </text>
+    <box flexDirection="row" flexShrink={0} columnGap={NOTICE_ACTION_GAP}>
+      <box flexGrow={1} flexShrink={1}>
+        <text flexShrink={0}>
+          <span fg={color}>{`${marker} `}</span>
+          <span fg={c.text}>{text}</span>
+        </text>
+      </box>
+      {action ? <Button label={action.label} onPress={action.onPress} keys={action.keys} focused={action.focused} /> : null}
+    </box>
+  );
+}
+
+/** Scrolls a page taller than the screen. The keys are mounted only while it is `focused` (default). */
+export function Scroll({ focused = true, children }: Props<"Scroll">) {
+  const scroll = useRef<ScrollBoxRenderable>(null);
+  return (
+    <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
+      {focused ? <LogKeys scroll={scroll} /> : null}
+      {children as ReactNode}
+    </scrollbox>
   );
 }

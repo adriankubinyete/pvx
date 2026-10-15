@@ -2,12 +2,19 @@ import { memo } from "react";
 import type { OutLine } from "@pvx/sdk";
 import { shortcuts } from "../keymap.ts";
 import { useOver } from "../hover.ts";
+import { clockText } from "../tabs/clock.tsx";
 import { useTheme } from "../theme-context.tsx";
 import type { Block } from "./store.ts";
 
 const kinds = { success: "ok", warning: "warn", error: "error", info: "info" } as const;
 /** Action row of the focused block, from the one shortcut table. */
 const allActions = shortcuts.filter((s) => s.scope === "block" && s.hint);
+/** Columns the result lines are indented from the block's edge: a small fixed step, never aligned to the time column. */
+const RESULT_INDENT = 4;
+/** Columns of the start time (`13:31:02`) and of the blank that stands in for it on a block with no start. */
+const TIME_W = 8;
+/** The start time before the command; blank (same width) for a block that has none, so the commands still line up. */
+const startTime = (at: number | undefined): string => (at === undefined ? " ".repeat(TIME_W) : clockText(new Date(at), "time"));
 const dur = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
 
 function Line({ l }: { l: OutLine }) {
@@ -38,7 +45,7 @@ function Hint({ keys, label, onPick }: { keys: string; label: string; onPick: ()
 }
 
 /**
- * One scrollback block: command line, status and duration, output indented 3 cells. `focused`: selected background, `»` and the action row.
+ * One scrollback block: the start time inline before the command, status and duration at the right, results indented a fixed `RESULT_INDENT` cells. `focused`: selected background, `»` and the action row.
  * `tick` only matters while running (the spinner frame). Memoized. Hover tints only the header (`selected` background, dim `›`, underlined command): the focused block tints the whole block and shows the accent `»`, so the two never look alike. `onAct` runs a footer action by its key.
  */
 export const BlockView = memo(function BlockView({ b, focused, tick, onPick, onAct }: { b: Block; focused: boolean; tick: number; onPick: (b: Block) => void; onAct?: (b: Block, keys: string) => void }) {
@@ -54,6 +61,7 @@ export const BlockView = memo(function BlockView({ b, focused, tick, onPick, onA
       onMouseOver={() => enter("x")} onMouseOut={() => leave("x")} onMouseDown={() => onPick(b)}>
       <box flexDirection="row" justifyContent="space-between" flexShrink={0} backgroundColor={over && !focused ? c.selected : undefined}>
         <text>
+          <span fg={c.dim}>{`${startTime(b.at)}  `}</span>
           <span fg={focused || !over ? (host ? c.warn : c.accent) : c.dim}>{`${focused ? g.cursor : over ? g.query : host ? g.shell : g.prompt} `}</span>
           <span fg={c.text}><b>{over && !focused ? <u>{b.line}</u> : b.line}</b></span>
         </text>
@@ -62,7 +70,7 @@ export const BlockView = memo(function BlockView({ b, focused, tick, onPick, onA
           <span fg={c.dim}>{b.ms === undefined ? "" : dur(b.ms)}</span>
         </text>
       </box>
-      <box flexDirection="column" paddingLeft={3} flexShrink={0}>
+      <box flexDirection="column" paddingLeft={RESULT_INDENT} flexShrink={0}>
         {b.lines.map((l, i) => <Line key={i} l={l} />)}
         {focused ? (
           <box flexDirection="row" gap={3} flexShrink={0}>

@@ -5,6 +5,12 @@ import { useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
 import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
+import type { Component, SdkUi } from "@pvx/sdk";
+import { Button } from "./button.tsx";
+import { columnOf, copyText } from "./display.ts";
+import { toneColor as tone } from "./tones.ts";
+
+type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
 
 /** Writes `text` to the clipboard. `ok: false` carries the reason. */
 export type ClipboardWrite = (text: string) => Promise<{ ok: true } | { ok: false; reason: string }>;
@@ -76,6 +82,34 @@ export function CopyPreview() {
     <box position="absolute" bottom={0} left={2} zIndex={9} minWidth={[...clean(p.title)].length + 6} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(p.ok === false ? c.warn : c.dim)} title={`${p.ok === false ? g.warn : g.ok} ${clean(p.title)}`}>
       {lines.map((l, i) => <text key={i} fg={c.dim} wrapMode="none" flexShrink={0}>{l || " "}</text>)}
       {more > 0 ? <text fg={c.dim} wrapMode="none" flexShrink={0}>{`… mais ${more} linha${more > 1 ? "s" : ""}`}</text> : null}
+    </box>
+  );
+}
+
+const DEFAULT_COPY_LABEL = "copiar";
+const DEFAULT_COPY_KEY = "c";
+const COPY_BLOCK_PAD = 1;
+
+/** Label/value rows on a subtle fill (the `panel` token, no border), with the copy button under them. */
+export function CopyBlock({ rows, copyLabel = DEFAULT_COPY_LABEL, keys = DEFAULT_COPY_KEY, title }: Props<"CopyBlock">) {
+  const { c } = useTheme();
+  const copy = useCopy();
+  const { labelWidth } = columnOf(rows);
+  const copyAll = () => void copy(copyText(rows), { title });
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      <box flexDirection="column" flexShrink={0} backgroundColor={c.panel} paddingX={COPY_BLOCK_PAD}>
+        {rows.map((row) => (
+          <text key={row.label} wrapMode="none" flexShrink={0}>
+            <span fg={c.dim}>{`${clean(row.label).padEnd(labelWidth)}  `}</span>
+            <span fg={tone(c, row.tone)}>{clean(row.value)}</span>
+            {row.note ? <span fg={c.dim}>{` ${clean(row.note)}`}</span> : null}
+          </text>
+        ))}
+      </box>
+      <box flexShrink={0} paddingTop={1}>
+        <Button label={copyLabel} primary keys={keys} onPress={copyAll} />
+      </box>
     </box>
   );
 }

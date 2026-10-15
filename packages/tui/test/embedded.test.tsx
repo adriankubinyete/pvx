@@ -45,10 +45,11 @@ async function mount(registry: Registry, cols = 120, rows = 40) {
   return h;
 }
 
-test("the tab bar tag reads the dev mark in the nightly format", async () => {
+test("the tab bar tag is short: the version, dev and the count of embedded modules (Sistema lists them)", async () => {
   const t = await mount(await loadedRegistry());
   const bar = t.frame().split("\n")[0]!;
-  expect(bar).toContain("pvx 0.1.2 (dev, +alpha +beta)");
+  expect(bar).toContain("pvx 0.1.2 dev +2");
+  expect(bar).not.toContain("alpha");
 });
 
 test("Início shows the aviso for an installed module that lost to the embedded copy", async () => {

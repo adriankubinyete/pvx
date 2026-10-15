@@ -80,7 +80,7 @@ test.each([[80, 24], [230, 24]] as const)("chips line sits alone under the bar a
   const { t } = await mount({ cols, rows });
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Início");
-  expect(lines[1]).toContain("✓ demo");
+  expect(lines[2]).toContain("✓ demo"); // row 1 is the rule
   expect(lines.filter((l) => l.includes("✓ demo"))).toHaveLength(1);
   for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
   expect(lines.filter((l) => l.includes("› máquina"))).toHaveLength(1);

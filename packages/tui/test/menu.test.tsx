@@ -251,8 +251,9 @@ test("Módulos: the bar hides the selection and the first row sits fully below t
   expect(selectedName(t)).toBeUndefined(); // bar focused: no accent border
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Módulos");
-  expect(lines[1]).toContain("instalados"); // the switch right under the bar, not clipped
-  expect(lines[2]).toContain("╭"); // and the first row of cards under it
+  expect(lines[1]).toMatch(/^ ─+ $/); // the rule under the bar
+  expect(lines[2]).toContain("instalados"); // the switch right under the bar, not clipped
+  expect(lines[3]).toContain("╭"); // and the first row of cards under it
   await t.press("ARROW_DOWN");
   expect(selectedName(t)).toBeDefined();
 });
@@ -290,9 +291,9 @@ async function openForm() {
 
 test("form frame: the bar row is intact and the panel title sits whole on the next row", async () => {
   const t = await openForm();
-  const [bar, top] = t.frame().split("\n");
+  const [bar, , top] = t.frame().split("\n"); // the rule is row 1
   for (const l of ["Início", "Módulos", "Logs", "Comando", "0.1.0"]) expect(bar).toContain(l);
-  expect(bar).not.toMatch(/[╭╮─│]/);
+  expect(bar).not.toMatch(/[╭╮─]/); // no frame on the bar row (the `│` is the separator before the clock)
   expect(top).toContain("módulos › accept"); // one dim breadcrumb line, no box
   expect(t.frame()).not.toMatch(/[╭╮╰╯]/);
 });
@@ -377,10 +378,10 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[1]).toMatch(/^ ╭─› máquina.*╭─› \[1\] conformidade ●─/); // row 0 is the bar
+  expect(t.frame().split("\n")[2]).toMatch(/^ ╭─› máquina.*╭─› \[1\] conformidade ●─/); // row 0 is the bar, row 1 the rule
   await t.press("ARROW_UP");
   await t.press("TAB");
-  expect(t.frame().split("\n")[1]).toMatch(/^\s+instalados \d+\s+catálogo\s+c alterna/); // the switch: Módulos has cards, not a panel
+  expect(t.frame().split("\n")[2]).toMatch(/^\s+instalados \d+\s+catálogo\s+c alterna/); // the switch: Módulos has cards, not a panel
 });
 
 /** The help is fully visible at 80x24: title, first row, last row (the hint), and no row cut by the frame. */
@@ -397,7 +398,7 @@ const seeHelp = (t: TuiHarness, scope: Scope) => {
 test("? help fits 80x24 from every main context and esc returns to the same focus", async () => {
   const m = await mount({ cols: 80, rows: 24, modules: true });
   const t = m.t;
-  for (let i = 0; i < 100 && !t.frame().split("\n")[6]?.includes("1.0.0"); i++) (await Bun.sleep(50), await t.flush()); // the card rows load async (listModules): compare frames only after the first row shows its version
+  for (let i = 0; i < 100 && !t.frame().split("\n")[7]?.includes("1.0.0"); i++) (await Bun.sleep(50), await t.flush()); // the card rows load async (listModules): compare frames only after the first row shows its version
   const check = async (scope: Scope, footerKey: string) => {
     const before = t.frame();
     await t.press("?");
@@ -528,17 +529,17 @@ test("mouse: hover moves the selection, click opens the menu; hover selects an i
 
 test("mouse: the segments switch the view; the dashed cards are clickable", async () => {
   const { t } = await mount({ cols: 120, rows: 30, modules: true });
-  const row1 = () => t.frame().split("\n")[1]!;
-  await t.click(row1().indexOf("catálogo") + 2, 1);
+  const row1 = () => t.frame().split("\n")[2]!; // row 1 is the rule under the bar
+  await t.click(row1().indexOf("catálogo") + 2, 2);
   expect(footerLine(t)).toContain("c instalados");
-  await t.click(row1().indexOf("instalados") + 2, 1);
+  await t.click(row1().indexOf("instalados") + 2, 2);
   expect(footerLine(t)).toContain("c catálogo");
   for (let i = 0; i < 12; i++) await t.press("ARROW_RIGHT"); // the dashed cards, last row
   const lines = t.frame().split("\n");
   const y = lines.findIndex((l) => l.includes("abrir o catálogo"));
   await t.click(lines[y]!.indexOf("abrir o catálogo") + 2, y);
   expect(footerLine(t)).toContain("c instalados"); // the catalog view
-  await t.click(row1().indexOf("instalados") + 2, 1);
+  await t.click(row1().indexOf("instalados") + 2, 2);
   const ys = t.frame().split("\n").findIndex((l) => l.includes("adicionar por URL"));
   await t.click(t.frame().split("\n")[ys]!.indexOf("adicionar por URL") + 2, ys);
   expect(t.frame()).toContain("somente leitura"); // this mount has no host deps; with them the box opens

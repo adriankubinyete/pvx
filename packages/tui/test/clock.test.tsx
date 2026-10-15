@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { createLogger, createRegistry, logsDir, pvxHome } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs } from "../src/index.ts";
-import { clockText, clockWidth, pickForm } from "../src/tabs/clock.tsx";
+import { barVersion } from "../src/tabs/bar.ts";
+import { clockCost, clockText, clockWidth, pickForm } from "../src/tabs/clock.tsx";
 
 let h: TuiHarness | undefined;
 afterEach(() => h?.destroy());
@@ -23,22 +24,38 @@ async function mount(cols: number, now: () => number) {
 }
 const D = new Date(2026, 9, 8, 14, 32, 7).getTime(); // a Thursday
 
-test("the clock drops weekday, then date, then seconds; HH:MM stays", () => {
+test("the clock drops the date, then the seconds, then the time itself", () => {
   const d = new Date(D);
-  expect(["full", "noDay", "time", "short"].map((f) => clockText(d, f as never))).toEqual(["qui 08/10 14:32:07", "08/10 14:32:07", "14:32:07", "14:32"]);
-  expect(pickForm(clockWidth("full"))).toBe("full");
-  expect(pickForm(clockWidth("full") - 1)).toBe("noDay");
-  expect(pickForm(clockWidth("noDay") - 1)).toBe("time");
-  expect(pickForm(clockWidth("time") - 1)).toBe("short");
-  expect(pickForm(0)).toBe("short");
+  expect(["full", "time", "short", "none"].map((f) => clockText(d, f as never))).toEqual(["qui 08/10 14:32:07", "14:32:07", "14:32", ""]);
+  expect(pickForm(clockCost("full"))).toBe("full");
+  expect(pickForm(clockCost("full") - 1)).toBe("time");
+  expect(pickForm(clockCost("time") - 1)).toBe("short");
+  expect(pickForm(clockCost("short") - 1)).toBe("none");
+  expect(pickForm(0)).toBe("none");
+  expect(clockWidth("none")).toBe(0);
+});
+
+test("the bar shows a dev build as `dev +N` (the count of embedded modules) and leaves any other label alone", () => {
+  expect(barVersion("0.1.2 (dev, +alpha +beta +gamma)")).toBe("0.1.2 dev +3");
+  expect(barVersion("0.1.2 (dev)")).toBe("0.1.2 dev");
+  expect(barVersion("0.1.2 (nightly, abc1234)")).toBe("0.1.2 (nightly, abc1234)");
+  expect(barVersion("0.1.0")).toBe("0.1.0");
 });
 
 test("the bar shows clock and version at 80 columns with the current tabs", async () => {
   const t = await mount(80, () => D);
   const bar = t.frame().split("\n")[0]!;
-  expect(bar).toContain("qui 08/10 14:32:07 · pvx 0.1.0");
+  expect(bar).toContain("│ qui 08/10 14:32:07 · pvx 0.1.0");
   expect(bar.length).toBeLessThanOrEqual(80);
 });
+
+for (const cols of [80, 100, 120]) {
+  test(`a thin rule runs under the bar across the page width (${cols} columns)`, async () => {
+    const t = await mount(cols, () => D);
+    const rule = t.frame().split("\n")[1]!;
+    expect(rule.trim()).toBe("─".repeat(cols - 2));
+  });
+}
 
 test("a clock tick re-renders only the clock: the tab content does not render again", async () => {
   const start = Date.now();

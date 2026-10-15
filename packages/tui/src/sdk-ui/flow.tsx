@@ -7,14 +7,17 @@ import { useNudge } from "../nudge.tsx";
 import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
 import type { Tokens } from "../theme.ts";
+import { toneColor as tone } from "./tones.ts";
 import { Fields } from "./fields.tsx";
 import { FocusCtx, useHost } from "./host.tsx";
+import { Button } from "./button.tsx";
 import { clock } from "./kit.tsx";
+
+export { Button, unreachableButtons } from "./button.tsx";
 
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
 type Value = string | boolean;
 
-const tone = (c: Tokens, t: Tone = "text") => ({ ok: c.accent, warn: c.warn, error: c.error, info: c.info, accent: c.accent, dim: c.dim, text: c.text })[t];
 const len = (s: string) => [...s].length;
 
 /** The width of a box, once laid out (`undefined` before): spread `props` on the box. */
@@ -83,54 +86,6 @@ export function useAsync<T>(fn: () => T | Promise<T>, deps: readonly unknown[]):
   return { ...st, run };
 }
 
-// ---- Button ----
-
-/** The key of a `Button`: its own component, so the hook runs only when there is one. */
-function ButtonKey({ keys, label, onPress }: { keys: string; label: string; onPress: () => void }) {
-  const host = useHost();
-  const latest = useRef(onPress);
-  latest.current = onPress;
-  useEffect(() => host.addKey({ keys, label, run: () => latest.current() }), [host, keys, label]);
-  return null;
-}
-
-/** Labels of the mounted buttons the keyboard cannot reach (see `isReachable`), with a count each. Read by `unreachableButtons`. */
-const unreachable = new Map<string, number>();
-
-/** A button the keyboard reaches either has a key (`keys`, shown in the footer) or is drawn focused by a page that navigates to it (`focused` given, true or false). */
-const isReachable = ({ keys, focused }: { keys?: string; focused?: boolean }): boolean => keys !== undefined || focused !== undefined;
-
-/** Labels of the buttons mounted now that no key and no focus reaches: only the mouse does. A test of a page expects this to be empty (UI.md, section 14). */
-export const unreachableButtons = (): string[] => [...unreachable.keys()];
-
-/** Counts a button in `unreachable` while it is mounted and cannot be reached. */
-function useReachabilityCheck(label: string, reachable: boolean) {
-  useEffect(() => {
-    if (reachable) return;
-    unreachable.set(label, (unreachable.get(label) ?? 0) + 1);
-    return () => {
-      const left = (unreachable.get(label) ?? 1) - 1;
-      if (left > 0) unreachable.set(label, left);
-      else unreachable.delete(label);
-    };
-  }, [label, reachable]);
-}
-
-export function Button({ label, onPress, primary, keys, focused }: Props<"Button">) {
-  const { c } = useTheme();
-  const [hot, setHot] = useState(false);
-  const text = `[ ${clean(label)} ]`;
-  useReachabilityCheck(label, isReachable({ keys, focused }));
-  return (
-    <box flexShrink={0} onMouseDown={() => onPress()} onMouseOver={() => setHot(true)} onMouseOut={() => setHot(false)}>
-      {keys ? <ButtonKey keys={keys} label={label} onPress={onPress} /> : null}
-      <text wrapMode="none" fg={focused ? c.bg : hot || primary ? c.accent : c.text} bg={focused ? c.accent : undefined}>
-        {primary ? <b>{text}</b> : text}
-      </text>
-    </box>
-  );
-}
-
 // ---- ProgressBar ----
 
 interface TimesInput {
@@ -178,9 +133,9 @@ export function ProgressBar({ value, startedAt, etaMs, state = "running", label 
     <box width="100%" flexShrink={0} {...(measure as object)}>
       <text wrapMode="none" flexShrink={0}>
         {head ? <span fg={c.dim}>{head}</span> : null}
-        <span fg={c.accent}>{g.barFull.repeat(lit)}</span>
-        {bad ? <span fg={c.error}>{g.barFull.repeat(bad)}</span> : null}
-        <span fg={c.dim}>{g.barFull.repeat(Math.max(0, w - lit - bad))}</span>
+        <span fg={c.accent}>{g.progressFull.repeat(lit)}</span>
+        {bad ? <span fg={c.error}>{g.progressFull.repeat(bad)}</span> : null}
+        <span fg={c.dim}>{g.progressEmpty.repeat(Math.max(0, w - lit - bad))}</span>
         <span fg={state === "running" ? c.text : color}>{` ${tail}`}</span>
       </text>
     </box>
@@ -191,6 +146,9 @@ export function ProgressBar({ value, startedAt, etaMs, state = "running", label 
 
 const CELL_WORD = { done: "concluído", running: "rodando", failed: "falhou", pending: "pendente" } as const;
 const CELL_TONE: Record<keyof typeof CELL_WORD, Tone> = { done: "ok", running: "info", failed: "error", pending: "dim" };
+
+/** The color of a cell: a pending one is the faint `border` token (the wall shows what is left as a shadow, the legend says the word). */
+const cellColor = (c: Tokens, state: keyof typeof CELL_WORD): string => (state === "pending" ? c.border : tone(c, CELL_TONE[state]));
 
 export function CellGrid({ cells, onPress, legend = true, focused }: Props<"CellGrid">) {
   const { c, g } = useTheme();
@@ -231,7 +189,7 @@ export function CellGrid({ cells, onPress, legend = true, focused }: Props<"Cell
         <box flexDirection="row" flexWrap="wrap" columnGap={2} flexShrink={0}>
           {(Object.keys(CELL_WORD) as (keyof typeof CELL_WORD)[]).filter((s) => count(s)).map((s) => (
             <text key={s} wrapMode="none" flexShrink={0}>
-              <span fg={tone(c, CELL_TONE[s])}>{`${s === "pending" ? g.cellOff : g.cellOn} `}</span>
+              <span fg={cellColor(c, s)}>{`${s === "pending" ? g.cellOff : g.cellOn} `}</span>
               <span fg={c.dim}>{`${count(s)} ${CELL_WORD[s]}`}</span>
             </text>
           ))}
@@ -245,7 +203,7 @@ export function CellGrid({ cells, onPress, legend = true, focused }: Props<"Cell
               <box key={cell.id} width={2} flexShrink={0} backgroundColor={lit ? c.selected : cell.id === over ? c.panel : undefined}
                 onMouseOver={() => (setOver(cell.id), on && setSel(cell.id))} onMouseOut={() => setOver((o) => (o === cell.id ? undefined : o))}
                 onMouseDown={() => (setSel(cell.id), onPress?.(cell.id))}>
-                <text wrapMode="none" fg={tone(c, CELL_TONE[cell.state])}>{`${cell.state === "pending" ? g.cellOff : g.cellOn} `}</text>
+                <text wrapMode="none" fg={cellColor(c, cell.state)}>{`${cell.state === "pending" ? g.cellOff : g.cellOn} `}</text>
               </box>
             );
           })}

@@ -79,6 +79,8 @@ export interface ArgSpec {
   secret?: boolean;
   /** Completion candidates. */
   values?: string[];
+  /** With `values`, the form draws the argument as a single choice among them instead of a text line: `radio` (`( ) a   (•) b`) or `buttons` (a row of buttons). */
+  style?: "radio" | "buttons";
   /** Positional only, free text: when missing and stdin is not a TTY, the value is read from stdin (`echo txt | pvx <module> add`); extra words on the line are joined into it. */
   stdin?: boolean;
   /** Option only: may be given several times; the module receives the values joined by a comma. */
@@ -652,6 +654,8 @@ export interface KeySpec {
 }
 
 export type Level = "ok" | "warn" | "error";
+/** The tones of a `Notice` and a `Badge`: the three levels plus the blue `info`. */
+export type NoticeLevel = Level | "info";
 
 export interface FieldSpec {
   id: string;
@@ -661,10 +665,18 @@ export interface FieldSpec {
   rows?: number;
   /** Text beside a `toggle`'s box (the label stays in the label column). */
   text?: string;
+  /**
+   * How the options of a `choice` or `multi` are drawn. `list` (default): one option per line, with its `detail`. `radio` (`choice`): one row `( ) 16   (•) 18`;
+   * `←` `→` move the choice and a click picks. `buttons` (`choice`): one row of buttons, the chosen one filled. `row` (`multi`): one row `[x] a   [ ] b`;
+   * `←` `→` move, `espaço` marks. The row styles put the label in the label column like a `line`, and ignore `detail`.
+   */
+  style?: "list" | "radio" | "buttons" | "row";
   /** `choice` and `multi`. The value of a `choice` is the chosen option's `value` (the first option when `initial` has none); of a `multi`, the checked values joined by a comma (`initial` the same). */
   options?: FieldOption[];
   /** Marks the field with a subtle `*`; submitting with it empty shows "preencha este campo" under it. Not for `toggle`, `choice` or `multi`. */
   required?: boolean;
+  /** An error to show under the field now (a failure the module found, such as a rejected value): it stays until the field is edited. The form's own `required` and `validate` errors work as before. */
+  error?: string;
   /** A short dim hint to the right of the value. Only when it helps fill the field (a constraint: "letras, números e hífen"); never to explain the obvious or why the form is built this way. */
   help?: string;
   /**
@@ -704,7 +716,7 @@ export interface WidgetDef {
 
 // ---- sdk.ui: injected by the host, so a module never imports React ----
 
-export type Tone = "ok" | "warn" | "error" | "info" | "accent" | "dim" | "text";
+export type Tone = "ok" | "warn" | "error" | "info" | "accent" | "dim" | "text" | "ip";
 /** What a job is doing, from the page's side: `stale` is a job that says it runs but has written nothing for `staleMs`. */
 export type JobView = "idle" | "running" | "stale" | "done" | "failed" | "stopped";
 /** What a phased run is doing: `idle` (nothing, or only what an older job left), the job's own view while it runs, `done`, `failed` (a phase failed, or the job ended before the last one). */
@@ -844,6 +856,24 @@ export interface RunState extends Omit<JobState, "view"> {
   current: boolean;
 }
 
+/** The button at the end of a `Notice` line. Same rules as `Button`: it needs `keys` or `focused`. */
+export interface NoticeAction {
+  label: string;
+  onPress: () => void;
+  keys?: string;
+  focused?: boolean;
+}
+
+/** One row of `Details` and `CopyBlock`. */
+export interface DetailItem {
+  label: string;
+  value: string;
+  /** The value's color; the label is always dim. */
+  tone?: Tone;
+  /** Dim text after the value (`nftables` then `(automático)`). */
+  note?: string;
+}
+
 /** What a confirmation dialog says (`useConfirm`). */
 export interface ConfirmOptions {
   /** The bold first line. */
@@ -873,12 +903,42 @@ export interface SdkUi {
    * `title` and `tone` is only a container (use it as the page root).
    */
   Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
-  /** Children side by side, equal widths. Give each Panel `grow` so their borders match in height. */
-  Row: Component<Kids>;
+  /**
+   * Children side by side, equal widths (give each Panel `grow` so they match in height). With `fit` each child keeps its own width, `gap` cells (default 0) separate them, and the ones that do not fit go to the next line:
+   * a row of buttons, or a line made of styled pieces (`<Row fit><Text tone="accent" bold>lor</Text><Text>em</Text></Row>`).
+   */
+  Row: Component<Kids & { fit?: boolean; gap?: number }>;
   Text: Component<Kids & { tone?: Tone; bold?: boolean }>;
-  Chip: Component<{ label: string; level?: Level }>;
-  /** `value` 0..1; colored by level (above 85% error, above 70% warn). */
-  Meter: Component<{ value: number; width?: number; label?: string }>;
+  /**
+   * `● label` with the dot in the level's color. With `state` it is a filter chip instead: ` label ` filled with the accent when `on`, on the panel fill when `off`;
+   * `onPress` makes it clickable (the module keeps the filter and its keys). Lay several out with `<Row fit gap={1}>`.
+   */
+  Chip: Component<{ label: string; level?: Level; state?: "on" | "off"; onPress?: () => void }>;
+  /**
+   * A thin usage bar `━━━━────` with the percentage: `lorem  ━━━━━━━━────  41%  18 de 44 GB`. `value` is 0..1, `width` the bar's cells (default 20),
+   * `label` a dim prefix (pad it yourself to align several meters), `suffix` a dim text after the percentage. The bar is the accent color,
+   * and the warn color above `warnAbove` (0..1, default 0.8).
+   */
+  Meter: Component<{ value: number; width?: number; label?: string; suffix?: string; warnAbove?: number }>;
+  /**
+   * A time series as `▁▂▃▅` blocks, oldest first, stretched to `width` cells (default 14). `values` are 0..`max` (default 100); `suffix` is the dim text after
+   * the bar (default: the last value as a percentage when `max` is 100, else none); `label` is a dim prefix.
+   */
+  Spark: Component<{ values: number[]; width?: number; label?: string; suffix?: string; max?: number }>;
+  /** A solid chip with bold uppercase text: ` ATIVO `. `tone` is `ok` (default), `warn`, `error` or `info`. */
+  Badge: Component<{ label: string; tone?: NoticeLevel }>;
+  /**
+   * A label/value grid: labels dim and aligned, each value in its `tone` with an optional dim `note` after it. With `columns: 2` the items fill two
+   * columns (the first half down the left, the rest down the right); below 100 terminal columns it falls back to one. Default 1.
+   */
+  Details: Component<{ items: DetailItem[]; columns?: 1 | 2 }>;
+  /**
+   * Label/value rows on a subtle panel fill (no border), for values a technician copies (an access URL, a password), and under them the button `[ copiar ]`
+   * (`copyLabel`, `keys` default `c`, shown in the footer). It copies the rows as aligned `label  value` lines through `useCopy`, with `title` on the preview.
+   */
+  CopyBlock: Component<{ rows: DetailItem[]; copyLabel?: string; keys?: string; title?: string }>;
+  /** Scrolls its children when the page is taller than the screen: `↑` `↓` a line, `pgup` `pgdn` a page, `home` `end`, and the mouse wheel. Give it a parent with a height (it grows to fill it). With `focused: false` it takes no key. */
+  Scroll: Component<Kids & { focused?: boolean }>;
   KeyHint: Component<{ keys: string; label: string }>;
   Table: Component<{ columns: string[]; rows: string[][] }>;
   /**
@@ -915,8 +975,11 @@ export interface SdkUi {
   Steps: Component<{ items: StepItem[] }>;
   /** Scrolling log: follows the end until the user scrolls up with the mouse wheel, and resumes at the end. Give it a parent with a height (it grows to fill it). */
   LogTail: Component<{ lines: string[]; follow?: boolean; /** Takes the keyboard: up/down a line, pgup/pgdn a page, home the start, end the end (and follows again). Default false: the page owns the keys. */ focused?: boolean }>;
-  /** An inline result block: `[✓]`, `[!]` or `[✗]` in the level's color and the text beside it (several lines allowed). Theme tokens only. */
-  Notice: Component<Kids & { level: Level }>;
+  /**
+   * An inline result block: `[✓]`, `[!]`, `[✗]` or `[i]` (blue) in the level's color and the text beside it (several lines allowed). Theme tokens only.
+   * With `action` a button sits at the end of the line (`[ resolver ]`); like any `Button` it needs `keys` or `focused`.
+   */
+  Notice: Component<Kids & { level: NoticeLevel; action?: NoticeAction }>;
   /**
    * An editable form (no box: a header line, one row per field with a visible input cell, the focused field's `help` under the form, then the buttons):
    * `area` (multiline), `line` (one line), `toggle` (checkbox), `secret` (masked line), `choice` (radio) and
@@ -939,6 +1002,8 @@ export interface SdkUi {
     deleteLabel?: string;
     /** The dialog that asks before `onDelete` runs (`useConfirm`): defaults to the title `<deleteLabel>?`, the buttons `[ deleteLabel ]  [ cancelar ]`, destructive. */
     deleteConfirm?: Partial<ConfirmOptions>;
+    /** The id of the field that has the focus when the form opens (default: the first). */
+    initialFocus?: string;
     /** `false` while the form is a parked part of a bigger flow (`Conversation` uses it): it draws no cursor, owns no key and adds nothing to the footer. Default true. */
     active?: boolean;
     /** `false` hides [ salvar ], [ cancelar ] and [ remover ]: enter on the last field or ctrl+s submits, esc cancels. Default true. */
@@ -980,8 +1045,12 @@ export interface SdkUi {
     /** Adds [ cancelar ] to the confirm step and runs on esc at the top. */
     onCancel?: () => void;
   }>;
-  /** `[ label ]`, clickable; hover tints it. `primary` is accent and bold. `keys` (`enter`, `ctrl+enter`, `a`) registers the key for the page, so the footer and `?` show it. `focused` draws it selected (for a button the page navigates to by keyboard). */
-  Button: Component<{ label: string; onPress: () => void; primary?: boolean; keys?: string; focused?: boolean }>;
+  /**
+   * `[ label ]` in the accent color, clickable; hover and `focused` fill it. `primary` is a filled accent chip ` label `; `danger` uses the error color (`[ remover ]`, filled when focused).
+   * `disabled` takes the reason (`disabled="falta o token"`): the button is dim, ignores the mouse and the key, and the reason shows under it. `keys` (`enter`, `ctrl+enter`, `a`) registers the key
+   * for the page, so the footer and `?` show it. `focused` draws it selected (for a button the page navigates to by keyboard).
+   */
+  Button: Component<{ label: string; onPress: () => void; primary?: boolean; danger?: boolean; disabled?: string; keys?: string; focused?: boolean }>;
   /**
    * One full-width line: a `━` bar, the percentage and the times. `value` is 0..1. With `startedAt` (ms since epoch) it shows the elapsed
    * time and, while running, `faltam ~` the rest (from `etaMs`, the expected TOTAL duration; without it from the pace so far); it ticks each second.

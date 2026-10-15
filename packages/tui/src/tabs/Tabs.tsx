@@ -15,8 +15,8 @@ import { useTheme } from "../theme-context.tsx";
 import { LEAD_TABS, onTabRequest, TRAIL_TABS, TabsProvider, type CoreTabId, type TabId } from "./context.ts";
 import { SistemaTab } from "./SistemaTab.tsx";
 import { CoreTab, type CoreCache } from "./CoreTab.tsx";
-import { fitBar } from "./bar.ts";
-import { Clock, clockWidth, pickForm } from "./clock.tsx";
+import { barVersion, fitBar } from "./bar.ts";
+import { Clock, clockCost, pickForm } from "./clock.tsx";
 import { createHomeNav, HomeTab, type HomeNav } from "./HomeTab.tsx";
 import { pageTabs } from "./pageTabs.ts";
 
@@ -66,17 +66,20 @@ interface BarTab {
   behind: number;
 }
 
+/** Columns of the separator between the last tab and the clock and version: ` │ `. */
+const BAR_SEPARATOR_W = 3;
+
 function TabBar({ nav, tabs, active, version, now, onPick }: { nav: TabsNav; tabs: BarTab[]; active: TabId; version: string; now: () => number; onPick: (id: TabId) => void }) {
   const { c, g } = useTheme();
   const { cols } = useLayout();
-  const tag = `pvx ${version} `;
+  const tag = `pvx ${barVersion(version)} `;
   const widths = tabs.map((t) => [...t.label].length + 2 + (t.errors ? ` ${g.error}${t.errors}`.length : 0) + (t.behind ? ` ↓${t.behind}`.length : 0));
-  // The tabs fit around the shortest clock (HH:MM) and the version; the clock then takes the richest form that fits in what is left.
-  const reserve = tag.length + clockWidth("short") + 3;
+  // The tabs fit around the separator, the shortest clock (HH:MM) and the version; the clock then takes the richest form that fits in what is left.
+  const reserve = tag.length + BAR_SEPARATOR_W + clockCost("short");
   const { from, to } = fitBar(widths, tabs.findIndex((t) => t.id === active), nav.barFrom, cols - 2 - reserve);
   nav.barFrom = from;
   const used = (from > 0 ? 1 : 0) + (to < tabs.length ? 1 : 0) + widths.slice(from, to).reduce((a, b) => a + b, 0);
-  const form = pickForm(cols - 2 - used - tag.length - 3);
+  const form = pickForm(cols - 2 - used - tag.length - BAR_SEPARATOR_W);
   return (
     <box height={1} flexShrink={0} overflow="hidden" flexDirection="row" justifyContent="space-between">
       <box flexDirection="row" flexShrink={0}>
@@ -87,11 +90,19 @@ function TabBar({ nav, tabs, active, version, now, onPick }: { nav: TabsNav; tab
         {to < tabs.length ? <text fg={c.dim} flexShrink={0}>{g.moreRight}</text> : null}
       </box>
       <box flexDirection="row" flexShrink={0}>
-        <Clock form={form} now={now} />
+        <text fg={c.border} wrapMode="none" flexShrink={0}>{` ${g.sepBar} `}</text>
+        {form === "none" ? null : <Clock form={form} now={now} />}
         <text fg={c.dim} wrapMode="none" flexShrink={0}>{tag}</text>
       </box>
     </box>
   );
+}
+
+/** The thin line under the bar: it separates the bar from the page. */
+function BarRule() {
+  const { c, g } = useTheme();
+  const { cols } = useLayout();
+  return <text fg={c.border} wrapMode="none" flexShrink={0}>{g.hline.repeat(Math.max(0, cols - 2))}</text>;
 }
 
 /**
@@ -152,6 +163,7 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
     <TabsProvider value={api}>
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} tabs={bar} active={active} version={version} now={now} onPick={(id) => update({ active: id, bar: true })} />
+        <BarRule />
         {/* A mouse down anywhere in the content moves the keyboard in; it bubbles up after the clicked element has handled it. */}
         <box flexGrow={1} minHeight={0} flexDirection="column" onMouseDown={api.focusContent}>
           {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} /> : null}

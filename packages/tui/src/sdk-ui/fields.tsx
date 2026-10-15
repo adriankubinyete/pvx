@@ -9,6 +9,7 @@ import { LineText } from "../LineText.tsx";
 import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
 import { END_OF_TEXT, withDerived } from "./derive.ts";
+import { buttonLook, LookText } from "./button.tsx";
 import { HostCtx } from "./host.tsx";
 
 type Props = Parameters<SdkUi["Fields"]>[0];
@@ -56,6 +57,29 @@ type Field = Props["fields"][number];
 
 const fieldId = (field: Field): string => `field-${field.id}`;
 
+/** A `choice` or `multi` drawn as one row (`radio`, `buttons`, `row`): its label sits in the label column like a `line`'s. */
+const isRowStyle = (field: Field): boolean => field.style === "radio" || field.style === "buttons" || field.style === "row";
+
+/** A `choice` or `multi` drawn one option per line (the default): its label stacks above the options. */
+const isOptionList = (field: Field): boolean => (field.kind === "choice" || field.kind === "multi") && !isRowStyle(field);
+
+/** The kinds that have a row of their own beside the label column. */
+const hasLabelColumn = (field: Field): boolean => field.kind !== "area" && !isOptionList(field);
+
+/** Columns between two options of a row. */
+const OPTION_GAP = 3;
+/** Columns of a checkbox mark and the space after it. */
+const TOGGLE_MARK_W = 4;
+const cellsOf = (text: string): number => [...text].length;
+
+/** Columns a row of options takes (each option, the gaps between them), so the hint goes where the room is left. */
+function rowOptionsWidth(field: Field): number {
+  const options = field.options ?? [];
+  const cells = options.map((option) => cellsOf(option.label) + (field.style === "buttons" ? 2 : 4));
+  const gap = field.style === "buttons" ? 1 : OPTION_GAP;
+  return cells.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, options.length - 1);
+}
+
 /** The label cell of a field: its label and, when required, the mark. */
 const labelCell = (field: Field): string => clean(field.label) + (field.required ? REQUIRED_MARK : "");
 
@@ -67,8 +91,10 @@ function requiredProblems(fields: Field[], values: Record<string, Value>): Recor
 
 const picks0 = (f: { id: string; options?: { value: string }[] }, initial: Record<string, string | boolean>) => String(initial[f.id] ?? f.options?.[0]?.value ?? "");
 
+type KeyEvent = Parameters<Parameters<typeof useKeys>[0]>[0];
+
 /** The keyboard of the form. Mounted one commit after the form: handlers run newest first, so it outranks the page and the tab bar. */
-function Keys({ on }: { on: (k: Parameters<Parameters<typeof useKeys>[0]>[0]) => void }) {
+function Keys({ on }: { on: (k: KeyEvent) => void }) {
   useKeys((k) => {
     if (matchKey(k, "ctrl+k")) return; // the palette is the host's
     on(k);
@@ -78,14 +104,14 @@ function Keys({ on }: { on: (k: Parameters<Parameters<typeof useKeys>[0]>[0]) =>
 }
 
 export const Fields: Component<Props> = (props) => {
-  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, title, description, submitLabel = "salvar", details } = props;
+  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, initialFocus, title, description, submitLabel = "salvar", details } = props;
   const { c, g } = useTheme();
   const { cols } = useLayout();
   const host = useContext(HostCtx); // a form outside a page (the Módulos tab) has no page footer: its screen sets the scope
-  const [focus, setFocus] = useState(0);
+  const [focus, setFocus] = useState(() => Math.max(0, fields.findIndex((f) => f.id === initialFocus)));
   const [ready, setReady] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, string>>(() => Object.fromEntries(fields.filter((f) => f.error).map((f) => [f.id, f.error!])));
   const [lines, setLines] = useState<Record<string, Line>>(() => Object.fromEntries(fields.filter((f) => f.kind === "line" || f.kind === "secret").map((f) => [f.id, f.derive ? { text: String(initial[f.id] ?? ""), cursor: END_OF_TEXT } : lineOf(String(initial[f.id] ?? ""))])));
   const [touched, setTouched] = useState<Record<string, boolean>>(() => Object.fromEntries(fields.filter((f) => f.derive && initial[f.id]).map((f) => [f.id, true]))); // a given initial value is the technician's
   const [marks, setMarks] = useState<Record<string, boolean>>(() => Object.fromEntries(fields.filter((f) => f.kind === "toggle").map((f) => [f.id, initial[f.id] === true])));
@@ -108,11 +134,12 @@ export const Fields: Component<Props> = (props) => {
   const button = focus >= fields.length ? buttons[focus - fields.length] : undefined;
 
   // Footer rows for this form; ctrl+s and the arrows are handled by the form itself, these only show.
-  const listy = here?.kind === "choice" || here?.kind === "multi";
+  const listy = (here?.kind === "choice" || here?.kind === "multi") && !isRowStyle(here);
+  const rowy = here !== undefined && isRowStyle(here);
   const enterHint = button ? "ativa" : here?.kind === "toggle" ? "marca" : here?.kind === "choice" ? "escolhe" : here?.kind === "area" ? "" : focus === fields.length - 1 ? "salva" : "avança";
   const marks_ = fields.some((f) => f.kind === "toggle" || f.kind === "multi" || f.kind === "choice");
   const hints = [
-    here?.kind === "area" ? "tab|campo" : listy ? "↑↓|opção\ntab|campo" : "↑↓ tab|campo",
+    here?.kind === "area" ? "tab|campo" : listy ? "↑↓|opção\ntab|campo" : rowy ? "←→|opção\n↑↓ tab|campo" : "↑↓ tab|campo",
     marks_ ? `space|${here?.kind === "choice" ? "escolhe" : "marca"}` : "",
     here?.kind === "secret" && here.generate ? `${here.generate}|gera` : "",
     here?.kind === "secret" ? "ctrl+r|mostra ou oculta|help" : "",
@@ -170,7 +197,28 @@ export const Fields: Component<Props> = (props) => {
   };
   const press = (b: Button) => (b === "save" ? submit() : b === "cancel" ? onCancel() : askDelete());
 
-  const onKey: Parameters<typeof Keys>[0]["on"] = (k) => {
+  /** An arrow past the first or last stop hands the key to `onEdge` (when given) instead of wrapping; tab always wraps. */
+  const step = (d: number, arrow = false) => {
+    const n = focus + d;
+    if (arrow && onEdge && (n < 0 || n >= total)) return onEdge(d < 0 ? "up" : "down");
+    go((n + total) % total);
+  };
+  /** The keys of an options row: `←` `→` move (a `choice` picks as it moves), `espaço` picks or marks, `↑` `↓` go to the neighbour field, `enter` picks and goes on. */
+  const onRowKey = (field: Field, k: KeyEvent) => {
+    const at = cursors[field.id] ?? 0;
+    const last = (field.options?.length ?? 1) - 1;
+    const moveTo = (to: number) => (field.kind === "choice" ? pick(field, to) : setCursors({ ...cursors, [field.id]: to }));
+    if (matchKey(k, "left")) return at > 0 ? moveTo(at - 1) : undefined;
+    if (matchKey(k, "right")) return at < last ? moveTo(at + 1) : undefined;
+    if (matchKey(k, "up")) return step(-1, true);
+    if (matchKey(k, "down")) return step(1, true);
+    if (k.sequence === " ") return pick(field, at);
+    if (!matchKey(k, "enter")) return;
+    if (field.kind === "choice") pick(field, at);
+    const picked = field.kind === "choice" && field.options?.[at] ? { [field.id]: field.options[at]!.value } : undefined;
+    return focus === fields.length - 1 ? submit(picked) : step(1);
+  };
+  const onKey = (k: KeyEvent) => {
     if (confirm) {
       if (k.name === "escape") setConfirm(false);
       else if (matchKey(k, "enter")) remove();
@@ -181,15 +229,10 @@ export const Fields: Component<Props> = (props) => {
     const typing = here !== undefined && TEXT_KINDS.includes(here.kind); // `?` is a character there
     if (details && (matchKey(k, "ctrl+d") || (k.sequence === "?" && !typing))) return setDetailsOpen(!detailsOpen);
     if (here?.kind === "secret" && matchKey(k, "ctrl+r")) return setShown(shown === here.id ? undefined : here.id);
-    // An arrow past the first or last stop hands the key to `onEdge` (when given) instead of wrapping; tab always wraps.
-    const step = (d: number, arrow = false) => {
-      const n = focus + d;
-      if (arrow && onEdge && (n < 0 || n >= total)) return onEdge(d < 0 ? "up" : "down");
-      go((n + total) % total);
-    };
     if (matchKey(k, "tab")) return step(1);
     if (matchKey(k, "shift+tab")) return step(-1);
     if (here?.kind === "area") return; // the textarea owns arrows and enter
+    if (here && isRowStyle(here)) return onRowKey(here, k);
     if (here && (here.kind === "choice" || here.kind === "multi")) {
       const at = cursors[here.id] ?? 0;
       const n = here.options?.length ?? 0;
@@ -232,12 +275,14 @@ export const Fields: Component<Props> = (props) => {
     }
   };
 
-  const labelW = Math.max(0, ...fields.filter((f) => f.kind !== "area" && f.kind !== "choice" && f.kind !== "multi").map((f) => [...labelCell(f)].length));
+  const labelW = Math.max(0, ...fields.filter(hasLabelColumn).map((f) => [...labelCell(f)].length));
   const stacked = labelW > LABEL_MAX;
   const labelCol = stacked ? 0 : labelW + 2;
   const col = MARK_W + labelCol; // where the input and the text under it start
   const inputW = Math.max(MIN_INPUT_W, Math.min(INPUT_W, cols - PAGE_PADDING - col));
-  const hintW = cols - PAGE_PADDING - col - inputW - HINT_GAP;
+  /** Columns left for a hint after `used` columns of value. */
+  const hintRoom = (used: number) => cols - PAGE_PADDING - col - used - HINT_GAP;
+  const hintW = hintRoom(inputW);
   const err = (f: { id: string }) =>
     errors[f.id] ? (
       <text wrapMode="none" flexShrink={0} fg={c.error}>{`${" ".repeat(col)}${g.error} ${clean(errors[f.id]!)}`}</text>
@@ -251,13 +296,8 @@ export const Fields: Component<Props> = (props) => {
   );
   const focusMark = (on: boolean) => <box width={MARK_W} flexShrink={0}><text wrapMode="none" fg={c.accent}>{on ? g.query : " "}</text></box>;
   const labelColumn = (f: Field, on: boolean) => (stacked ? null : <box width={labelCol} flexShrink={0}>{labelOf(f, on)}</box>);
-  /** The primary button is always filled (accent); the others are plain, filled with their tone on focus. A focused button is also underlined. */
-  const btn = (b: Button, label: string) => {
-    const on = button === b;
-    if (b === "save") return btnBox(b, <text wrapMode="none" fg={c.bg} bg={c.accent}><b>{on ? <u>{`[ ${label} ]`}</u> : `[ ${label} ]`}</b></text>);
-    const color = b === "remove" ? c.error : c.dim;
-    return btnBox(b, <text wrapMode="none" fg={on ? c.bg : color} bg={on ? color : undefined}>{on ? <u>{`[ ${label} ]`}</u> : `[ ${label} ]`}</text>);
-  };
+  /** The buttons look like every `Button` (UI.md, section 12): the primary a filled chip, the others `[ label ]`, filled when focused. */
+  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(label, { primary: b === "save", danger: b === "remove", lit: button === b }, c)} />);
   const btnBox = (b: Button, content: React.ReactNode) => (
     <box key={b} flexShrink={0} onMouseDown={() => (go(fields.length + buttons.indexOf(b)), press(b))}>{content}</box>
   );
@@ -285,8 +325,9 @@ export const Fields: Component<Props> = (props) => {
         {stacked ? <box width={MARK_W} flexShrink={0} /> : focusMark(on)}
         {labelColumn(f, on)}
         <text wrapMode="none" flexShrink={0}>
-          <span fg={on ? c.bg : c.text} bg={on ? c.accent : undefined}>{`[${marks[f.id] ? "x" : " "}]`}</span>
+          <span fg={on ? c.bg : marks[f.id] ? c.accent : c.text} bg={on ? c.accent : undefined}>{`[${marks[f.id] ? "x" : " "}]`}</span>
           <span fg={c.text}>{f.text ? ` ${clean(f.text)}` : ""}</span>
+          <span fg={c.dim}>{f.help ? `${" ".repeat(HINT_GAP)}${fitHint(clean(f.help), hintRoom(TOGGLE_MARK_W + cellsOf(f.text ?? "")))}` : ""}</span>
         </text>
       </box>
       {err(f)}
@@ -313,6 +354,40 @@ export const Fields: Component<Props> = (props) => {
       {err(f)}
     </box>
   );
+  /** One option of a row: the radio `( ) a` / `(•) a`, the checkbox `[ ] a` / `[x] a` or the button ` a `. */
+  const rowOption = (f: Field, o: { value: string; label: string }, oi: number, on: boolean) => {
+    const set = f.kind === "choice" ? picks[f.id] === o.value : checks[f.id]!.includes(o.value);
+    const here_ = on && cursors[f.id] === oi;
+    const label = clean(o.label);
+    const click = () => (go(fields.indexOf(f)), pick(f, oi));
+    if (f.style === "buttons") {
+      const chip = <span fg={set ? c.bg : c.text} bg={set ? c.accent : undefined}>{set && here_ ? <u>{` ${label} `}</u> : ` ${label} `}</span>;
+      return <box key={o.value} flexShrink={0} onMouseDown={click}><text wrapMode="none">{chip}</text></box>;
+    }
+    const mark = f.kind === "choice" ? `(${set ? g.radioOn : " "})` : `[${set ? "x" : " "}]`;
+    return (
+      <box key={o.value} flexShrink={0} onMouseDown={click}>
+        <text wrapMode="none">
+          <span fg={here_ ? c.bg : set ? c.accent : c.text} bg={here_ ? c.accent : undefined}>{mark}</span>
+          <span fg={here_ ? c.bg : c.text} bg={here_ ? c.accent : undefined}>{` ${label}`}</span>
+        </text>
+      </box>
+    );
+  };
+  const rowField = (f: Field, i: number, on: boolean) => (
+    <box key={f.id} flexDirection="column" flexShrink={0}>
+      {stacked ? <box flexDirection="row" flexShrink={0}>{focusMark(on)}{labelOf(f, on)}</box> : null}
+      <box flexDirection="row" flexShrink={0}>
+        {stacked ? <box width={MARK_W} flexShrink={0} /> : focusMark(on)}
+        {labelColumn(f, on)}
+        <box flexDirection="row" flexShrink={0} columnGap={f.style === "buttons" ? 1 : OPTION_GAP}>
+          {(f.options ?? []).map((o, oi) => rowOption(f, o, oi, on))}
+        </box>
+        {f.help ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{`${" ".repeat(HINT_GAP)}${fitHint(clean(f.help), hintRoom(rowOptionsWidth(f)))}`}</text> : null}
+      </box>
+      {err(f)}
+    </box>
+  );
   const areaField = (f: Field, i: number, on: boolean) => (
     <box key={f.id} flexShrink={0} height={(f.rows ?? 5) + 2} border borderStyle="rounded" borderColor={on ? c.accent : c.border} title={clean(f.label)} onMouseDown={() => go(i)}>
       <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && active} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
@@ -322,6 +397,7 @@ export const Fields: Component<Props> = (props) => {
     const on = i === focus && !confirm && active;
     if (f.kind === "area") return areaField(f, i, on);
     if (f.kind === "toggle") return toggleField(f, i, on);
+    if (isRowStyle(f)) return rowField(f, i, on);
     if (f.kind === "choice" || f.kind === "multi") return optionsField(f, i, on);
     return textField(f, i, on);
   };
@@ -329,7 +405,7 @@ export const Fields: Component<Props> = (props) => {
   const rowsOf = (f: Field): number => {
     if (f.kind === "area") return (f.rows ?? 5) + 2;
     const under = errors[f.id] ? 1 : 0;
-    if (f.kind === "choice" || f.kind === "multi") return (f.label ? 1 : 0) + (f.options?.length ?? 0) + under;
+    if (isOptionList(f)) return (f.label ? 1 : 0) + (f.options?.length ?? 0) + under;
     return 1 + (stacked ? 1 : 0) + under;
   };
   /** The height of the fields area when everything fits: the area shrinks and scrolls only when the terminal is shorter than this. */

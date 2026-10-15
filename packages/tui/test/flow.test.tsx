@@ -81,7 +81,7 @@ test("Conversation: asks one question at a time, collapses answers, then confirm
   expect(f).toMatch(/✓ Nome +pbx/);
   expect(f).toMatch(/✓ Pacotes extras +licenciados, blocklist +\(padrão\)/);
   expect(f).toContain("leva 20 min");
-  expect(f).toContain("[ instalar ]");
+  expect(f).toContain(" instalar ");
   expect(log.answers).toEqual([["ver", "18"], ["name", "pbx"]]);
   expect(log.confirmed).toEqual([]); // nothing commits before the button
   await t.press("RETURN"); // the cursor starts on the primary button
@@ -104,7 +104,7 @@ test("Conversation: up moves into the answered list, enter reopens in place, re-
   await t.type("c"); // focus is back on the open question, its text kept
   await t.press("RETURN");
   expect(log.answers.at(-1)).toEqual(["name", "abc"]);
-  expect(t.frame()).toContain("[ instalar ]");
+  expect(t.frame()).toContain(" instalar ");
 });
 
 test("Conversation: esc cancels a reopened question without changing the answer; down returns to the question", async () => {
@@ -156,7 +156,7 @@ test("Conversation: a click on an answered line reopens it; ctrl+enter confirms 
   expect(fh.rows.some((r) => r.keys === "ctrl+enter" && r.label === "instalar")).toBe(true); // the footer row of the button
   fh.rows.find((r) => r.keys === "ctrl+enter")!.run();
   expect(log.confirmed).toHaveLength(1);
-  const [bx, by] = at(t, "[ instalar ]");
+  const [bx, by] = at(t, " instalar ");
   await t.click(bx + 2, by);
   expect(log.confirmed).toHaveLength(2);
 });
@@ -182,14 +182,14 @@ test("Button: click and key press it; the key reaches the footer rows", async ()
   const fh = fakeHost();
   let n = 0;
   h = await renderTui(wrap(fh.host, <Btn label="instalar" primary keys="ctrl+enter" onPress={() => void n++} />), { cols: 80, rows: 24 });
-  expect(h.frame()).toContain("[ instalar ]");
+  expect(h.frame()).toContain(" instalar ");
   await h.click(3, 0);
   expect(n).toBe(1);
   expect(fh.rows).toHaveLength(1);
   fh.rows[0]!.run();
   expect(n).toBe(2);
   const accent = RGBA.fromHex(tokens.accent);
-  expect(h.spans().lines[0]!.spans.some((s) => s.text.includes("[ instalar ]") && s.fg.equals(accent))).toBe(true);
+  expect(h.spans().lines[0]!.spans.some((s) => s.text.includes(" instalar ") && s.bg.equals(accent))).toBe(true);
 });
 
 test("Button: without keys it registers nothing", async () => {
@@ -204,7 +204,7 @@ test("Button: without keys it registers nothing", async () => {
 const barColors = (t: TuiHarness) => {
   const out: string[] = [];
   const accent = RGBA.fromHex(tokens.accent), err = RGBA.fromHex(tokens.error), dim = RGBA.fromHex(tokens.dim);
-  for (const s of t.spans().lines[0]!.spans) for (const ch of s.text) if (ch === "━") out.push(s.fg.equals(accent) ? "a" : s.fg.equals(err) ? "e" : s.fg.equals(dim) ? "d" : "?");
+  for (const s of t.spans().lines[0]!.spans) for (const ch of s.text) if (ch === "█" || ch === "░") out.push(s.fg.equals(accent) ? "a" : s.fg.equals(err) ? "e" : s.fg.equals(dim) ? "d" : "?");
   return out.join("");
 };
 
@@ -249,11 +249,11 @@ const cells = (n: number): CellItem[] => Array.from({ length: n }, (_, i) => ({ 
 test("CellGrid: wraps to the width, one cell wide per glyph, with a legend of the counts", async () => {
   h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><Grid cells={cells(60)} /></KeyRouter></ThemeProvider>, { cols: 60, rows: 12 });
   let rows = h.frame().split("\n");
-  expect(rows[0]).toContain("▪ 20 concluído  ▪ 3 rodando  ▪ 1 falhou  ▫ 36 pendente");
+  expect(rows[0]).toContain("■ 20 concluído  ■ 3 rodando  ■ 1 falhou  ■ 36 pendente");
   const glyphs = (r: string) => r.trimEnd().replace(/ /g, "");
   expect([...rows[1]!.trimEnd()].length).toBe(59); // 30 cells of glyph + space: the last space is trimmed
-  expect(glyphs(rows[1]!)).toBe("▪".repeat(20) + "▪".repeat(3) + "▪" + "▫".repeat(6));
-  expect(glyphs(rows[2]!)).toBe("▫".repeat(30));
+  expect(glyphs(rows[1]!)).toBe("■".repeat(20) + "■".repeat(3) + "■" + "■".repeat(6));
+  expect(glyphs(rows[2]!)).toBe("■".repeat(30));
   expect(rows.every((r) => [...r].length <= 60)).toBe(true);
   h.destroy();
   h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><Grid cells={cells(60)} /></KeyRouter></ThemeProvider>, { cols: 120, rows: 12 });
@@ -263,7 +263,7 @@ test("CellGrid: wraps to the width, one cell wide per glyph, with a legend of th
   h.destroy();
   h = await renderTui(<ThemeProvider><KeyRouter onQuit={() => {}}><Grid cells={cells(60)} /></KeyRouter></ThemeProvider>, { cols: 40, rows: 12 });
   rows = h.frame().split("\n");
-  for (const w of ["▪ 20 concluído", "▪ 3 rodando", "▪ 1 falhou", "▫ 36 pendente"]) expect(h.frame()).toContain(w); // the legend wraps instead of being cut
+  for (const w of ["■ 20 concluído", "■ 3 rodando", "■ 1 falhou", "■ 36 pendente"]) expect(h.frame()).toContain(w); // the legend wraps instead of being cut
   expect(rows.every((r) => [...r].length <= 40)).toBe(true);
 });
 
@@ -280,7 +280,7 @@ test("CellGrid: tones, hover moves the selection (when focused) and shows the la
   expect(colorAt(0, 1)!.equals(RGBA.fromHex(tokens.accent))).toBe(true); // done
   expect(colorAt(2 * 20, 1)!.equals(RGBA.fromHex(tokens.info))).toBe(true); // cell 20: running
   expect(colorAt(2 * 23, 1)!.equals(RGBA.fromHex(tokens.error))).toBe(true); // cell 23: failed
-  expect(colorAt(2 * 24, 1)!.equals(RGBA.fromHex(tokens.dim))).toBe(true); // cell 24: pending
+  expect(colorAt(2 * 24, 1)!.equals(RGBA.fromHex(tokens.border))).toBe(true); // cell 24: pending, the faint border token
   await h.hover(2 * 4, 1); // cell p4
   expect(h.frame()).toContain("pacote 4  concluído");
   await h.click(2 * 5, 1);

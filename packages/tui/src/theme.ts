@@ -13,6 +13,7 @@ export const tokens = {
   error: "#ff7a7a",
   info: "#7cc4ff",
   thirdParty: "#b78cff",
+  ip: "#f07fb0",
 } as const;
 
 export type TokenKey = keyof typeof tokens;
@@ -26,7 +27,7 @@ export type HexTokens = Record<TokenKey, string>;
 export type ThemeName = "dark" | "light" | "contrast" | "terminal" | "custom";
 export const THEME_NAMES: readonly ThemeName[] = ["dark", "light", "contrast", "terminal", "custom"];
 /** Tokens drawn as text: each must reach 4.5:1 on `bg`. */
-export const TEXT_TOKENS: readonly TokenKey[] = ["text", "dim", "accent", "warn", "error", "info", "thirdParty"];
+export const TEXT_TOKENS: readonly TokenKey[] = ["text", "dim", "accent", "warn", "error", "info", "thirdParty", "ip"];
 /** Backgrounds a text token can land on. */
 export const SURFACES: readonly TokenKey[] = ["bg", "panel", "selected"];
 
@@ -35,20 +36,20 @@ const hexThemes = {
   // Same roles on a light ground; every text token is >= 4.5:1 on bg, panel and selected (see theme.test.ts).
   light: {
     bg: "#f6f7f9", panel: "#ffffff", selected: "#d9efe4", border: "#c4cad3",
-    text: "#1b1f24", dim: "#505a66", accent: "#0a6b4a", warn: "#7d4a00", error: "#b3261e", info: "#0b5394", thirdParty: "#6a3dbd",
+    text: "#1b1f24", dim: "#505a66", accent: "#0a6b4a", warn: "#7d4a00", error: "#b3261e", info: "#0b5394", thirdParty: "#6a3dbd", ip: "#a3195b",
   } as HexTokens,
   // Pure black and white; text tokens >= 7:1 on every surface.
   contrast: {
     bg: "#000000", panel: "#0a0a0a", selected: "#161616", border: "#a0a0a0",
-    text: "#ffffff", dim: "#c4c4c4", accent: "#3dffb0", warn: "#ffd60a", error: "#ff8080", info: "#6cc9ff", thirdParty: "#d4a5ff",
+    text: "#ffffff", dim: "#c4c4c4", accent: "#3dffb0", warn: "#ffd60a", error: "#ff8080", info: "#6cc9ff", thirdParty: "#d4a5ff", ip: "#ff9ccc",
   } as HexTokens,
 };
 export type HexThemeName = keyof typeof hexThemes;
 
-/** No colours of its own: the terminal's default fg/bg and its ANSI palette (green accent, yellow warn, red error, blue info, bright black dim). */
+/** No colours of its own: the terminal's default fg/bg and its ANSI palette (green accent, yellow warn, red error, blue info, magenta ip, bright black dim). */
 const terminal = {
   bg: RGBA.defaultBackground(), panel: RGBA.defaultBackground(), selected: RGBA.defaultBackground(), border: RGBA.fromIndex(8),
-  text: RGBA.defaultForeground(), dim: RGBA.fromIndex(8), accent: RGBA.fromIndex(2), warn: RGBA.fromIndex(3), error: RGBA.fromIndex(1), info: RGBA.fromIndex(4), thirdParty: RGBA.fromIndex(5),
+  text: RGBA.defaultForeground(), dim: RGBA.fromIndex(8), accent: RGBA.fromIndex(2), warn: RGBA.fromIndex(3), error: RGBA.fromIndex(1), info: RGBA.fromIndex(4), thirdParty: RGBA.fromIndex(5), ip: RGBA.fromIndex(13),
 } as unknown as Tokens;
 
 /** `#rgb` or `#rrggbb` (any case) to `#rrggbb` lowercase; `null` if it is neither. */
@@ -126,13 +127,13 @@ export const glyphs = {
     ok: "✓", warn: "▲", warnTag: "!", error: "✗", info: "i", active: "●", inactive: "○",
     meterFull: "▰", meterEmpty: "▱", prompt: "❯", shell: "$", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
     core: "■", page: "§", official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═", moreLeft: "‹", moreRight: "›",
-    hline: "─", sep: "·", down: "↓", up: "↑", blocks: "▁▂▃▄▅▆▇█", braille: "1", barFull: "━", cellOn: "▪", cellOff: "▫", gutter: "▌", mask: "•",
+    hline: "─", sep: "·", down: "↓", up: "↑", blocks: "▁▂▃▄▅▆▇█", braille: "1", barFull: "━", barEmpty: "─", progressFull: "█", progressEmpty: "░", cellOn: "■", cellOff: "■", gutter: "▌", mask: "•", radioOn: "•", sepBar: "│",
   },
   ascii: {
     ok: "+", warn: "^", warnTag: "!", error: "x", info: "i", active: "*", inactive: "o",
     meterFull: "#", meterEmpty: "-", prompt: ">", shell: "$", query: ">", cursor: ">", spinner: "|/-\\",
     core: "=", page: "#", official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=", moreLeft: "<", moreRight: ">",
-    hline: "-", sep: "-", down: "v", up: "^", blocks: "_.-:=+*#", braille: "", barFull: "=", cellOn: "#", cellOff: ".", gutter: "|", mask: "*",
+    hline: "-", sep: "-", down: "v", up: "^", blocks: "_.-:=+*#", braille: "", barFull: "=", barEmpty: "-", progressFull: "#", progressEmpty: ".", cellOn: "#", cellOff: ".", gutter: "|", mask: "*", radioOn: "*", sepBar: "|",
   },
 } as const;
 export type Symbols = keyof typeof glyphs;

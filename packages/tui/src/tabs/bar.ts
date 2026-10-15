@@ -14,3 +14,14 @@ export function fitBar(widths: number[], active: number, start: number, avail: n
   while (from < active && span(from) <= active) from++;
   return { from, to: span(from) };
 }
+
+/** The version label of a dev build: `0.1.2 (dev, +alpha +beta)`; the part after `dev,` lists the embedded modules, one `+name` each. */
+const DEV_LABEL = /^(\S+) \(dev(?:, (.*))?\)$/;
+
+/** The version as the bar shows it: `0.1.2 (dev, +alpha +beta)` becomes `0.1.2 dev +2` (the count of embedded modules; Sistema lists them), any other label stays. */
+export function barVersion(label: string): string {
+  const dev = DEV_LABEL.exec(label);
+  if (!dev) return label;
+  const embedded = (dev[2] ?? "").split(" ").filter(Boolean).length;
+  return embedded ? `${dev[1]} dev +${embedded}` : `${dev[1]} dev`;
+}

@@ -147,7 +147,7 @@ for (const [cols, rows] of SIZES) {
     expect(rowsOf(h)[2]).toContain("Cria o usuário no UOE"); // the description (the command's help)
     for (const label of ["Usuário *", "Senha *", "Root path", "ID do cliente"]) expect(frame).toContain(label);
     expect(frame).toContain("Nome do novo usuário"); // the hint, right of the value
-    expect(frame).toContain("[ criar e entrar ]");
+    expect(frame).toContain(" criar e entrar ");
     expect(frame).toContain("[ cancelar ]");
     for (const raw of ["root-path", "id-cliente", "username", "stdin", "PVX_SECRET", "prompt", "(segredo)", "$ pvx", "segredo fora da linha"]) expect(frame).not.toContain(raw);
     expect(frame).not.toMatch(BORDER_CHARS);
@@ -217,18 +217,18 @@ for (const [cols, rows] of SIZES) {
     expect(columnOf(h, "✗ preencha este campo")).toBe(columnOf(h, "Usuário *") + CELL_OFFSET);
     expect(spanOf(h, "✗ preencha este campo").fg.equals(color(tokens.error))).toBe(true);
     // the primary button has the accent fill; cancel is plain
-    expect(spanOf(h, "[ criar e entrar ]").bg.equals(color(tokens.accent))).toBe(true);
+    expect(spanOf(h, " criar e entrar ").bg.equals(color(tokens.accent))).toBe(true);
     expect(spanOf(h, "[ cancelar ]").bg.equals(color(tokens.accent))).toBe(false);
   });
 }
 
 test("the form: a short terminal scrolls the fields, keeps the blank rows and the buttons", async () => {
   h = await renderPage(MODULE, "long", { cols: 80, rows: 24 });
-  expect(h.frame()).toContain("[ salvar ]");
+  expect(h.frame()).toContain(" salvar ");
   expect(h.frame()).not.toContain("Campo 12"); // the area is shorter than the form
   for (let i = 0; i < 11; i++) await h.press("ARROW_DOWN"); // the last field
   expect(h.frame()).toContain("Campo 12");
-  expect(h.frame()).toContain("[ salvar ]"); // the buttons stay
+  expect(h.frame()).toContain(" salvar "); // the buttons stay
   expect(rowIndex(h, "Campo 12") - rowIndex(h, "Campo 11")).toBe(2); // the blank row is kept
 });
 

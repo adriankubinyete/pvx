@@ -19,16 +19,21 @@ export function helpOf(help: string): string {
 /** The label a form shows for an argument. */
 export const labelOf = (arg: ArgSpec): string => clean(arg.label ?? humanize(arg.name));
 
+/** An argument with `values` and a `style` is a choice among them (the first is the default), not free text. */
+const isChoice = (arg: ArgSpec): boolean => arg.kind !== "flag" && arg.style !== undefined && (arg.values?.length ?? 0) > 0;
+
 function kindOf(arg: ArgSpec): FieldSpec["kind"] {
   if (arg.kind === "flag") return "toggle";
+  if (isChoice(arg)) return "choice";
   return arg.secret ? "secret" : "line";
 }
 
-/** The field of one argument: a flag is a checkbox with its help beside it, the rest a line (a secret when `secret`). */
+/** The field of one argument: a flag is a checkbox with its help beside it, one with `values` and a `style` a choice, the rest a line (a secret when `secret`). */
 export function fieldOf(arg: ArgSpec): FieldSpec {
   const kind = kindOf(arg);
   const field: FieldSpec = { id: arg.name, label: labelOf(arg), kind, required: arg.required };
   if (kind === "toggle") return { ...field, text: helpOf(arg.help) };
+  if (kind === "choice") return { ...field, style: arg.style, options: arg.values!.map((value) => ({ value, label: value })) };
   return { ...field, help: helpOf(arg.help) };
 }
 
