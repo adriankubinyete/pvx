@@ -27,6 +27,26 @@ export function useTheme(): ThemeApi {
   return t;
 }
 
+/** The theme of a set of axes: tokens with the accent applied, the glyphs and the helpers that follow them. */
+function buildTheme(axes: TuiState, set: ThemeApi["set"], flush: () => void): ThemeApi {
+  const c = applyAccent(axes.theme, tokensFor(axes.theme, axes.custom), axes.accent);
+  const g = glyphs[axes.symbols];
+  const level = { ok: c.ok, warn: c.warn, error: c.error, info: c.info };
+  return {
+    c, g, axes, set, flush,
+    box: (color = c.border) => ({ border: axes.border !== "none", borderStyle: axes.border === "single" ? "single" : "rounded", borderColor: color }),
+    result: (kind) => ({ marker: resultMarker(kind, axes.result, g), color: level[kind] }),
+  };
+}
+
+/** Draws `children` as if `patch` were chosen: the theme, the accent, the symbols, the frame or the result style. Nothing is saved and the terminal background does not change. */
+export function ThemePreview({ patch, children }: { patch: Partial<TuiState>; children: ReactNode }) {
+  const current = useTheme();
+  const key = JSON.stringify(patch);
+  const api = useMemo(() => buildTheme({ ...current.axes, ...patch }, current.set, current.flush), [current.axes, current.set, current.flush, key]);
+  return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
+}
+
 /** `statePath` defaults to `$PVX_HOME/tui-state.json`. Flushes on unmount. */
 export function ThemeProvider({ statePath, children }: { statePath?: string; children: ReactNode }) {
   const writer = useMemo(() => createTuiStateWriter(statePath), [statePath]);
@@ -43,16 +63,7 @@ export function ThemeProvider({ statePath, children }: { statePath?: string; chi
   }, [writer]);
 
   const renderer = useRenderer();
-  const api = useMemo<ThemeApi>(() => {
-    const c = applyAccent(axes.theme, tokensFor(axes.theme, axes.custom), axes.accent);
-    const g = glyphs[axes.symbols];
-    const level = { ok: c.ok, warn: c.warn, error: c.error, info: c.info };
-    return {
-      c, g, axes, set, flush: writer.flush,
-      box: (color = c.border) => ({ border: axes.border !== "none", borderStyle: axes.border === "single" ? "single" : "rounded", borderColor: color }),
-      result: (kind) => ({ marker: resultMarker(kind, axes.result, g), color: level[kind] }),
-    };
-  }, [axes, set, writer]);
+  const api = useMemo<ThemeApi>(() => buildTheme(axes, set, writer.flush), [axes, set, writer]);
 
   // Nothing repaints on its own: the terminal background and a redraw follow the palette.
   useEffect(() => {

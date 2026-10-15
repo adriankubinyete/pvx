@@ -1,5 +1,5 @@
 import { commitLabel, compareSemver, type EmbeddedInfo } from "@pvx/core";
-import { accents, type AccentName } from "../theme.ts";
+import { accents, TOKEN_KEYS, type AccentName, type TokenKey } from "../theme.ts";
 
 /** The sections of the Sistema tab, in the order of their numbers. */
 export const SECTIONS = ["pvx", "aparencia", "avancado"] as const;
@@ -11,13 +11,29 @@ export function sectionOfKey(sequence: string): Section | undefined {
   return SECTIONS[Number(sequence) - 1];
 }
 
-/** The rows the cursor stops on, in the order they are drawn. */
-export const ROW_IDS = ["update", "theme", "accent", "symbols", "border", "result", "edit", "tasks"] as const;
-export type RowId = (typeof ROW_IDS)[number];
-export const SECTION_OF_ROW: Record<RowId, Section> = { update: "pvx", theme: "aparencia", accent: "aparencia", symbols: "aparencia", border: "aparencia", result: "aparencia", edit: "aparencia", tasks: "avancado" };
+/** The id of a color row of the custom theme editor: `token:bg`. A token can share a name with an axis (`border`), so the row ids never do. */
+export const tokenRowId = (key: TokenKey): `token:${TokenKey}` => `token:${key}`;
+export const isTokenRow = (id: string): id is `token:${TokenKey}` => id.startsWith("token:");
+export const tokenOfRow = (id: `token:${TokenKey}`): TokenKey => id.slice("token:".length) as TokenKey;
+
+/** The rows the cursor stops on. */
+export type RowId = "update" | "theme" | "accent" | "symbols" | "border" | "result" | "from" | "tasks" | `token:${TokenKey}`;
+
+/** The rows of the page, in the order they are drawn. With the custom theme the options of a preset (accent, symbols, frame, result) give way to the editor: "começar de" and one row per color. */
+export function rowIds(customTheme: boolean): RowId[] {
+  const appearance: RowId[] = customTheme ? ["from", ...TOKEN_KEYS.map(tokenRowId)] : ["accent", "symbols", "border", "result"];
+  return ["update", "theme", ...appearance, "tasks"];
+}
+
+export function sectionOfRow(id: RowId): Section {
+  if (id === "update") return "pvx";
+  if (id === "tasks") return "avancado";
+  return "aparencia";
+}
 
 /** The first row of a section: where the number key puts the cursor. */
-export const firstRowOf = (section: Section): RowId => ROW_IDS.find((row) => SECTION_OF_ROW[row] === section)!;
+const FIRST_ROW: Record<Section, RowId> = { pvx: "update", aparencia: "theme", avancado: "tasks" };
+export const firstRowOf = (section: Section): RowId => FIRST_ROW[section];
 
 export type Options = readonly (readonly [value: string, label: string])[];
 /** The axes that are a choice among a few words: state key, row label and the values with their display names. */
@@ -32,7 +48,7 @@ export const CHOICE_AXES: readonly ChoiceAxis[] = [
   { id: "border", label: "moldura", options: [["rounded", "arredondada"], ["single", "simples"], ["none", "nenhuma"]] },
   { id: "result", label: "resultado", options: [["bracket", "colchetes"], ["glyph", "símbolo"], ["text", "texto"]] },
 ];
-export const choiceAxisOf = (row: RowId): ChoiceAxis | undefined => CHOICE_AXES.find((axis) => axis.id === row);
+export const choiceAxisOf = (row: string): ChoiceAxis | undefined => CHOICE_AXES.find((axis) => axis.id === row);
 
 /** The accent: `tema` keeps the theme's own, the others are the presets. */
 export const ACCENT_OPTIONS: Options = [["tema", "tema"], ["menta", "menta"], ["azul", "azul"], ["ambar", "âmbar"], ["roxo", "roxo"]];
