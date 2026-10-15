@@ -587,7 +587,7 @@ export interface CrontabBlock {
 
 /** `sdk.crontab`. */
 export interface CrontabKit {
-  /** The block of module `id` (`autobackup`): the markers are derived from it, so two modules never touch each other's lines. */
+  /** The block of module `id` (`meumodulo`): the markers are derived from it, so two modules never touch each other's lines. */
   block(id: string): CrontabBlock;
   /** True for the error `read`, `sync`, `restore` and `update` throw. */
   isError(error: unknown): error is CrontabError;
