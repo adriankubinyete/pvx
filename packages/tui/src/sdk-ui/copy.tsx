@@ -6,7 +6,7 @@ import { useNudge } from "../nudge.tsx";
 import { clean } from "../palette/search.ts";
 import { useTheme } from "../theme-context.tsx";
 import type { Component, SdkUi } from "@pvx/sdk";
-import { Button } from "./button.tsx";
+import { ButtonRow } from "./button.tsx";
 import { columnOf, copyText } from "./display.ts";
 import { toneColor as tone } from "./tones.ts";
 
@@ -91,7 +91,7 @@ const DEFAULT_COPY_KEY = "c";
 const COPY_BLOCK_PAD = 1;
 
 /** Label/value rows on a subtle fill (the `panel` token, no border), with the copy button under them. */
-export function CopyBlock({ rows, copyLabel = DEFAULT_COPY_LABEL, keys = DEFAULT_COPY_KEY, title }: Props<"CopyBlock">) {
+export function CopyBlock({ rows, copyLabel = DEFAULT_COPY_LABEL, keys = DEFAULT_COPY_KEY, title, focused, actions = [] }: Props<"CopyBlock">) {
   const { c } = useTheme();
   const copy = useCopy();
   const { labelWidth } = columnOf(rows);
@@ -108,7 +108,7 @@ export function CopyBlock({ rows, copyLabel = DEFAULT_COPY_LABEL, keys = DEFAULT
         ))}
       </box>
       <box flexShrink={0} paddingTop={1}>
-        <Button label={copyLabel} primary keys={keys} onPress={copyAll} />
+        <ButtonRow focused={focused} buttons={[{ label: copyLabel, primary: true, keys, onPress: copyAll }, ...actions]} />
       </box>
     </box>
   );

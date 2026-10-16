@@ -323,7 +323,7 @@ for (const [cols, rows] of SIZES) {
     expect(rowsOf(h)[last + 1]!.trim()).toBe(""); // the one blank row
     expect(rowsOf(h)[last + 2]).toContain("[ fechar ]");
     expect(rowsOf(h)[last + 2]).toContain("[ copiar erro ]");
-    expect(spanOf(h, "[ fechar ]").bg.equals(color(tokens.accent))).toBe(false); // not focused: not filled
+    expect(spanOf(h, "[ fechar ]").bg.equals(color(tokens.accent))).toBe(true); // `fechar` is the current button of the focused row: filled
     fits(h, cols);
   });
 }

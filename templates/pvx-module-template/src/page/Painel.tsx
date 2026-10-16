@@ -7,7 +7,7 @@ import { greetedNames } from "../state.ts";
 import { FIX, TEXT } from "../texts.ts";
 import { historyRows, rowIds } from "./rows.ts";
 
-export const makePainel = ({ h, Panel, List, Text, Button, Loading, useState, useStore, useKey, useCommand, usePanels, usePageFocused }: SdkUi) =>
+export const makePainel = ({ h, Panel, List, Text, ButtonRow, Loading, useState, useStore, useKey, useCommand, usePanels, usePageFocused }: SdkUi) =>
   function Painel() {
     const store = useStore();
     const panels = usePanels();
@@ -30,7 +30,7 @@ export const makePainel = ({ h, Panel, List, Text, Button, Loading, useState, us
     if (greet.running) return <Loading label={TEXT.greeting} />;
     return (
       <Panel>
-        <Button label={TEXT.greetButton} primary keys="s" onPress={() => void greetWorld()} />
+        <ButtonRow focused={focused} buttons={[{ label: TEXT.greetButton, primary: true, keys: "s", onPress: () => void greetWorld() }]} />
         <Panel title={TEXT.historyTitle} tone={focused ? "accent" : undefined} panelRef={panels.ref("historico")}>
           {rows.length ? <List items={rows} selected={selectedId} /> : <Text tone="dim">{TEXT.historyEmpty}</Text>}
         </Panel>

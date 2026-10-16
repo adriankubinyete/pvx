@@ -62,8 +62,8 @@ function ButtonKey({ keys, label, help, onPress }: { keys: string; label: string
 /** Labels of the mounted buttons the keyboard cannot reach (see `isReachable`), with a count each. Read by `unreachableButtons`. */
 const unreachable = new Map<string, number>();
 
-/** A button the keyboard reaches either has a key (`keys`, shown in the footer) or is drawn focused by a page that navigates to it (`focused` given, true or false). */
-const isReachable = ({ keys, focused }: { keys?: string; focused?: boolean }): boolean => keys !== undefined || focused !== undefined;
+/** A button the cursor reaches is in the focus order: the page navigates to it and draws it focused (`focused` given, true or false). A `keys` shortcut alone is not enough. */
+const isReachable = ({ focused }: { focused?: boolean }): boolean => focused !== undefined;
 
 /** Labels of the buttons mounted now that no key and no focus reaches: only the mouse does. A test of a page expects this to be empty (UI.md, section 17). */
 export const unreachableButtons = (): string[] => [...unreachable.keys()];
@@ -86,7 +86,7 @@ export function Button({ label, onPress, primary, danger, disabled, keys, help, 
   const [hot, setHot] = useState(false);
   const off = disabled !== undefined;
   const look = buttonLook(label, { primary, danger, disabled, lit: focused || hot }, c);
-  useReachabilityCheck(label, isReachable({ keys, focused }));
+  useReachabilityCheck(label, isReachable({ focused }));
   const press = () => {
     if (!off) onPress();
   };

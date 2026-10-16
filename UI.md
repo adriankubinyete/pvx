@@ -411,11 +411,12 @@ Exemplos no código: `packages/tui/src/sdk-ui/kit.tsx` (`Panel`, `headerParts`).
 Todo botão, ação ou linha clicável tem um caminho pelo teclado. "Só com o mouse" é defeito.
 
 - Ação de página (`[ rodar agora ]`): é uma linha na seção a que pertence, alcançável por `↑↓` (a "linha de ações" no fim da lista, como `+ adicionar rotina…`), e/ou tem uma tecla (`keys`) que aparece no rodapé. Use as duas quando fizer sentido.
-- `Button` precisa de `keys` (tecla no rodapé) ou de `focused` (a página navega até ele e o desenha em foco). Um botão sem nenhum dos dois só responde ao mouse e é erro.
+- **Botão desenhado é navegável; atalho é extra.** Tudo que aparece como botão se alcança e se aperta pelo cursor: `←→`/`tab` dentro da fileira, `enter` aperta o em foco, o mouse clica, e o foco usa o preenchimento só do botão em foco. `keys` é um atalho a mais, nunca o único caminho. Se não quer o botão navegável, não o desenhe: deixe só o atalho no rodapé.
+- `Button` precisa de `focused` (a página navega até ele e o desenha em foco) ou de um `ButtonRow`. Só `keys` não basta e é erro.
 - Botões de um formulário (`Fields`, os extras incluídos) andam por `Tab` e `↑↓` junto com os campos.
 - Várias ações numa seção: use `ButtonRow` e não escreva o `←` `→` à mão. A fileira é **uma** parada (um id ao lado dos ids das linhas); a página leva `↑↓` até ela, dá `focused` quando a seleção está nela e a fileira cuida de `←` `→` e `enter`.
 - `Button help` (com `keys`) põe a tecla no `?` e não no rodapé: uma página com muitos botões mantém o rodapé em ~5 atalhos.
-- Teste: `expectButtonsReachable()` (`@pvx/testing`) falha se um botão montado não tem teclado. Chame-o depois de montar a tela, em todo teste de página. `expectNoKeyboardTrap(page)` falha se a página prende o teclado (seção 1).
+- Teste: `expectButtonsReachable()` (`@pvx/testing`) falha se um botão montado não está na ordem de foco (só `keys` não basta). Chame-o depois de montar a tela, em todo teste de página. `expectNoKeyboardTrap(page)` falha se a página prende o teclado (seção 1).
 
 ```text
  1 Rotinas

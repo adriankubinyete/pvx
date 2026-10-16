@@ -301,7 +301,7 @@ for (const [cols, rows] of SIZES) {
   });
 }
 
-test("a Button with no key and no focus is flagged; with a key it is not", async () => {
+test("a Button reachable only by a key shortcut is flagged; a focusable one with a key is not", async () => {
   h = await renderPage(MODULE, "orphan", { cols: 80, rows: 24 });
   expect(() => expectButtonsReachable()).toThrow("[ rodar agora ]");
   h.destroy();

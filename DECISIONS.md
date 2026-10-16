@@ -126,6 +126,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - A aba do Firewall usa os primitivos novos (status em `Badge` e `Details`, marcas de mudança pelo `lastApply.lists`, confirmação e formulários do framework) → [Firewall: etapa 3, a aba nos primitivos novos](#2026-10-16--firewall-etapa-3-a-aba-nos-primitivos-novos)
 - `Fields` reativo: `FieldSpec.when` (campo condicional: sai do foco, do envio e da validação; a coluna dos rótulos conta os ocultos), `onChange(values)`, `summary(values)` (linha apagada sempre visível acima dos botões), o `detail` da opção escolhida sob um `choice` em `radio` ou `buttons`, `extraActions` (botões de envio depois do primário, validam e ocupam como ele) e `FieldSpec.width` (`short`, `normal`, `long`: a célula cresce com o formulário, 40% e 60% da largura, mínimo 30; valor longo sem edição mostra o começo e `…`) → [Fields reativo, botões extras e células largas](#2026-10-16--fields-reativo-botões-extras-e-células-largas)
 - `sdk.ui.ButtonRow` (uma fileira de botões é uma parada da seção; `←` `→` e `enter` com `focused`), `aside` do `Panel` no SDK, `useJobLog()` (abre `jobs log <módulo> <nome>` na aba Comando) e a ordem segura-primeiro nos comentários do SDK → [ButtonRow, Panel aside e useJobLog](#2026-10-16--buttonrow-panel-aside-e-usejoblog)
+- Botão desenhado é navegável; atalho é extra: `expectButtonsReachable` falha num botão que só `keys` alcança → [Botão desenhado é navegável](#2026-10-16--botão-desenhado-é-navegável)
 - `sdk.cron.next(expressão, de?)`: a próxima execução em horário local, que pula o horário que o relógio salta e roda uma vez o que ele repete → [sdk.cron.next](#2026-10-16--sdkcronnext)
 - Nada longe do seu conteúdo: largura legível `CONTENT_MAX_W` (110), colunas do tamanho do conteúdo (teto de 60 células, `grow` só até o conteúdo), tabela e destaque com a largura das colunas, `Row right`, `aside`, botão de aviso e botões de formulário (`remover` por último, na mesma fileira) no fim do conteúdo, nunca na borda do terminal → [Nada longe do seu conteúdo](#2026-10-16--nada-longe-do-seu-conteúdo)
 - O módulo `nota` só tem `add`, `remove` e `list`; sem página, etiquetas, fixar, editar, resolver nem apelido; as notas antigas migram na leitura (texto, data e autor) → [Notas simples](#2026-10-16--notas-simples)
@@ -1688,3 +1689,18 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** menos para aprender, para manter e para testar; o que um recado precisa é texto, data e quem escreveu.
 
 **Limite:** quem usava etiquetas, fixadas e editar perde isso; uma nota se corrige removendo e escrevendo de novo. A lista do Início não tem ordem manual. Testes: `test/notas.test.ts`, `packages/tui/test/notas.test.tsx`, `test/banner.test.ts`, `home-rows.test.ts`.
+
+## 2026-10-16 — Botão desenhado é navegável
+
+**Status:** vigente.
+
+**Decisão:** tudo que a tela desenha como botão se alcança e se aperta pelo cursor; `keys` é atalho extra, nunca o único caminho.
+
+- `←→`/`tab` andam na fileira, `enter` aperta o botão em foco, o mouse clica e o foco usa o preenchimento só do botão em foco.
+- `expectButtonsReachable` agora exige o botão na ordem de foco (parada de `ButtonRow` ou `Button` com `focused`). `keys` sozinho falha.
+- Quem não quer o botão navegável não o desenha: deixa só o atalho no rodapé.
+- Host ajustado: `CommandResult` e `RunPanel` (`continuar daqui`) viram `ButtonRow focused`; `CopyBlock` ganha `focused` e `actions`; o modelo de módulo usa `ButtonRow`.
+
+**Motivo:** o `[ aplicar ]  [ cancelar ]` do firewall aparecia como botão e o cursor não andava entre eles; só o rodapé dizia como agir.
+
+**Limite:** `focused` sempre verdadeiro numa página de um botão só desenha o botão cheio o tempo todo. Teste: `layout.test.tsx` (fixture `layout-demo`).

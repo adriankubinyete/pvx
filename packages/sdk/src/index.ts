@@ -1028,9 +1028,9 @@ export interface SdkUi {
   Details: Component<{ items: DetailItem[]; columns?: 1 | 2 }>;
   /**
    * Label/value rows on a subtle panel fill (no border), for values a technician copies (an access URL, a password), and under them the button `[ copiar ]`
-   * (`copyLabel`, `keys` default `c`, shown in the footer). It copies the rows as aligned `label  value` lines through `useCopy`, with `title` on the preview.
+   * (`copyLabel`, `keys` default `c`, shown in the footer; `focused` draws it selected, for a page that navigates to it: without it the button is unreachable by the cursor; `actions` are more buttons in the same `ButtonRow`, after it). It copies the rows as aligned `label  value` lines through `useCopy`, with `title` on the preview.
    */
-  CopyBlock: Component<{ rows: DetailItem[]; copyLabel?: string; keys?: string; title?: string }>;
+  CopyBlock: Component<{ rows: DetailItem[]; copyLabel?: string; keys?: string; title?: string; focused?: boolean; actions?: ButtonRowItem[] }>;
   /** Scrolls its children when the page is taller than the screen: `↑` `↓` a line, `pgup` `pgdn` a page, `home` `end`, and the mouse wheel. Give it a parent with a height (it grows to fill it). With `focused: false` it takes no key. */
   Scroll: Component<Kids & { focused?: boolean }>;
   KeyHint: Component<{ keys: string; label: string }>;
@@ -1071,7 +1071,7 @@ export interface SdkUi {
   LogTail: Component<{ lines: string[]; follow?: boolean; /** Takes the keyboard: up/down a line, pgup/pgdn a page, home the start, end the end (and follows again). Default false: the page owns the keys. */ focused?: boolean }>;
   /**
    * An inline result block: `[✓]`, `[!]`, `[✗]` or `[i]` (blue) in the level's color and the text beside it (several lines allowed). Theme tokens only.
-   * With `action` a button sits at the end of the line (`[ resolver ]`); like any `Button` it needs `keys` or `focused`.
+   * With `action` a button sits at the end of the line (`[ resolver ]`); like any `Button` it needs `focused`.
    */
   Notice: Component<Kids & { level: NoticeLevel; action?: NoticeAction }>;
   /**
@@ -1161,7 +1161,7 @@ export interface SdkUi {
    * A row of buttons the keyboard walks as ONE stop of a section: give it `focused` while the page's selection is on the row (as a `List` row id), and the row owns
    * `←` `→` (move, wrapping), `enter` (press) and draws the current button filled (only that one, the rule of `Button`); the footer shows those keys only while it has the focus.
    * `↑` `↓` stay the page's: they leave the row. A click presses a button. The buttons are the `Button` props (`keys` also registers a key for the page).
-   * It replaces a hand-written `←` `→` between `Button`s. Like a `Button`, a row with no `focused` and no `keys` on its buttons is unreachable by the keyboard (`expectButtonsReachable`).
+   * It replaces a hand-written `←` `→` between `Button`s. Like a `Button`, a row with no `focused` is unreachable (a `keys` shortcut alone is not enough) by the keyboard (`expectButtonsReachable`).
    */
   ButtonRow: Component<{ buttons: ButtonRowItem[]; focused?: boolean }>;
   /**

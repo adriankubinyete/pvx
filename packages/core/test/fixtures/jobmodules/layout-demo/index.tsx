@@ -93,11 +93,11 @@ export default (sdk: Sdk) => {
     );
   }
 
-  /** A page button nobody can reach with the keyboard, and one with a key. */
+  /** A page button only a key shortcut reaches (not in the focus order), and one that is also focusable. */
   function Buttons({ keyed }: { keyed: boolean }) {
     return (
       <Panel>
-        <Button label="rodar agora" primary keys={keyed ? "r" : undefined} onPress={() => {}} />
+        <Button label="rodar agora" primary keys="r" focused={keyed ? false : undefined} onPress={() => {}} />
       </Panel>
     );
   }
@@ -123,7 +123,7 @@ export default (sdk: Sdk) => {
       long: { title: "Longa", render: () => <Long /> },
       ask: { title: "Pergunta", render: () => <Ask /> },
       orphan: { title: "Órfão", render: () => <Buttons keyed={false} /> },
-      keyed: { title: "Com tecla", render: () => <Buttons keyed /> },
+      keyed: { title: "Focável", render: () => <Buttons keyed /> },
     },
   };
 };

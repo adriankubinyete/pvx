@@ -1,17 +1,14 @@
 import { hooks } from "./host.tsx";
-import { Button } from "./button.tsx";
-import { Panel, Row, Spacer, Text } from "./kit.tsx";
+import { ButtonRow } from "./button.tsx";
+import { Panel, Spacer, Text } from "./kit.tsx";
 import { resultViewOf } from "./command-result.ts";
 import type { SdkUi } from "@pvx/sdk";
 
 type CommandResultProps = Parameters<SdkUi["CommandResult"]>[0];
 
-/** Columns between two buttons. */
-const BUTTON_GAP = 2;
-
 /**
  * A command result: the section (`Erro` or `Concluído`, the message lines, then the dim details), ONE blank row, then `[ fechar ]`
- * and the page's own actions (UI.md, sections 8 and 12). `esc` and `enter` close it.
+ * and the page's own actions as one focused `ButtonRow` (UI.md, sections 8, 12 and 17). `esc` closes it; `enter` presses the current button, `fechar` first.
  */
 export function CommandResult({ run, failure, actions = [], onClose }: CommandResultProps) {
   hooks.useBack(onClose);
@@ -23,10 +20,7 @@ export function CommandResult({ run, failure, actions = [], onClose }: CommandRe
         {view.details.map((line, index) => <Text key={`d${index}`} tone="dim">{line}</Text>)}
       </Panel>
       <Spacer />
-      <Row fit gap={BUTTON_GAP}>
-        <Button label="fechar" primary keys="enter" onPress={onClose} />
-        {actions.map((action) => <Button key={action.label} label={action.label} keys={action.keys} onPress={action.onPress} danger={action.danger} />)}
-      </Row>
+      <ButtonRow focused buttons={[{ label: "fechar", primary: true, onPress: onClose }, ...actions]} />
     </Panel>
   );
 }

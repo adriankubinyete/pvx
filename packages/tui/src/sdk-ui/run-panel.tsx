@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { PhaseFailure, RunState, RunView, SdkUi, Tone } from "@pvx/sdk";
 import { hooks, useKey } from "./host.tsx";
 import { fit } from "./columns.ts";
-import { Button } from "./button.tsx";
+import { ButtonRow } from "./button.tsx";
 import { Loading, ProgressBar } from "./flow.tsx";
 import { LogTail, Notice, Panel, Spacer, Steps, Text } from "./kit.tsx";
 import { useCopy } from "./copy.tsx";
@@ -41,7 +41,7 @@ function FailureBlock({ failure, cause, width, onResume }: FailureBlockProps) {
       {cause ? <Text tone="dim">causa provável</Text> : null}
       {cause ? <Text>{fit(cause, width * 2)}</Text> : null}
       {onResume ? <Spacer /> : null}
-      {onResume ? <Button label="continuar daqui" primary keys="enter" onPress={onResume} /> : null}
+      {onResume ? <ButtonRow focused buttons={[{ label: "continuar daqui", primary: true, onPress: onResume }]} /> : null}
     </>
   );
 }
