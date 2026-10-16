@@ -111,7 +111,7 @@ test.each([1, 2, 8, 12, 32] as const)("every one of %i cores is a bar, filled ac
 });
 
 test("a bar above 80% turns to the warn color; the others stay in the accent; the brackets and the percent are dim and the label is info", async () => {
-  const cpu = { total: 1, cores: [48, 85], load: [1, 1, 1], history: [1] };
+  const cpu = { total: 1, cores: [48, 85], load: [1, 1, 1] as [number, number, number], history: [1] };
   const { t } = await mount({ cols: 120, rows: 40, machine: { cpu } }); // two cores sit in one row: 48% then 85%
   const row = lines(t).findIndex((l) => /^\s+1 +\[/.test(l));
   const spans = t.spans().lines[row]!.spans;

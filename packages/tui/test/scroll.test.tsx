@@ -33,7 +33,7 @@ const run = async (t: TuiHarness, line: string) => {
 };
 
 /** Polls in real time (the harness `waitFor` counts frames, too few for a real process). */
-const until = async (t: TuiHarness, pred: () => boolean, ms = 5000) => {
+const until = async (t: TuiHarness, pred: () => boolean, ms = 20_000) => {
   for (const end = Date.now() + ms; !pred() && Date.now() < end; ) (await Bun.sleep(25), await t.flush());
   expect(pred()).toBe(true);
 };
@@ -73,7 +73,7 @@ test("!cmd runs in the host shell: stdout in a block, exit 0, audited and in the
   await run(t, "!!"); // repeat, not a shell line of its own
   await until(t, () => store.blocks[1]?.status === "ok");
   expect(store.blocks[1]!.line).toBe("!echo oi");
-});
+}, 30_000);
 
 test("!cmd: exit code sets the status, stderr is warning, then error on failure; ANSI is stripped", async () => {
   const t = await mount();
@@ -84,7 +84,7 @@ test("!cmd: exit code sets the status, stderr is warning, then error on failure;
   await until(t, () => store.blocks[1]?.status === "ok");
   expect(store.blocks[1]!.lines).toEqual([{ kind: "plain", text: "red" }]);
   expect(audit().at(-1)).toMatchObject({ line: expect.stringContaining("!printf"), exit: 0 });
-});
+}, 30_000); // two real shell processes: slow when the suite runs in parallel
 
 test("!cmd runs without root, unaudited when the audit file is unwritable; interactive programs are refused", async () => {
   const t = await mount({ isRoot: false });

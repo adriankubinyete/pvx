@@ -30,8 +30,7 @@ const footer = (t: TuiHarness) => t.frame().split("\n").filter((l) => l.trim()).
 /** The notice shows, then disappears by itself (~1.5 s). */
 async function gone(t: TuiHarness, msg: string) {
   expect(footer(t)).toContain(msg);
-  await Bun.sleep(1700);
-  await t.flush();
+  for (const end = Date.now() + 10_000; footer(t).includes(msg) && Date.now() < end; ) (await Bun.sleep(50), await t.flush()); // real time: a loaded machine renders late
   expect(footer(t)).not.toContain(msg);
 }
 

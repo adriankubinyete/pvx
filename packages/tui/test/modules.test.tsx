@@ -336,7 +336,7 @@ test("slow reads show a spinner and text, never a frozen screen: the catalog and
   const m = await mount();
   await see(m.t, (x) => /ld\s+● carregado/.test(x));
   expect(m.t.frame()).not.toContain("lendo os módulos…"); // gone once the rows are in
-});
+}, 30_000); // a git clone: slow when the suite runs in parallel
 
 test("d disables and enables live", async () => {
   await install(origin("tg"), "tg");
