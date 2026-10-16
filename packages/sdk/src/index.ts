@@ -1085,7 +1085,7 @@ export interface SdkUi {
     onDelete?: () => void | Promise<void>;
     /** Label of that button (default "remover"). */
     deleteLabel?: string;
-    /** The dialog that asks before `onDelete` runs (`useConfirm`): defaults to the title `<deleteLabel>?`, the buttons `[ deleteLabel ]  [ cancelar ]`, destructive. */
+    /** The dialog that asks before `onDelete` runs (`useConfirm`): defaults to the title `<deleteLabel>?`, the buttons `[ cancelar ]  [ deleteLabel ]` (the safe one first), destructive. */
     deleteConfirm?: Partial<ConfirmOptions>;
     /** The id of the field that has the focus when the form opens (default: the first). */
     initialFocus?: string;
@@ -1259,7 +1259,7 @@ export interface SdkUi {
   useNudge(): (msg?: string, tone?: "ok" | "warn" | "error") => void;
   /**
    * Asks for a confirmation in a dialog centered on the screen, the page behind it dimmed: the bold `title`, the dim `description`, then
-   * `[ confirmLabel ]  [ cancelLabel ]` (defaults `confirmar` and `cancelar`). Focus starts on the cancel button, the safe one. `←` `→` and
+   * `[ cancelLabel ]  [ confirmLabel ]` (defaults `cancelar` and `confirmar`): the safe option first (left), the one that acts second. Focus starts on the cancel button, the safe one. `←` `→` and
    * `tab` move between the buttons, `enter` picks, `esc` cancels, a click picks. `destructive` draws the confirm button in the error style.
    * It resolves true only on the confirm button. The CLI keeps its own text prompt; this is for the TUI pages.
    */

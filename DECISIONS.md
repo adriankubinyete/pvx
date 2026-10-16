@@ -124,6 +124,9 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `Crumb` em `sdk.ui` para a tela que abre dentro de uma aba (o host não a desenha sozinho), `Row right` para o canto direito de uma linha e célula de `List` em partes com tom → [Migalhas, `Row right` e célula em partes: lacunas achadas no Firewall](#2026-10-16--migalhas-row-right-e-célula-em-partes-lacunas-achadas-no-firewall)
 - `useQuery` guarda os dados anteriores enquanto a leitura com argumentos novos roda → [`useQuery` mantém os dados ao trocar os argumentos](#2026-10-16--usequery-mantém-os-dados-ao-trocar-os-argumentos)
 - A aba do Firewall usa os primitivos novos (status em `Badge` e `Details`, marcas de mudança pelo `lastApply.lists`, confirmação e formulários do framework) → [Firewall: etapa 3, a aba nos primitivos novos](#2026-10-16--firewall-etapa-3-a-aba-nos-primitivos-novos)
+- `Fields` reativo: `FieldSpec.when` (campo condicional: sai do foco, do envio e da validação; a coluna dos rótulos conta os ocultos), `onChange(values)`, `summary(values)` (linha apagada sempre visível acima dos botões), o `detail` da opção escolhida sob um `choice` em `radio` ou `buttons`, `extraActions` (botões de envio depois do primário, validam e ocupam como ele) e `FieldSpec.width` (`short`, `normal`, `long`: a célula cresce com o formulário, 40% e 60% da largura, mínimo 30; valor longo sem edição mostra o começo e `…`) → [Fields reativo, botões extras e células largas](#2026-10-16--fields-reativo-botões-extras-e-células-largas)
+- `sdk.ui.ButtonRow` (uma fileira de botões é uma parada da seção; `←` `→` e `enter` com `focused`), `aside` do `Panel` no SDK, `useJobLog()` (abre `jobs log <módulo> <nome>` na aba Comando) e a ordem segura-primeiro nos comentários do SDK → [ButtonRow, Panel aside e useJobLog](#2026-10-16--buttonrow-panel-aside-e-usejoblog)
+- `sdk.cron.next(expressão, de?)`: a próxima execução em horário local, que pula o horário que o relógio salta e roda uma vez o que ele repete → [sdk.cron.next](#2026-10-16--sdkcronnext)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1566,3 +1569,44 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** a tela deixa de refazer o layout à mão e mostra o que mudou desde a última aplicação, que é o que o técnico quer saber antes de aplicar.
 
 **Limite:** as marcas valem só até a próxima aplicação; o que o engine tem de fato continua sendo a prova do módulo, não a fotografia.
+
+## 2026-10-16 — Fields reativo, botões extras e células largas
+
+**Status:** vigente. Substitui, em parte, a célula de valor de largura fixa (30 colunas) de 2026-10-15 — Formulário padrão.
+
+**Decisão:** a migração do módulo autobackup mostrou lacunas no formulário padrão; o `Fields` as fecha.
+
+- `FieldSpec.when(values)` mostra o campo só enquanto devolve `true`, ao vivo. Recebe os valores de todos os campos (um oculto guarda o último). Um campo oculto não entra no foco, na exigência (`required`), na `validate` nem nos valores de `onSubmit`, `onChange`, `summary` e `details`. A coluna dos rótulos é medida com todos os campos, ocultos incluídos, e o foco acompanha o campo em que estava (`refocus`), então a tela não anda de lado. Uma `area` oculta recomeça do `initial` quando aparece.
+- `onChange(values)` roda uma vez por mudança (compara o JSON dos valores), nunca no primeiro desenho. `summary(values)` é uma linha apagada acima dos botões, com uma linha em branco antes e outra depois; vazia, some. O `details` de `ctrl+d` continua escondido.
+- O `detail` da opção escolhida de um `choice` em `radio` ou `buttons` vira uma linha apagada sob a fileira, alinhada às opções. `list` já mostrava cada `detail`; `row` o ignora.
+- `extraActions: { label, onPress(values), keys? }[]` põe botões de envio depois do primário. Passam pelo mesmo `submit` (`required`, `validate`, foco no primeiro erro) e pelo mesmo estado ocupado: o botão apertado mostra o spinner e `busyLabel`, os outros apagam. A regra de foco não muda (só o focado vem cheio). `keys` vale de qualquer campo e entra no rodapé; o autor usa um `ctrl+…`.
+- `FieldSpec.width`: `short` 20 colunas, `normal` (padrão) 40% da largura do formulário e `long` 60%, os dois com mínimo de 30, nunca além do que sobra depois do rótulo (`valueWidth`). Com 80 colunas de terminal a célula normal tem 31 e a longa 46; com 120, 47 e 70. `LineText ellipsis`: sem foco, um texto que não cabe mostra o começo e termina em `…`; com foco rola como antes.
+
+**Motivo:** o autobackup montava a rotina com campos que dependem do tipo de agenda, uma estimativa ao vivo, um segundo botão de envio e caminhos longos; cada módulo refazia isso com estado próprio, e a célula de 30 colunas cortava o começo de um caminho.
+
+**Limite:** `onChange` não ouve a digitação numa `area` (o `textarea` guarda o próprio texto); a mudança chega junto com a próxima em outro campo. `when` não vale em `Form` (argumentos de comando) nem em `Conversation`. Teste: `fields-reactive.test.tsx` em 80x24 e 120x40.
+
+## 2026-10-16 — ButtonRow, Panel aside e useJobLog
+
+**Status:** vigente.
+
+**Decisão:**
+
+- `sdk.ui.ButtonRow({ buttons, focused? })`: uma fileira de botões que o teclado percorre como uma só parada de uma seção. A página dá `focused` quando a sua seleção está na fileira; ela então é dona de `←` `→` (dão a volta) e `enter`, e só o botão atual vem cheio. `↑` `↓` continuam da página. O clique aperta o botão. Reusa `Button`, então `expectButtonsReachable` a conta (com `focused` definido ou `keys`). Substitui o `←`/`→` escrito à mão entre botões.
+- `aside` do `Panel` entra no tipo do SDK (o cabeçalho do host já o desenhava): nota apagada na ponta direita da linha de cabeçalho.
+- `useJobLog()` devolve `openJobLog(nome)`: roda `jobs log <módulo> <nome>` pela sessão e leva à aba Comando (`requestTab("comando")`), o mesmo que `l` faz na aba Tarefas. É um hook, e não uma função solta de `sdk.ui`, porque precisa da sessão e do módulo da página, como `useCommand`. O módulo não abre a aba Tarefas.
+- Confirmação: os comentários do SDK (`useConfirm`, `Fields.deleteConfirm`) ainda diziam `[ confirmar ]  [ cancelar ]`; agora dizem a ordem vigente, a opção segura primeiro (2026-10-16 — Confirmação: opção segura primeiro e borda warn). O UI.md e o README já estavam certos; o UI.md ganhou a ordem do `remover` de um formulário.
+
+**Motivo:** o autobackup escrevia a navegação `←` `→` de `[ + nova rotina ]  [ rodar agora ]  [ sincronizar cron ]` à mão, reescrevia o cabeçalho com o resumo da seção e não tinha como abrir o log inteiro de um job.
+
+**Limite:** `ButtonRow` não escolhe a parada por conta própria: a página guarda a seleção e dá `focused`. Um botão `disabled` recebe o foco (mostra o motivo) e não age. `useJobLog` só abre jobs do próprio módulo; um nome que não existe mostra `job inexistente` na aba Comando. Testes: `module-forms.test.tsx` (fixture `forms-demo`).
+
+## 2026-10-16 — sdk.cron.next
+
+**Status:** vigente.
+
+**Decisão:** `sdk.cron.next(expressão, de = agora): Date | undefined` devolve a próxima execução, estritamente depois de `de`, em horário local. Inválida (`validate`) ou que nunca roda (`0 0 31 2 *`) dá `undefined`. Portado do `nextRunAt` do autobackup: os campos viram conjuntos de valores e a busca anda dia a dia (até 8 anos, para o `29 2`). Com dia do mês e dia da semana restritos vale o dia que casa com qualquer um, e um campo que começa com `*` (`*/2`) não restringe, como no cron. Horário de verão: cada dia é montado pelos campos do calendário; um horário que o relógio salta não é execução, e um que ele repete roda só na primeira vez.
+
+**Motivo:** todo módulo que agenda mostra "próxima execução"; o cálculo não é do módulo.
+
+**Limite:** não há nomes (`mon`, `jan`) nem `@reboot`, como em `validate`. Quem precisa de "recuperar" a execução de um horário pulado pelo relógio não a encontra aqui. Testes: `cron-next.test.ts`, com `TZ=America/New_York`.

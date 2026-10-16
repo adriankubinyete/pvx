@@ -533,8 +533,9 @@ export const Fields: Component<Props> = (props) => {
     </box>
   );
 
-  /** The summary line: dim, above the buttons, cut to the width of the form. */
+  /** The summary line: dim, above the buttons, in their column (past the focus marker), cut to the width of the form. */
   const summaryText = summary ? fitHint(clean(summary(currentValues)), formW - MARK_W) : "";
+  const summaryLine = summaryText ? `${" ".repeat(MARK_W)}${summaryText}` : "";
 
   return (
     <box flexDirection="column" flexShrink={1} minHeight={0}>
@@ -545,8 +546,8 @@ export const Fields: Component<Props> = (props) => {
       <scrollbox ref={scroll} flexShrink={1} minHeight={0} maxHeight={areaRows} focused={false} opacity={busy ? BUSY_OPACITY : 1}>
         {fields.map(spaced)}
       </scrollbox>
-      {summaryText ? <text flexShrink={0}> </text> : null}
-      {summaryText ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{summaryText}</text> : null}
+      {summaryLine ? <text flexShrink={0}> </text> : null}
+      {summaryLine ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{summaryLine}</text> : null}
       {details && detailsOpen ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(details(currentValues))}</text> : null}
       {showButtons ? <text flexShrink={0}> </text> : null}
       {showButtons ? <box flexDirection="row" justifyContent="space-between" flexShrink={0}>

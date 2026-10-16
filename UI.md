@@ -173,25 +173,48 @@ O desenho, sem exceção:
 
 - **Título e descrição.** O título (negrito) vem de `title` (em `Form`: o `title` do comando, senão o `help`); a descrição apagada, de uma linha, vem de `description`. O título aparece uma só vez: um `Panel` em volta com o mesmo título é erro.
 - **Rótulo e obrigatório.** Rótulos alinhados numa coluna. O obrigatório é um `*` vermelho (token `error`) logo depois do rótulo, nunca verde nem de acento. Campo opcional não leva marca.
-- **Célula de valor.** Todo campo de texto tem uma célula com fundo preenchido (token `panel`), de largura fixa (30 colunas), mesmo vazia. A célula do campo em foco tem fundo mais forte (`selected`) e o cursor. Em temas sem fundo próprio (Terminal) o cursor continua visível.
+- **Célula de valor.** Todo campo de texto tem uma célula com fundo preenchido (token `panel`), mesmo vazia. A largura cresce com o formulário: o padrão (`normal`) toma 40% da largura, no mínimo 30 colunas (31 a 80 colunas de terminal, 47 a 120); `width: "long"` toma 60% (um caminho: 46 e 70) e `width: "short"` fica em 20 (um código, uma hora). A célula nunca passa do que sobra depois do rótulo. Um valor mais longo que a célula, enquanto o campo não está em edição, mostra o começo e termina em `…` (o início de um caminho nunca some); ele só rola com o foco no campo. A célula do campo em foco tem fundo mais forte (`selected`) e o cursor. Em temas sem fundo próprio (Terminal) o cursor continua visível.
 - **Marcador de foco.** O `›` do campo em foco mora numa coluna própria de 2 células: ele nunca desloca rótulo nem valor.
 - **Espaço entre campos.** Uma linha em branco entre campos. Se o terminal for baixo, a área dos campos rola (acompanha o foco) e mantém o espaço; os botões ficam fixos embaixo.
 - **Dica.** Dica só quando ajuda a preencher; nada de explicar o óbvio. Uma dica é uma restrição que o técnico precisa saber ("letras, números e hífen"), ou a descrição curta de uma opção que não se explica sozinha. Não explique o motivo de um desenho ("nunca as de hoje: o dia ainda não acabou", "sorteado entre 01h e 05h"), nem repita o rótulo. Ela fica apagada à direita do valor, curta (corta com `…` e some se não couber). Nada de `stdin`, `PVX_SECRET_*`, "prompt" ou "(segredo)".
 - **Erro.** Vermelho, na linha abaixo do valor, começando com `✗`. `required` vazio mostra "preencha este campo"; `validate` põe o resto.
 - **Segredo.** `secret` mostra `••••` (`g.mask`); `ctrl+r` mostra ou oculta; a tecla `generate` do campo gera e mostra.
 - **Colar funciona em todo campo.** O terminal manda o colado como um evento só (paste com colchetes), e o `KeyRouter` o entrega só a quem tem campo de texto (`useKeys(…, { paste: true })`). O campo em foco é dono do colado: `editLine` o insere no cursor, como digitado, e o campo rola na horizontal. Campo de uma linha: o colado perde escapes ANSI, caracteres de controle e quebras de linha (`\r`, `\n`, as de dentro também: o texto é juntado, não recusado), então uma senha colada com `\n` no fim fica inteira. Segredo continua mascarado (`•` por caractere) e o colado não vai a nenhum outro lugar (log, scrollback, histórico, aviso). Sem campo em foco (barra de abas, botão, caixa de marcar, lista) o colado não faz nada e nunca vira atalho. Vale para `Fields`/`Form`, respostas da conversa e do modal de segredo, a linha do Comando, a busca e os campos da palette, o `AddBox` e o editor de tema; a `area` (várias linhas) usa o colado do próprio `textarea`. Um campo novo usa `editLine` e registra `paste: true`.
-- **Botões.** Todos `[ rótulo ]`, na regra da seção 12: só o botão em foco vem cheio (acento; `error` no perigoso) e sublinhado. O primário (`submitLabel`, padrão `salvar`) sem foco é `[ salvar ]` em negrito no acento; `[ cancelar ]` é sempre o segundo; `[ remover ]` é opcional (`onDelete`), no tom `error`, e pergunta no diálogo da seção 18. Uma linha em branco separa o conteúdo dos botões. Todos clicáveis.
+- **Botões.** Todos `[ rótulo ]`, na regra da seção 12: só o botão em foco vem cheio (acento; `error` no perigoso) e sublinhado. O primário (`submitLabel`, padrão `salvar`) sem foco é `[ salvar ]` em negrito no acento; os botões de envio extras (`extraActions`, abaixo) vêm logo depois dele; `[ cancelar ]` vem depois deles; `[ remover ]` é opcional (`onDelete`), no tom `error`, e pergunta no diálogo da seção 18. Uma linha em branco separa o conteúdo dos botões. Todos clicáveis.
 - **Comando.** O formulário de um comando não mostra a linha `$ pvx …` nem "segredo fora da linha". `ctrl+d` (e `?`, fora de campo de texto) mostra a linha, apagada, numa só linha.
 - **Campo derivado.** `derive(values)` faz o campo seguir os outros enquanto o técnico não o editou. Editar para de seguir e guarda o texto; apagar até ficar vazio volta a seguir. A tela não diz nada sobre isso: o campo só mostra o valor, e ele continua editável. Exemplo: `Pasta no UOE` vira `clientes/<id-cliente>-<id-contrato>-<empresa>` conforme se digita.
 - **Teclas.** `↑↓` e `Tab` andam entre campos e botões (as setas dão a volta; `tab` no último ponto e `shift+tab` no primeiro vão para o host, seção 1); `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` sai do campo: o módulo ouve `onCancel` e o formulário devolve o teclado à página (o segundo `esc` chega à barra; `enter` volta para dentro). Nas pontas de `choice` e `multi` em lista, `↑↓` passam ao campo vizinho; em `radio`, `buttons` e `row` (seção 19), `←→` movem a escolha e `↑↓` vão ao campo vizinho.
+- **Campo condicional.** `when(values)` mostra o campo só enquanto devolve `true`, ao vivo. Um campo oculto sai do foco (`↑↓` e `tab` o pulam), não é exigido, não é validado e não vai nos valores que o módulo recebe. A coluna dos rótulos considera também os campos ocultos: nada anda de lado quando um campo entra ou sai, e o foco fica no campo em que estava. O que está abaixo do campo novo desce.
+- **Descrição da opção.** Num `choice` em `radio` ou `buttons`, o `detail` da opção escolhida aparece numa linha apagada embaixo da fileira, alinhada às opções, e muda com a escolha; opção sem `detail` não deixa linha. Em `list` cada `detail` já fica ao lado da sua opção.
+- **Resumo.** `summary(values)` é uma linha apagada, sempre visível, acima dos botões (uma linha em branco antes e outra depois): o estado do que se está montando (`2 rotinas · próxima hoje 03:30`). Vazio, não desenha nada. Não é o `details` (`ctrl+d`), que fica escondido e mostra o comando.
+- **Botões extras.** `extraActions` põe botões de envio depois do primário: `[ salvar rotina ]  [ salvar e rodar agora ]  [ cancelar ]`. Cada um valida como o primário e fica ocupado como ele (o botão apertado troca o rótulo pelo spinner; os outros apagam). A regra de foco é a mesma (só o botão em foco vem cheio); `keys` (um `ctrl+…`) vale de qualquer campo e aparece no rodapé.
+- **`onChange(values)`.** O módulo ouve cada mudança dos valores (nunca o primeiro desenho) para refazer um resumo ou uma estimativa. O formulário não guarda nada por ele.
 - **Erro do módulo.** `FieldSpec.error` mostra uma mensagem sob o campo agora (um valor que só o módulo sabe recusar); ela some quando o campo é editado. `initialFocus` abre o formulário com o foco num campo.
 - **Erro e envio.** O primeiro campo com erro recebe o foco e bloqueia o envio. Na edição, o valor enviado é gravado como está: campo vazio limpa o valor.
 - **Ocupado.** `onSubmit` (e `onConfirm` da conversa) que devolve uma promessa deixa o formulário ocupado até ela terminar: campos e botões apagados, sem foco, sem edição, sem clique; o botão primário troca o rótulo por spinner e progresso (`[ ⠹ entrando… ]`; padrão `executando…`, `busyLabel` muda); um segundo envio é impossível. Só `esc` funciona: sai da página e avisa "continua rodando em segundo plano"; o comando não é cancelado. Ao terminar, o formulário volta com os valores e o foco no primeiro campo com erro, senão no botão primário. O `Form` de comando já faz isso; `expectNoKeyboardTrap` vale também ocupado. A palette ocupada (fila em execução) segue a mesma regra: spinner e `esc` fecha.
 
+
+Um formulário reativo (o campo `Dia` só aparece em `toda semana`; o `detail` da opção, o resumo e o segundo botão de envio):
+
+```text
+ Nova rotina de backup
+
+ › Quando        todo dia   toda semana
+                 roda uma vez por semana, no dia escolhido        ← detail da opção escolhida
+                                                                  ← uma linha em branco entre campos
+   Dia *         ░dom░░░░░░░░░░░░░░░                              ← só com `toda semana` (when)
+                                                                  
+   Pasta no UOE  ░/clientes/12-3-acme/producao/diario/2026-10-1…  ← não editado: começo e …
+
+   semanal · próxima dom 18/10 03:30                              ← summary, sempre visível
+
+   [ salvar rotina ]  [ salvar e rodar agora ]  [ cancelar ]      ← só o botão em foco vem cheio
+```
+
 Exemplos no código:
 
 - `packages/tui/src/sdk-ui/fields.tsx` (o formulário), `packages/tui/src/sdk-ui/command-form.tsx` e `packages/tui/src/sdk-ui/labels.ts` (rótulos e dicas dos argumentos).
-- `packages/tui/src/sdk-ui/derive.ts` (campo derivado).
+- `packages/tui/src/sdk-ui/derive.ts` (campo derivado) e `packages/tui/src/sdk-ui/reactive.ts` (`when`, foco, largura da célula, `onChange`).
 - `packages/tui/src/menu/MenuForm.tsx` (o mesmo formulário na aba Módulos).
 
 ## 8. Retorno de ações
@@ -250,12 +273,13 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 
 | Componente | Quando usar | Comportamento |
 | --- | --- | --- |
-| `Panel`, `Row`, `Text`, `Chip`, `Meter`, `KeyHint`, `Table`, `Spacer` | tela comum | tons do tema; `Panel` é uma seção (linha de cabeçalho, sem borda; seção 15), na raiz é só o contêiner da página |
+| `Panel`, `Row`, `Text`, `Chip`, `Meter`, `KeyHint`, `Table`, `Spacer` | tela comum | tons do tema; `Panel` é uma seção (linha de cabeçalho, sem borda; seção 15; `aside` é a nota apagada na ponta direita do cabeçalho), na raiz é só o contêiner da página |
 | `List` | linhas navegáveis, com colunas | seção 4; seleção por id, hover, letreiro |
 | `Fields`, `Form` | qualquer formulário | seção 7 (o formulário padrão) |
 | `CommandResult` | o resultado de um comando que a página rodou | seção `Erro` ou `Concluído` (sem o código de saída no título), as linhas, os detalhes apagados (comando e fim da saída de um `StepError`; `código de saída N` só quando não é 0 nem 1), UMA linha em branco e `[ fechar ]` mais as ações da página; `esc` e `enter` fecham |
 | `useConfirm` | confirmar algo | diálogo centralizado, seção 18 |
 | `Conversation` | perguntas guiadas, uma por vez (instalador, assistente) | a respondida vira `✓ título   resumo`; a próxima aparece como `○ título`; `↑` no topo da pergunta sobe para as respondidas; `enter` ou clique reabre no lugar e volta ao ponto onde estava; depois da última vem a confirmação com todas as respostas (as puladas marcadas "(padrão)"), as notas "antes de instalar" e o botão principal; nada se aplica antes dele |
+| `ButtonRow` | as ações de uma seção, numa fileira | uma só parada de teclado dentro da seção (seção 17): com `focused` ela é dona de `←` `→` (movem o botão, dando a volta) e `enter` (aperta), e só o botão atual vem cheio (regra de foco da seção 19); `↑↓` continuam da página; o clique aperta; conta para `expectButtonsReachable` |
 | `Button` | ação de uso único, ação principal de uma etapa | `[ rótulo ]` clicável na cor de destaque, cheio só com o mouse por cima ou em foco; `primary` é negrito; `danger` usa o tom `error`; `disabled="motivo"` apaga e mostra o motivo embaixo; `keys` põe a tecla no rodapé e no `?`; precisa de `keys` ou `focused` (seção 17) |
 | `Steps` | fases de uma tarefa longa | `✓` feito, spinner rodando, `○` pendente, `✗` falhou, com a palavra do estado e o tempo; com `useRun` o tempo da fase em curso avança sozinho, e a barra anda dentro de uma fase longa por `phase.progress`; mostre uma espera (`Loading`) enquanto `run.loading` |
 | `RunPanel` | a tela de uma execução em fases (backup, instalação) | a barra e a palavra do estado, `Steps`, a falha (`Notice`, comando, código, saída, causa) com `[ continuar daqui ]`, os `children` do módulo e o log; `x` para, `c` copia o erro, `esc` sai; espera (`Loading`) até haver execução |
@@ -267,6 +291,7 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `ConfirmPreview` | mostrar numa folha ou ajuda como é a pergunta | o diálogo da seção 18 desenhado no lugar, sem fundo escurecido nem teclas |
 | `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `FilterChips`, `Row fit`, `Row right`, `Crumb` | leitura de estado e valores | seção 19 |
 | `Loading`, `useAsync` | toda espera visível | spinner e texto |
+| `useJobLog` | "ver o log completo" de um job do módulo | `openJobLog(nome)` roda `jobs log <módulo> <nome>` e leva à aba Comando, como o `l` da aba Tarefas; ao lado do `LogTail`, que só mostra o fim |
 | `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
 
 **Regra de espera.** Toda ação ou leitura que possa passar de ~300 ms mostra um estado de carregamento visível (spinner e texto, `Loading`); nunca uma tela congelada. Vale para catálogo, clone, revisão, verificação de conformidade, primeira carga de um `useQuery` e qualquer ação de um módulo. Texto estático como "carregando…" sem spinner não conta.
@@ -365,7 +390,8 @@ Todo botão, ação ou linha clicável tem um caminho pelo teclado. "Só com o m
 
 - Ação de página (`[ rodar agora ]`): é uma linha na seção a que pertence, alcançável por `↑↓` (a "linha de ações" no fim da lista, como `+ adicionar rotina…`), e/ou tem uma tecla (`keys`) que aparece no rodapé. Use as duas quando fizer sentido.
 - `Button` precisa de `keys` (tecla no rodapé) ou de `focused` (a página navega até ele e o desenha em foco). Um botão sem nenhum dos dois só responde ao mouse e é erro.
-- Botões de um formulário (`Fields`) andam por `Tab` e `↑↓` junto com os campos.
+- Botões de um formulário (`Fields`, os extras incluídos) andam por `Tab` e `↑↓` junto com os campos.
+- Várias ações numa seção: use `ButtonRow` e não escreva o `←` `→` à mão. A fileira é **uma** parada (um id ao lado dos ids das linhas); a página leva `↑↓` até ela, dá `focused` quando a seleção está nela e a fileira cuida de `←` `→` e `enter`.
 - `Button help` (com `keys`) põe a tecla no `?` e não no rodapé: uma página com muitos botões mantém o rodapé em ~5 atalhos.
 - Teste: `expectButtonsReachable()` (`@pvx/testing`) falha se um botão montado não tem teclado. Chame-o depois de montar a tela, em todo teste de página. `expectNoKeyboardTrap(page)` falha se a página prende o teclado (seção 1).
 
@@ -375,6 +401,13 @@ Todo botão, ação ou linha clicável tem um caminho pelo teclado. "Só com o m
  › diaria     02:10
    + adicionar rotina…
    ▶ rodar agora                  ← a ação é uma linha: ↑↓ chega nela, enter age
+```
+
+```text
+ 1 Rotinas                                      2 rotinas · próxima hoje 03:30   ← aside do Panel
+   NOME       AGENDA
+ › diaria     02:10
+   [ + nova rotina ]  [ rodar agora ]  [ sincronizar cron ]   ← ButtonRow: uma parada; ←→ andam, enter age
 ```
 
 Exemplos no código: `packages/tui/src/sdk-ui/flow.tsx` (`Button`, `unreachableButtons`), `packages/testing/src/reachable.ts`.
@@ -391,6 +424,7 @@ Toda confirmação (comando destrutivo, `remover` de um formulário, uma ação 
 - O foco começa na opção segura (a primeira). `←` `→` e `Tab` andam entre os botões, `enter` ativa, `esc` cancela, os dois botões são clicáveis.
 - Uma borda só (o diálogo flutua). O fundo e o diálogo são irmãos, porque `opacity` vale para a subárvore.
 - `ConfirmPreview` desenha o mesmo diálogo no lugar, em modo "prévia": só a caixa, sem fundo escurecido, sem tecla e sem resposta. É para folha de referência e ajuda; o diálogo de verdade continua sendo `useConfirm`, aberto por um botão com tecla.
+- O `remover` de um formulário (`Fields onDelete`) é o mesmo diálogo, na mesma ordem: `[ cancelar ]  [ remover ]` (ou os rótulos de `deleteConfirm`).
 - No módulo: `useConfirm()({ title, description?, confirmLabel?, cancelLabel?, destructive? })` devolve `Promise<boolean>`. A CLI mantém o prompt de texto.
 
 ```text
@@ -543,7 +577,7 @@ As abas do núcleo seguem o desenho aprovado (`pvx-design/telas`). Resumo do que
 
 - **Início.** No alto, no estilo do htop: uma `BarMeter` por núcleo, que enche a largura primeiro (quantas colunas couberem com barras de pelo menos 26 células: 4 a 120 colunas, 2 a 80, 1 em terminal muito estreito; linhas = teto de núcleos ÷ colunas, preenchidas por coluna: 1, 2, 3 na primeira, depois 4, 5, 6) e as barras esticam até a coluna; embaixo, na metade esquerda, `mem`, `swp` e `dsk` com o tamanho dentro da barra (`6,4/13,7G]`); à direita o hostname em negrito e o sistema, `ligado`, `carga` (o primeiro valor em negrito), `processos N · M rodando`, `rede ↓ … ↑ …`, `sessão <ip>` e os 3 `mais pesados` (nome, cpu, memória). Quando a metade direita não cabe os fatos (terminal estreito), eles descem para baixo das barras. Embaixo, `1 Atenção` (uma linha por item: glifo do nível, texto curto e, quando há o que fazer, o botão `[ corrigir ]` numa coluna só; a memória acima de 90% vira `memória em 99%` com `[ ver processos ]`, e a conformidade nunca verificada vira `[ ] conformidade não verificada` com `[ verificar ]`; os avisos dos módulos e do host entram aqui, não numa faixa acima), com `[ rodar o plano (N passos) ]` e `[ verificar de novo ]` depois da verificação. `2 Notas` e `3 Atividade` são uma linha cada (`nenhuma · + nova nota`, o resumo apagado dos comandos recentes) até o `enter` abri-las em linhas; continuam selecionáveis vazias. Teclas: `1 2 3` seção, `enter` abre ou age, `p` plano, `r` verifica, `n` nota, `esc` sobe.
 - **Sistema.** Uma página, três seções: `1 pvx` (versão, atualização com `[ atualizar ] [ verificar ]`, plataforma, dados, embutidos, a dica apagada de desinstalar), `2 Aparência` e `3 Avançado` (a caixa `aba Tarefas · mostrar`, desligada por padrão, guardada no estado da TUI). Aparência tem o `tema` como fileira de botões, o seletor de acento (seção 19) e `símbolos`, `moldura` e `resultado` como fileiras de botões; ao lado (a partir de 120 colunas, com cerca de 36% da largura) ou embaixo (abaixo disso) fica a prévia ao vivo: os primitivos reais (cabeçalho de seção ativo e inativo, linha selecionada, os quatro avisos, dois botões, um campo, um selo, uma barra e uma etapa `✓` no token `ok`) no tema que estaria valendo se a opção sob o mouse, o swatch sob o teclado ou o hex que se digita fosse escolhido. Com o tema `Personalizado`, as opções de predefinição somem e o editor (`começar de` e uma linha por cor, `enter` edita o hex) toma o lugar sob `tema`; o cursor fica em `tema`. Teclas: `↑↓` andam pelas linhas, `←→` mudam a opção, `enter` escolhe, `u` atualiza, `1 2 3` seção.
-- **Tarefas.** Aba escondida até ligar em Sistema; fica entre as abas de módulo e Logs, com a contagem das que rodam (`Tarefas 1`). `1 Em andamento` (tarefa, módulo, início com cron ou você, tempo e a barra com a fase) e `2 Terminadas` das últimas 24 h (`✓ concluída` no token `ok`, `✗ falhou` com a fase e a causa, `■ parada` com quem parou), e o fim do log da tarefa selecionada. Cada tarefa mostra a última execução do nome. Teclas: `x` para (pergunta antes), `c` continua da fase (só quando ela guarda fases e não recebeu segredos), `l` log inteiro no Comando, `enter` abre a aba do módulo.
+- **Tarefas.** Aba escondida até ligar em Sistema; fica entre as abas de módulo e Logs, com a contagem das que rodam (`Tarefas 1`). `1 Em andamento` (tarefa, módulo, início com cron ou você, tempo e a barra com a fase) e `2 Terminadas` das últimas 24 h (`✓ concluída` no token `ok`, `✗ falhou` com a fase e a causa, `■ parada` com quem parou), e o fim do log da tarefa selecionada. Cada tarefa mostra a última execução do nome. Teclas: `x` para (pergunta antes), `c` continua da fase (só quando ela guarda fases e não recebeu segredos), `l` log inteiro no Comando (um módulo faz o mesmo com `useJobLog`), `enter` abre a aba do módulo.
 - **Logs.** Todos os logs mesclados (o do núcleo e o de cada módulo, com as linhas dos jobs), do mais antigo ao mais novo, agrupados por dia (`hoje`, `ontem`, a data) com a hora local, a coluna do módulo e a palavra do nível só para `aviso` e `erro`. No alto, `FilterChips` (`todos`, `pvx`, um por módulo), o chip de nível (`info+`), `/ buscar` e `● ao vivo`. A linha selecionada mostra as linhas que a continuam e, se é de um job, `↳ fase … · tarefa … · enter mostra o log da tarefa`. Teclas: `←→` módulo, `n` nível, `/` buscar, `enter` detalhes (ou o log do job), `c` copia, `end` ao vivo, `a` alterna para o audit.
 - **Comando.** O scrollback e o modo shell da seção 19; o campo é uma linha preenchida; `tab` completa, `↑` histórico.
 - **Paleta.** Diálogo flutuante de uma borda só: o campo no alto, uma régua, os resultados em grupos (`favoritos` e `recentes` com a busca vazia, depois `comandos` e `páginas`) com as letras casadas em negrito no acento (cada palavra da busca casa em ordem), a nota apagada e, à direita, as marcas (`★`, `!`) e a tecla `enter` na linha selecionada; embaixo uma régua e uma linha apagada de dicas. O formulário de argumentos e a fila aparecem sob a lista.
@@ -558,7 +592,8 @@ As abas do núcleo seguem o desenho aprovado (`pvx-design/telas`). Resumo do que
 - [ ] A lista dá a volta nas pontas, alinha colunas e rola só a linha selecionada; a seleção é por id.
 - [ ] O rodapé tem até ~5 atalhos; ações vivem num menu com `enter`; o resto está no `?`.
 - [ ] Estado tem cor e palavra; vazio é `—`; só tokens do tema; sem texto explicativo fixo.
-- [ ] Formulário segue a seção 7 (rótulos humanos, `*` vermelho, célula de valor, uma linha entre campos, erro `✗` sob o valor, primário cheio) e a confirmação de `remover` é o diálogo da seção 18.
+- [ ] Formulário segue a seção 7 (rótulos humanos, `*` vermelho, célula de valor, uma linha entre campos, erro `✗` sob o valor, primário cheio) e a confirmação de `remover` é o diálogo da seção 18. Campo que depende de outro usa `when`, a explicação de uma opção é o `detail`, o estado do conjunto é o `summary`, e o segundo envio é `extraActions`.
+- [ ] Várias ações numa seção são um `ButtonRow` (uma parada), não botões soltos com `←` `→` à mão.
 - [ ] A aba já nomeia a página (sem moldura repetida), no máximo uma borda e todo controle alcançável pelo teclado (seções 14, 15 e 17).
 - [ ] Sucesso volta para a lista com `✓`; erro mostra a tela de resultado.
 - [ ] Se o salvo pode diferir do aplicado, a tela mostra `precisa aplicar` (seção 13).
