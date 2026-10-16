@@ -1610,3 +1610,15 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** todo módulo que agenda mostra "próxima execução"; o cálculo não é do módulo.
 
 **Limite:** não há nomes (`mon`, `jan`) nem `@reboot`, como em `validate`. Quem precisa de "recuperar" a execução de um horário pulado pelo relógio não a encontra aqui. Testes: `cron-next.test.ts`, com `TZ=America/New_York`.
+
+## 2026-10-16 — Início sem "mais pesados"; seções lado a lado com respiro
+
+**Status:** vigente.
+
+**Contexto:** a lista dos processos mais pesados muda de tamanho e de nome a cada leitura, e o bloco da máquina se mexia. No Firewall, a última coluna de uma lista cortada com `…` encostava no `▌` da seção vizinha.
+
+**Decisão:** o bloco da máquina perdeu os `mais pesados`; o amostrador deixou de ler `/proc/[pid]/stat` e `MachineSnap.top` saiu (a contagem de processos continua). `Row` sem `fit` deixa `SECTION_GAP_W` (3) células entre os filhos e a `List` em colunas deixa `LIST_RIGHT_MARGIN_W` (1) livre à direita.
+
+**Motivo:** o que atualiza ao vivo tem largura e altura fixas; seções vizinhas precisam respirar.
+
+**Limite:** não há ação de ver processos no Início além de `[ ver processos ]`. Testes: `home.test.tsx`, `side-by-side.test.tsx`.

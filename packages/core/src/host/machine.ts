@@ -29,8 +29,6 @@ export interface MachineSnap {
   procs?: number;
   /** Processes in the run queue right now (`procs_running`). */
   running?: number;
-  /** Top processes by CPU, as % of the whole machine; `mem` is the resident size in bytes. */
-  top?: { name: string; pct: number; mem?: number }[];
 }
 
 /** What the sampler reads from `/proc`; tests feed fixtures. `read` gives undefined when the file is missing or denied. */
@@ -126,35 +124,6 @@ export function pickNet(prev: Record<string, { rx: number; tx: number }> | undef
   return best && { iface: best.iface, rx: best.rx, tx: best.tx };
 }
 
-/** Bytes of a page: `/proc/[pid]/stat` counts the resident set in pages. ponytail: 4 KiB, true on every Linux the pvx targets; read `getconf PAGESIZE` if one appears with another. */
-const PAGE_BYTES = 4096;
-/** Field 24 of `/proc/[pid]/stat` is `rss`; the fields after the name start at the third one (the state). */
-const RSS_INDEX = 21;
-
-/** `/proc/[pid]/stat`: the name sits in parentheses (and may hold spaces and parentheses), utime and stime follow, then the resident size in pages. */
-export function parsePidStat(text: string): { name: string; ticks: number; rss?: number } | undefined {
-  const a = text.indexOf("(");
-  const b = text.lastIndexOf(")");
-  if (a < 0 || b < a) return undefined;
-  const f = text.slice(b + 2).split(" ");
-  const ticks = Number(f[11]) + Number(f[12]);
-  const rss = Number(f[RSS_INDEX]);
-  return Number.isFinite(ticks) ? { name: text.slice(a + 1, b), ticks, ...(Number.isFinite(rss) ? { rss: rss * PAGE_BYTES } : {}) } : undefined;
-}
-
-/** Top processes by tick delta, as % of `totalTicks` (the delta of the aggregate CPU line, i.e. the whole machine). Pids without a previous reading are skipped. */
-export function topProcs(prev: Map<string, number>, cur: Map<string, { name: string; ticks: number; rss?: number }>, totalTicks: number, n: number): { name: string; pct: number; mem?: number }[] {
-  if (totalTicks <= 0) return [];
-  const out: { name: string; pct: number; mem?: number }[] = [];
-  for (const [pid, p] of cur) {
-    const before = prev.get(pid);
-    if (before === undefined) continue;
-    const pct = (Math.max(0, p.ticks - before) / totalTicks) * 100;
-    if (pct > 0) out.push({ name: p.name, pct, ...(p.rss !== undefined ? { mem: p.rss } : {}) });
-  }
-  return out.sort((x, y) => y.pct - x.pct).slice(0, n);
-}
-
 export interface MachineSampler {
   /** Reads everything and appends to the history; cheap enough for a 2 s timer. */
   sample(): MachineSnap;
@@ -181,7 +150,6 @@ export function createMachineSampler(deps: SamplerDeps = {}): MachineSampler {
   let prevAt: number | undefined;
   let prevCpu: { all: CpuTimes; cores: CpuTimes[] } | undefined;
   let prevNet: Record<string, { rx: number; tx: number }> | undefined;
-  let prevPids = new Map<string, number>();
 
   const osPretty = () => osName ??= (linux ? fs.read("/etc/os-release")?.match(/^PRETTY_NAME="?([^"\n]*)"?/m)?.[1] : undefined) ?? `${sys.type()} ${sys.release()}`;
 
@@ -210,19 +178,10 @@ export function createMachineSampler(deps: SamplerDeps = {}): MachineSampler {
 
       let procs: number | undefined;
       let running: number | undefined;
-      let top: MachineSnap["top"];
       if (linux) {
         const pids = fs.list("/proc").filter((p) => /^\d+$/.test(p));
-        const cur = new Map<string, { name: string; ticks: number; rss?: number }>();
-        for (const pid of pids) {
-          const s = fs.read(`/proc/${pid}/stat`); // vanished or denied: skip
-          const p = s && parsePidStat(s);
-          if (p) cur.set(pid, p);
-        }
         procs = pids.length;
         running = parseRunning(fs.read("/proc/stat") ?? "");
-        top = topProcs(prevPids, cur, stat.all.total - (prevCpu?.all.total ?? stat.all.total), 5);
-        prevPids = new Map([...cur].map(([k, v]) => [k, v.ticks]));
       }
 
       prevAt = at;
@@ -231,7 +190,7 @@ export function createMachineSampler(deps: SamplerDeps = {}): MachineSampler {
       return {
         at, host: sys.hostname(), ip: sys.ip(), os: osPretty(), uptime: sys.uptime(),
         cpu: { total, cores, load: [l[0] ?? 0, l[1] ?? 0, l[2] ?? 0], history: [...history] },
-        mem, swap, disk: sys.disk(), net, procs, running, top,
+        mem, swap, disk: sys.disk(), net, procs, running,
       };
     },
   };

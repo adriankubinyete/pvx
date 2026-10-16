@@ -1,7 +1,7 @@
 import type { MachineSnap } from "@pvx/core";
 import { BarMeter } from "../sdk-ui/display.tsx";
 import { useTheme } from "../theme-context.tsx";
-import { BAR_LABEL_W, coreColumns, heaviestLines, loadParts, machineLayout, processesText, rateText, sizeText, uptimeText, type MachineLayout } from "./home-view.ts";
+import { BAR_LABEL_W, coreColumns, loadParts, machineLayout, processesText, rateText, sizeText, uptimeText, type MachineLayout } from "./home-view.ts";
 
 /** Cells of the dim label of a fact on the right (`processos` is the longest) and the space after it. */
 const FACT_LABEL_W = 9;
@@ -55,11 +55,10 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** The hostname and what it runs, then the facts of the machine and the heaviest processes. */
+/** The hostname and what it runs, then the facts of the machine. */
 function Facts({ machine, product, sessionIp }: { machine: MachineSnap; product?: string; sessionIp?: string }) {
   const { c, g } = useTheme();
   const load = loadParts(machine.cpu.load);
-  const heaviest = heaviestLines(machine.top);
   return (
     <box flexDirection="column" flexShrink={0}>
       <text wrapMode="none" flexShrink={0}>
@@ -71,13 +70,6 @@ function Facts({ machine, product, sessionIp }: { machine: MachineSnap; product?
       {machine.procs === undefined ? null : <Fact label="processos"><span fg={c.text}>{processesText(machine.procs, machine.running)}</span></Fact>}
       <Fact label="rede"><span fg={machine.net ? c.text : c.dim}>{machine.net ? rateText(machine.net, g) : SIZE_UNAVAILABLE}</span></Fact>
       {sessionIp ? <Fact label="sessão"><span fg={c.ip}>{sessionIp}</span></Fact> : null}
-      {heaviest.length ? (
-        <>
-          <text wrapMode="none" flexShrink={0}> </text>
-          <text wrapMode="none" flexShrink={0} fg={c.dim}>mais pesados</text>
-          {heaviest.map((line) => <text key={line} wrapMode="none" flexShrink={0} fg={c.dim}>{`  ${line}`}</text>)}
-        </>
-      ) : null}
     </box>
   );
 }

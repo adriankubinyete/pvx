@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
-import { coreColumns, decimalComma, heaviestLines, loadParts, machineLayout, memoryText, processesText, rateText, sizeText, sizeWidth, uptimeText } from "../src/tabs/home-view.ts";
+import { coreColumns, decimalComma, loadParts, machineLayout, processesText, rateText, sizeText, sizeWidth, uptimeText } from "../src/tabs/home-view.ts";
 import { glyphs } from "../src/theme.ts";
 
 const GIB = 2 ** 30;
-const MIB = 2 ** 20;
 
 test("the size keeps its width as the use grows (small and big totals), with the comma of the language", () => {
   expect(sizeText(7.9 * GIB, 8 * GIB)).toBe("7,9/8G");
@@ -29,13 +28,6 @@ test("the load, the rates, the uptime and the process counts are in fixed widths
   expect(processesText(88, 1)).toBe("  88 ·   1 rodando");
   expect(processesText(88, undefined)).toBe("  88");
   for (const procs of [9, 88, 1234]) expect(processesText(procs, 1).length).toBe(processesText(1, 1).length + (procs > 9999 ? 1 : 0));
-});
-
-test("the heaviest processes are three lines: the name, the cpu share and the memory, each in a fixed width", () => {
-  const lines = heaviestLines([{ name: "asterisk", pct: 3.1, mem: 55 * MIB }, { name: "fail2ban", pct: 2.4, mem: 43 * MIB }, { name: "php-fpm", pct: 1.2, mem: 1.2 * GIB }, { name: "cron", pct: 0.1 }]);
-  expect(lines).toEqual(["asterisk    3,1%   55 MB", "fail2ban    2,4%   43 MB", "php-fpm     1,2%  1,2 GB"]);
-  expect(heaviestLines(undefined)).toEqual([]);
-  expect(memoryText(900)).toBe("   0 MB");
 });
 
 test("the cores fill the width first: as many columns as fit, rows = ceil(cores / columns), the bars stretching to the column", () => {

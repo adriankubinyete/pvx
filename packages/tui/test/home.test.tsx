@@ -3,10 +3,11 @@ import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type MachineSnap, type Registry } from "@pvx/core";
 import { RGBA } from "@opentui/core";
 import { expectButtonsReachable, expectNoKeyboardTrap, renderTui, type TuiHarness } from "../../testing/src/index.ts";
-import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
+import { App, createSessionStore, createTabsNav, Tabs, theme, ThemeProvider } from "../src/index.ts";
 import { tokens } from "../src/theme.ts";
 import { saveFavorites } from "../src/palette/favorites.ts";
 import { snap } from "./machine-fixture.ts";
+import { MachineBlock } from "../src/tabs/HomeMachine.tsx";
 
 const fixtures = join(import.meta.dir, "../../core/test/fixtures");
 let h: TuiHarness | undefined;
@@ -43,7 +44,7 @@ const BAR = "tab próxima aba";
 test("Início at 120x40 has the bars, the facts, the sections and the footer, and 80x24 keeps the same content with the facts under the bars when it must", async () => {
   const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
   const f = t.frame();
-  for (const s of ["central-sp-01", "Rocky Linux 8.10", "ligado", "41d 0h 0m", "carga", "2,14 1,80 1,32", "processos", "212 ·   3 rodando", "rede", "↓   1,2 MB/s", "mais pesados", "asterisk", "68,0%", "55 MB", "mem[", "3,1/6G", "swp[", "0,0/2G", "dsk[", "38/54G", "1 Atenção", "perfil: Principal", "2 Atividade", "pvx 0.1.0"]) expect(f, s).toContain(s);
+  for (const s of ["central-sp-01", "Rocky Linux 8.10", "ligado", "41d 0h 0m", "carga", "2,14 1,80 1,32", "processos", "212 ·   3 rodando", "rede", "↓   1,2 MB/s", "mem[", "3,1/6G", "swp[", "0,0/2G", "dsk[", "38/54G", "1 Atenção", "perfil: Principal", "2 Atividade", "pvx 0.1.0"]) expect(f, s).toContain(s);
   const row = lines(t).find((l) => l.includes("central-sp-01"))!;
   expect(row.indexOf("central-sp-01")).toBeGreaterThan(40); // the facts are beside the bars
   t.destroy();
@@ -424,3 +425,28 @@ test("Notas and Atividade are one line each until enter opens them, and stay sel
   await t.press("ESCAPE"); // back to one line
   expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1);
 });
+
+// The machine block never moves between refreshes: two very different samples give the same line count and the same columns.
+const MACHINE_ANCHORS = ["ligado", "carga", "processos", "rede", "mem[", "swp[", "dsk[", "1[", "8["];
+
+async function machineFrame(machine: ReturnType<typeof snap>, cols: number) {
+  h = await renderTui(<ThemeProvider><MachineBlock machine={machine} sessionIp="203.0.113.7" width={cols - 4} /></ThemeProvider>, { cols, rows: 24 });
+  await h.flush();
+  return h.frame().split("\n").map((line) => line.trimEnd());
+}
+
+for (const cols of [80, 120]) {
+  test(`the machine block keeps its line count and columns between two samples at ${cols} columns`, async () => {
+    const quiet = snap(8, { uptime: 59, procs: 9, running: 1, cpu: { total: 1, cores: Array(8).fill(0), load: [0, 0, 0], history: [] }, mem: { used: 0, total: 6 * 2 ** 30 }, net: { iface: "eth0", rx: 0, tx: 0 } });
+    const busy = snap(8, { uptime: 400 * 86400, procs: 1234, running: 120, cpu: { total: 100, cores: Array(8).fill(100), load: [99.5, 40.25, 12.1], history: [] }, mem: { used: 6 * 2 ** 30, total: 6 * 2 ** 30 }, net: { iface: "eth0", rx: 900 * 2 ** 20, tx: 2 * 2 ** 20 } });
+    const first = await machineFrame(quiet, cols);
+    h!.destroy();
+    const second = await machineFrame(busy, cols);
+    const trimmed = (lines: string[]) => lines.slice(0, lines.findLastIndex((line) => line !== "") + 1);
+    expect(trimmed(second).length).toBe(trimmed(first).length);
+    for (const anchor of MACHINE_ANCHORS) {
+      const column = (lines: string[]) => lines.map((line) => line.indexOf(anchor));
+      expect(column(second), anchor).toEqual(column(first));
+    }
+  });
+}

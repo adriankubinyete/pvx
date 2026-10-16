@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cpuPct, createMachineSampler, parseMeminfo, parseNetDev, parsePidStat, parseRunning, parseStat, pickNet, topProcs, type ProcFs } from "../../src/index.ts";
+import { cpuPct, createMachineSampler, parseMeminfo, parseNetDev, parseRunning, parseStat, pickNet, type ProcFs } from "../../src/index.ts";
 
 const stat = (a: number[], cores: number[][]) =>
   [a, ...cores].map((f, i) => `${i ? `cpu${i - 1}` : "cpu "} ${f.join(" ")} 0 0 0`).join("\n") + "\nintr 1 2 3\n";
@@ -35,17 +35,6 @@ test("net picks the interface with the most traffic since the last reading, neve
   expect(pickNet(a, parseNetDev(dev({ lo: [1, 1] })), 2)).toBeUndefined();
 });
 
-const pid = (name: string, u: number, s: number, rssPages = 0) => `1 (${name}) S 1 1 1 0 -1 0 0 0 0 0 ${u} ${s} 0 0 20 0 1 0 5 0 ${rssPages}\n`;
-
-test("top processes use the tick delta over the machine's ticks; new pids are skipped; names may hold parentheses", () => {
-  expect(parsePidStat(pid("a (b) c", 7, 3))).toEqual({ name: "a (b) c", ticks: 10, rss: 0 });
-  expect(parsePidStat("garbage")).toBeUndefined();
-  const prev = new Map([["1", 100], ["2", 50], ["9", 10]]);
-  const cur = new Map([["1", { name: "asterisk", ticks: 160 }], ["2", { name: "mysqld", ticks: 60 }], ["3", { name: "new", ticks: 999 }]]); // 9 vanished
-  expect(topProcs(prev, cur, 100, 3)).toEqual([{ name: "asterisk", pct: 60 }, { name: "mysqld", pct: 10 }]); // no `rss` in the readings: no `mem`
-  expect(topProcs(prev, cur, 0, 3)).toEqual([]);
-});
-
 function fakeProc(files: Record<string, string>): ProcFs & { files: Record<string, string> } {
   return {
     files,
@@ -60,41 +49,37 @@ test("the sampler reads fixtures, keeps a ring of history, and survives a vanish
     "/proc/stat": stat([0, 0, 0, 0, 0, 0, 0, 0], [[0, 0, 0, 0, 0, 0, 0, 0]]),
     "/proc/meminfo": "MemTotal: 1000 kB\nMemAvailable: 400 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n",
     "/proc/net/dev": dev({ eth0: [0, 0] }),
-    "/proc/1/stat": pid("asterisk", 0, 0),
-    "/proc/2/stat": pid("gone", 0, 0),
+    "/proc/1/stat": "stat",
+    "/proc/2/stat": "stat",
     "/proc/self/stat": "ignored",
   });
   let t = 1_000;
   const s = createMachineSampler({ fs, linux: true, history: 2, now: () => t, sys: { hostname: () => "h", ip: () => "1.2.3.4", loadavg: () => [1, 2, 3], uptime: () => 60, disk: () => ({ used: 1, total: 2 }) } });
   const first = s.sample();
-  expect(first).toMatchObject({ host: "h", ip: "1.2.3.4", os: "Rocky Linux 8.10", procs: 2, top: [], mem: { used: 600 * 1024, total: 1000 * 1024 }, swap: { used: 0, total: 0 } });
+  expect(first).toMatchObject({ host: "h", ip: "1.2.3.4", os: "Rocky Linux 8.10", procs: 2, mem: { used: 600 * 1024, total: 1000 * 1024 }, swap: { used: 0, total: 0 } });
   fs.files["/proc/stat"] = stat([60, 0, 0, 40, 0, 0, 0, 0], [[60, 0, 0, 40, 0, 0, 0, 0]]);
-  fs.files["/proc/1/stat"] = pid("asterisk", 30, 10);
+  fs.files["/proc/1/stat"] = "stat";
   delete fs.files["/proc/2/stat"]; // vanished between samples
   fs.files["/proc/net/dev"] = dev({ eth0: [2000, 1000] });
   t += 2_000;
   const b = s.sample();
   expect(b.cpu.total).toBe(60);
   expect(b.cpu.cores).toEqual([60]);
-  expect(b.top).toEqual([{ name: "asterisk", pct: 40, mem: 0 }]);
   expect(b.net).toEqual({ iface: "eth0", rx: 1000, tx: 500 });
   fs.files["/proc/stat"] = stat([60, 0, 0, 140, 0, 0, 0, 0], [[60, 0, 0, 140, 0, 0, 0, 0]]);
   expect(s.sample().cpu.history).toEqual([60, 0]); // ring of 2
 });
 
-test("without /proc the sampler falls back to os and leaves net, procs and top out", () => {
+test("without /proc the sampler falls back to os and leaves net and procs out", () => {
   const s = createMachineSampler({ linux: false, sys: { cpus: () => [{ busy: 10, total: 20 }, { busy: 0, total: 20 }], totalmem: () => 100, freemem: () => 25, type: () => "Darwin", release: () => "25.0" } });
   const m = s.sample();
   expect(m.cpu.cores).toEqual([50, 0]);
   expect(m.mem).toEqual({ used: 75, total: 100 });
   expect(m.os).toBe("Darwin 25.0");
-  expect([m.net, m.procs, m.top, m.swap]).toEqual([undefined, undefined, undefined, undefined]);
+  expect([m.net, m.procs, m.swap]).toEqual([undefined, undefined, undefined]);
 });
 
-test("the resident size of a process is in pages (4 KiB) and reaches the top list; the run queue comes from /proc/stat", () => {
-  expect(parsePidStat(pid("httpd", 1, 1, 100))).toMatchObject({ rss: 100 * 4096 });
-  const prev = new Map([["1", 0]]);
-  expect(topProcs(prev, new Map([["1", { name: "httpd", ticks: 10, rss: 55 * 1024 * 1024 }]]), 100, 3)).toEqual([{ name: "httpd", pct: 10, mem: 55 * 1024 * 1024 }]);
+test("the run queue comes from /proc/stat", () => {
   expect(parseRunning("cpu  1 2 3\nprocs_running 3\nprocs_blocked 0\n")).toBe(3);
   expect(parseRunning("cpu  1 2 3\n")).toBeUndefined();
 });

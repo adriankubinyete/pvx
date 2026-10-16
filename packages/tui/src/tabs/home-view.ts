@@ -4,7 +4,6 @@ import { fixedNumber, fixedRate } from "../fixed.ts";
 import type { Glyphs } from "../theme.ts";
 
 const GIB = 2 ** 30;
-const MIB = 2 ** 20;
 const BIG_TOTAL_GIB = 10;
 /** Cells of one load average (`1,8`, `12,3`, `4,00`). */
 const LOAD_W = 4;
@@ -58,24 +57,6 @@ export function processesText(procs: number, running: number | undefined): strin
   const total = fixedNumber(procs, { width: 4 });
   if (running === undefined) return total;
   return `${total} · ${fixedNumber(running, { width: 3 })} rodando`;
-}
-
-/** `55 MB`, `1,2 GB`, in a fixed 7 cells. */
-export function memoryText(bytes: number): string {
-  const text = bytes >= GIB ? `${decimalComma((bytes / GIB).toFixed(1))} GB` : `${Math.round(bytes / MIB)} MB`;
-  return text.padStart(7);
-}
-
-const TOP_NAME_W = 10;
-const TOP_SHOWN = 3;
-
-/** The heaviest processes, one line each: the name, the cpu share and the resident memory, in fixed widths. */
-export function heaviestLines(top: MachineSnap["top"]): string[] {
-  return (top ?? []).slice(0, TOP_SHOWN).map((proc) => {
-    const name = [...proc.name].slice(0, TOP_NAME_W).join("").padEnd(TOP_NAME_W);
-    const share = `${decimalComma(fixedNumber(proc.pct, { width: 4, decimals: 1 }))}%`;
-    return `${name} ${share}${proc.mem === undefined ? "" : ` ${memoryText(proc.mem)}`}`;
-  });
 }
 
 /** Cells of a label before a bar (`mem`, `swp`, `dsk` and the index of a core up to 999). */
