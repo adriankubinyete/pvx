@@ -265,7 +265,7 @@ Regra: prefira um componente do framework a desenhar o seu. Um módulo que preci
 | `Notice` | aviso que fica na tela ("precisa aplicar") | bloco em linha `[✓]`/`[!]`/`[✗]`/`[i]` na cor do nível (`[i]` é azul); `action` põe um botão no fim da linha; só tokens do tema |
 | `Card`, `CardGrid` | blocos que representam coisas (módulos, hosts, serviços) | seção 20 |
 | `ConfirmPreview` | mostrar numa folha ou ajuda como é a pergunta | o diálogo da seção 18 desenhado no lugar, sem fundo escurecido nem teclas |
-| `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `FilterChips`, `Row fit` | leitura de estado e valores | seção 19 |
+| `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `FilterChips`, `Row fit`, `Row right`, `Crumb` | leitura de estado e valores | seção 19 |
 | `Loading`, `useAsync` | toda espera visível | spinner e texto |
 | `useCopy` | "copiar" um comando ou texto | copia, mostra um painel com exatamente o que foi copiado (borda apagada) e `✓ copiado`; sem clipboard, diz a causa |
 
@@ -303,7 +303,7 @@ A barra de abas diz onde o técnico está. A página não repete o nome numa mol
 
 - Uma página mostrada como aba não desenha moldura nem título: o conteúdo começa logo abaixo da barra.
 - Uma página empilhada (aberta por `#página`, `push` ou pela palette) não tem aba própria: mostra uma linha apagada de migalhas, sem caixa.
-- Uma tela de várias etapas dentro da aba (formulário, resultado) usa a mesma linha de migalhas.
+- Uma tela de várias etapas dentro da aba (formulário, resultado) usa a mesma linha de migalhas. O módulo a desenha com `Crumb parts={["Aba", "sub-tela"]}`, primeira linha da tela; o host só a desenha nas páginas empilhadas.
 
 ```text
   Início  Módulos  Issabel  Logs  Comando  Sistema          ← a aba já nomeia a página
@@ -386,9 +386,9 @@ Toda confirmação (comando destrutivo, `remover` de um formulário, uma ação 
 - Título em negrito numa linha só; descrição apagada, de uma ou mais linhas, opcional.
 - Tudo centralizado dentro da caixa (título, linhas da descrição e a linha de botões), cada bloco separado do seguinte por uma linha `─` apagada.
 - Sem linha de dicas de teclas dentro do diálogo: as teclas são óbvias.
-- Dois botões, com rótulo próprio quando ajuda: `[ remover IP ]  [ manter ]`, `[ aplicar sem failsafe ]  [ voltar ]`. Padrão: `[ confirmar ]  [ cancelar ]`.
-- Ação destrutiva: o botão de confirmar usa o token `error`.
-- O foco começa na opção segura (a de cancelar). `←` `→` e `Tab` andam entre os botões, `enter` ativa, `esc` cancela, os dois botões são clicáveis.
+- Dois botões, com rótulo próprio quando ajuda: `[ manter ]  [ remover IP ]`, `[ voltar ]  [ aplicar sem failsafe ]`. Padrão: `[ cancelar ]  [ confirmar ]`. A opção segura vem primeiro (à esquerda); a que age, depois.
+- Ação destrutiva: o botão de confirmar usa o token `error` e a borda do diálogo usa `warn`. Sem ação destrutiva a borda é `accent`.
+- O foco começa na opção segura (a primeira). `←` `→` e `Tab` andam entre os botões, `enter` ativa, `esc` cancela, os dois botões são clicáveis.
 - Uma borda só (o diálogo flutua). O fundo e o diálogo são irmãos, porque `opacity` vale para a subárvore.
 - `ConfirmPreview` desenha o mesmo diálogo no lugar, em modo "prévia": só a caixa, sem fundo escurecido, sem tecla e sem resposta. É para folha de referência e ajuda; o diálogo de verdade continua sendo `useConfirm`, aberto por um botão com tecla.
 - No módulo: `useConfirm()({ title, description?, confirmLabel?, cancelLabel?, destructive? })` devolve `Promise<boolean>`. A CLI mantém o prompt de texto.
@@ -400,7 +400,7 @@ Toda confirmação (comando destrutivo, `remover` de um formulário, uma ação 
  ░░░░░░░░░░░░░│────────────────────────────────────│░░░░░░░░░░░░░░░░░░
  ░░░░░░░░░░░░░│   A regra deixa de valer agora.    │░░░░░░░░░░░░░░░░░░
  ░░░░░░░░░░░░░│────────────────────────────────────│░░░░░░░░░░░░░░░░░░
- ░░░░░░░░░░░░░│    [ remover IP ]  [ manter ]      │░░░░░░░░░░░░░░░░░░
+ ░░░░░░░░░░░░░│    [ manter ]  [ remover IP ]      │░░░░░░░░░░░░░░░░░░
  ░░░░░░░░░░░░░╰────────────────────────────────────╯░░░░░░░░░░░░░░░░░░
 ```
 

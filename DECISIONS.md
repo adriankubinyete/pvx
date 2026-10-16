@@ -118,9 +118,12 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `sdk.cron` (`validate`, `describe`, `normalize`), `sdk.crontab.block(id)` (leitura com "no crontab for", fusão do bloco marcado, escrita conferida e volta) e `sdk.validate.firstProblem` → [SDK: sdk.cron, sdk.crontab e sdk.validate](#2026-10-14--sdk-sdk-cron-sdk-crontab-e-sdk-validate)
 - `sdk.ui.RunPanel` (barra e palavra do estado, `Steps`, falha com comando, código, saída, causa e `continuar daqui`, `children` do módulo, log, `x` para, `c` copia o erro) desenhado a partir do `run` do `useRun` → [RunPanel: a tela de uma execução em fases no framework](#2026-10-14--runpanel-a-tela-de-uma-execução-em-fases-no-framework)
 - Formulário padrão em `Fields` e `Form` (título e descrição, `*` vermelho, célula de valor com fundo e largura fixa, uma linha entre campos com rolagem, dica à direita só quando ajuda, erro `✗` abaixo do valor, primário cheio, `label`/`required`/`help`/`derive`, sem linha de comando, `ctrl+d` mostra) → [Sem caixa dentro de caixa](#2026-10-15--sem-caixa-dentro-de-caixa-aba-nomeia-a-página-no-máximo-uma-borda-formulário-padrão-e-diálogo-de-confirmação)
-- Confirmação em diálogo centralizado (`useConfirm`, `ConfirmOptions`; título, descrição, dois botões, foco na opção segura, destrutivo no tom de erro, uma borda), usada pelo comando `destructive`, por ações do host e pelo `onDelete` de `Fields` → [Sem caixa dentro de caixa](#2026-10-15--sem-caixa-dentro-de-caixa-aba-nomeia-a-página-no-máximo-uma-borda-formulário-padrão-e-diálogo-de-confirmação)
+- Confirmação em diálogo centralizado (`useConfirm`, `ConfirmOptions`; título, descrição, dois botões, foco na opção segura, destrutivo no tom de erro, uma borda; a opção segura à esquerda e a borda no token `warn` quando destrutivo, ver [Confirmação: opção segura primeiro e borda warn](#2026-10-16--confirmação-opção-segura-primeiro-e-borda-warn)), usada pelo comando `destructive`, por ações do host e pelo `onDelete` de `Fields` → [Sem caixa dentro de caixa](#2026-10-15--sem-caixa-dentro-de-caixa-aba-nomeia-a-página-no-máximo-uma-borda-formulário-padrão-e-diálogo-de-confirmação)
 - Primitivos de leitura no `sdk.ui`: `Badge`, `Details`, `Meter` (barra fina `━━━━────`, aviso acima de 80%), `Spark`, `CopyBlock`, `Scroll`, `Chip state`, `Row fit`, `Notice action`, `Button danger`/`disabled`, tom `ip`; campo `radio`, `buttons` e `row` (`FieldSpec.style`, `ArgSpec.style`), `FieldSpec.error` e `Fields.initialFocus`; a grade de cartões não é primitivo do SDK → [Primitivos de leitura (etapa 1 do redesenho)](#2026-10-15--primitivos-de-leitura-etapa-1-do-redesenho)
 - `Card`, `CardGrid` (grade de 3, 2 ou 1 colunas; a aba Módulos usa a mesma peça) e `ConfirmPreview` (o diálogo de confirmação no lugar) em `sdk.ui`; `Button help` e `NoticeAction.help`; `renderTab` e `expectNoKeyboardTrap` em `@pvx/testing` → [Nenhuma página prende o teclado, cards, sucesso e largura fixa](#2026-10-15--nenhuma-página-prende-o-teclado-cards-sucesso-e-largura-fixa)
+- `Crumb` em `sdk.ui` para a tela que abre dentro de uma aba (o host não a desenha sozinho), `Row right` para o canto direito de uma linha e célula de `List` em partes com tom → [Migalhas, `Row right` e célula em partes: lacunas achadas no Firewall](#2026-10-16--migalhas-row-right-e-célula-em-partes-lacunas-achadas-no-firewall)
+- `useQuery` guarda os dados anteriores enquanto a leitura com argumentos novos roda → [`useQuery` mantém os dados ao trocar os argumentos](#2026-10-16--usequery-mantém-os-dados-ao-trocar-os-argumentos)
+- A aba do Firewall usa os primitivos novos (status em `Badge` e `Details`, marcas de mudança pelo `lastApply.lists`, confirmação e formulários do framework) → [Firewall: etapa 3, a aba nos primitivos novos](#2026-10-16--firewall-etapa-3-a-aba-nos-primitivos-novos)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1515,3 +1518,51 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** 12 núcleos viravam 2 colunas de 6, alto demais; o htop do dono mostra 4 colunas de 3.
 
 **Limite:** metade direita menor que 36 células (terminal estreito) manda os fatos para baixo das barras.
+
+## 2026-10-16 — Migalhas, `Row right` e célula em partes: lacunas achadas no Firewall
+
+**Status:** vigente.
+
+**Decisão:** três peças genéricas entram no `sdk.ui`.
+
+- `Crumb({ parts })` desenha a linha apagada `Aba › sub-tela` (UI.md, seção 14). O módulo a põe no topo da tela que abre dentro da aba (formulário, revisão). O host não a desenha sozinho: a sub-tela é estado do componente do módulo, e o host só enxerga páginas empilhadas (que já ganham a linha dele).
+- `Row` ganhou `right`: o nó fica na borda direita da linha, no tamanho próprio, uma célula afastado dos filhos (`ATIVO DESATUALIZADO · 1 regra nova … [ aplicar ]`). Funciona com e sem `fit`.
+- A célula de `List` em colunas pode ser um vetor de partes `{ text, tone? }` (`ListCellPart`). As partes se juntam num só texto para largura, corte com `…` e marquee; cada parte mantém o tom, e a que não tem tom usa o da linha. A célula em texto e em `{ text, tone }` segue igual.
+
+**Motivo:** o módulo Firewall precisava dos três e os reproduzia com contas de colunas à mão.
+
+**Limite:** `Crumb` não é automático; uma sub-tela sem `Crumb` continua sem migalhas. A reticência de um corte não carrega o tom da parte cortada.
+
+## 2026-10-16 — `useQuery` mantém os dados ao trocar os argumentos
+
+**Status:** vigente.
+
+**Decisão:** o código estava errado, não a documentação: ao mudar o nome ou os argumentos, `useQuery` zerava `data` para `undefined` até a nova leitura chegar, e o README dizia que os dados antigos ficam. Agora a primeira leitura de uns argumentos novos mantém `data` e marca `loading: true`. Um erro dessa leitura ainda descarta os dados (eram de outros argumentos).
+
+**Motivo:** a tela piscava vazia a cada troca de filtro ou de seleção.
+
+**Limite:** o módulo que mostra dados por argumento deve olhar `loading` se não quiser exibir, por um instante, os dados dos argumentos anteriores. Teste: `kit-features.test.tsx`.
+
+## 2026-10-16 — Confirmação: opção segura primeiro e borda warn
+
+**Status:** vigente. Substitui, em parte, a ordem dos botões e o tom da borda de 2026-10-15 — Sem caixa dentro de caixa (diálogo de confirmação).
+
+**Decisão:** alinhado ao mockup `Confirmar` do dono.
+
+- Os botões ficam `[ cancelar ]  [ confirmar ]`: a opção segura à esquerda, a que age à direita. Vale para `useConfirm`, `ConfirmPreview`, o `remover` de um formulário e o comando `destructive`. A ordem de `ChoiceModal` (as opções como vêm) não mudou.
+- O foco continua começando na opção segura, que agora é a primeira. `←` `→` e `tab` seguem circulando.
+- Um diálogo `destructive` usa a borda no token `warn` (antes `error`) e o botão de confirmar no `error`. Sem `destructive`, a borda é `accent`.
+
+**Motivo:** o mockup põe a saída segura primeiro; a borda em `error` gritava mais do que um pedido de confirmação merece, e o `error` fica para o botão.
+
+**Limite:** o título não ganha o `!` do mockup; o diálogo não tem ícone.
+
+## 2026-10-16 — Firewall: etapa 3, a aba nos primitivos novos
+
+**Status:** vigente.
+
+**Decisão:** a aba do módulo Firewall (repositório próprio) passa a usar `Badge`, `Details`, `Row right`, `Crumb`, `List` com células em partes (o CIDR com o endereço no token `ip` e o `/8` no tom padrão), `Fields` e a confirmação do framework. O módulo grava, no registro `lastApply`, o campo `lists`: a fotografia das listas que a última aplicação carregou (`AppliedLists`). A tela compara as listas atuais com ela e marca cada linha (nova, removida, alterada) sem consultar o engine. Um registro antigo, sem `lists`, não marca nenhuma linha.
+
+**Motivo:** a tela deixa de refazer o layout à mão e mostra o que mudou desde a última aplicação, que é o que o técnico quer saber antes de aplicar.
+
+**Limite:** as marcas valem só até a próxima aplicação; o que o engine tem de fato continua sendo a prova do módulo, não a fotografia.
