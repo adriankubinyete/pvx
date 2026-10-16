@@ -1,4 +1,4 @@
-import type { ListColumn } from "@pvx/sdk";
+import type { ListCellPart, ListColumn } from "@pvx/sdk";
 
 /** Marquee timing; a test may shrink it. */
 export const marquee = { pauseMs: 1200, stepMs: 120 };
@@ -51,10 +51,30 @@ export function marqueeOffset(tick: number, over: number, pause: number): number
   return over - (phase - (2 * pause + over)) - 1;
 }
 
+/** Characters fitted to `width`: padded with `blank`, or cut with `ellipsis`, or (offset > 0) a window of them. */
+function fitChars<T>(chars: T[], blank: T, ellipsis: T, width: number, align: "left" | "right", offset: number): T[] {
+  if (chars.length <= width) {
+    const pad = Array.from({ length: width - chars.length }, () => blank);
+    return align === "right" ? [...pad, ...chars] : [...chars, ...pad];
+  }
+  if (offset > 0) return chars.slice(offset, offset + width);
+  return width <= 1 ? [ellipsis].slice(0, width) : [...chars.slice(0, width - 1), ellipsis];
+}
+
 /** Text fitted to `width`: padded, or cut with `…`, or (offset > 0) a window of the text. */
 export function fit(text: string, width: number, align: "left" | "right" = "left", offset = 0): string {
-  const chars = [...text];
-  if (chars.length <= width) { const pad = " ".repeat(width - chars.length); return align === "right" ? pad + text : text + pad; }
-  if (offset > 0) return chars.slice(offset, offset + width).join("");
-  return width <= 1 ? "…".slice(0, width) : `${chars.slice(0, width - 1).join("")}…`;
+  return fitChars([...text], " ", "…", width, align, offset).join("");
+}
+
+/** `fit` for a cell made of toned parts: the same padding, cut and window, and the pieces that stay keep their tones (merged when neighbors share one). */
+export function fitParts(parts: ListCellPart[], width: number, align: "left" | "right" = "left", offset = 0): ListCellPart[] {
+  const chars = parts.flatMap((part) => [...part.text].map((char) => ({ char, tone: part.tone })));
+  const fitted = fitChars(chars, { char: " ", tone: undefined }, { char: "…", tone: undefined }, width, align, offset);
+  const spans: ListCellPart[] = [];
+  for (const { char, tone } of fitted) {
+    const last = spans.at(-1);
+    if (last && last.tone === tone) last.text += char;
+    else spans.push({ text: char, tone });
+  }
+  return spans;
 }

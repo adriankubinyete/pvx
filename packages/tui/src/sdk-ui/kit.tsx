@@ -1,10 +1,10 @@
 import { Children, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useKeyboard } from "@opentui/react";
 import type { ScrollBoxRenderable } from "@opentui/core";
-import type { Component, ListItem, SdkUi, Tone } from "@pvx/sdk";
+import type { Component, ListCell, ListCellPart, ListItem, SdkUi, Tone } from "@pvx/sdk";
 import { followProps } from "../follow.ts";
 import { clean } from "../palette/search.ts";
-import { columnWidths, fit, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
+import { columnWidths, fit, fitParts, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
 import { useTheme } from "../theme-context.tsx";
 import { toneColor as tone } from "./tones.ts";
 import { Button } from "./button.tsx";
@@ -85,13 +85,27 @@ export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, 
 /** A left border whose only drawn side is the vertical one; the other characters never show. */
 const GUTTER_CHARS = { topLeft: " ", topRight: " ", bottomLeft: " ", bottomRight: " ", horizontal: " ", vertical: " ", topT: " ", bottomT: " ", leftT: " ", rightT: " ", cross: " " };
 
-/** Children side by side. By default equal shares of the width; with `fit` each keeps its own width, `gap` cells apart, and the ones that do not fit go to the next line (a row of buttons, a line made of styled pieces). */
-export function Row({ fit, gap = 0, children }: Props<"Row">) {
-  const pieces = Children.toArray(children as ReactNode);
-  if (fit) return <box flexDirection="row" flexWrap="wrap" flexShrink={0} columnGap={gap}>{pieces.map((piece, i) => <box key={i} flexShrink={0}>{piece}</box>)}</box>;
+/** The children of a `Row`: equal shares of the width, or (`fit`) each at its own width, wrapping. */
+function RowBody({ fit, gap, pieces }: { fit?: boolean; gap: number; pieces: ReactNode[] }) {
+  if (fit) return <box flexDirection="row" flexWrap="wrap" flexGrow={1} flexShrink={1} columnGap={gap}>{pieces.map((piece, i) => <box key={i} flexShrink={0}>{piece}</box>)}</box>;
+  return (
+    <box flexDirection="row" flexGrow={1} flexShrink={0}>
+      {pieces.map((ch, i) => <box key={i} flexGrow={1} flexBasis={0} flexDirection="column">{ch}</box>)}
+    </box>
+  );
+}
+
+/**
+ * Children side by side. By default equal shares of the width; with `fit` each keeps its own width, `gap` cells apart, and the ones that do not fit go to the next line (a row of buttons, a line made of styled pieces).
+ * `right` sits at the right edge of the row, at its own width (a button or a value at the end of a section line).
+ */
+export function Row({ fit, gap = 0, right, children }: Props<"Row">) {
+  const body = <RowBody fit={fit} gap={gap} pieces={Children.toArray(children as ReactNode)} />;
+  if (right === undefined) return <box flexDirection="row" flexShrink={0}>{body}</box>;
   return (
     <box flexDirection="row" flexShrink={0}>
-      {pieces.map((ch, i) => <box key={i} flexGrow={1} flexBasis={0} flexDirection="column">{ch}</box>)}
+      {body}
+      <box flexShrink={0} paddingLeft={1}>{right as ReactNode}</box>
     </box>
   );
 }
@@ -170,6 +184,30 @@ function ActionKey({ label, selected, onAction }: { label: string; selected: str
 /** Cells of the marker column of a row: the glyph and a space. The selected `»`, the hover `›` and the blank of the other rows all take exactly this, so the columns never move. */
 const CURSOR_WIDTH = 2;
 
+interface CellView { text: string; tone?: Tone; parts?: ListCellPart[] }
+
+/** The text, the one tone, or the toned parts of a cell, with the module text cleaned. */
+function cellOf(value: ListCell | undefined): CellView {
+  if (value === undefined) return { text: "" };
+  if (typeof value === "string") return { text: clean(value) };
+  if (Array.isArray(value)) {
+    const parts = value.map((part) => ({ text: clean(part.text), tone: part.tone }));
+    return { text: parts.map((part) => part.text).join(""), parts };
+  }
+  return { text: clean(value.text), tone: value.tone };
+}
+
+/** The spans of a toned cell; a part without a tone takes the tone of the row. */
+function CellParts({ parts, rowTone, gap }: { parts: ListCellPart[]; rowTone: Tone | undefined; gap: string }) {
+  const { c } = useTheme();
+  return (
+    <>
+      {parts.map((part, index) => <span key={index} fg={tone(c, part.tone ?? rowTone)}>{part.text}</span>)}
+      <span fg={tone(c, rowTone)}>{gap}</span>
+    </>
+  );
+}
+
 export function List({ items, selected, columns, onPress, onHover, maxRows, onAction, actionLabel = DEFAULT_ACTION_LABEL, actionOnClick = true }: Props<"List">) {
   const { c, g } = useTheme();
   const [over0, setOver] = useState<string | undefined>(undefined); // the row under the mouse
@@ -181,10 +219,7 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
   const [tick, setTick] = useState({ id: selected, n: 0 });
   const windowAt = useRef(0);
   const inPage = useContext(HostCtx) !== null;
-  const cell = (it: Props<"List">["items"][number], id: string) => {
-    const v = it.cells?.[id];
-    return { text: clean(typeof v === "string" ? v : v?.text ?? ""), tone: typeof v === "object" ? v.tone : undefined };
-  };
+  const cell = (it: Props<"List">["items"][number], id: string) => cellOf(it.cells?.[id]);
   const lead = CURSOR_WIDTH + (marks ? markWidth + 1 : 0);
   const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, width - lead)) : [];
   const sel = cols ? items.find((it) => it.id === selected) : undefined;
@@ -225,8 +260,10 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
             {marks ? <span fg={it.mark ? tone(c, it.mark.tone) : c.dim}>{`${(it.mark ? clean(it.mark.text) : "").padEnd(markWidth)} `}</span> : null}
             {cols ? cols.map((col, i) => {
               const v = cell(it, col.id);
-              const text = fit(v.text, widths[i]!, col.align, it.id === selected ? marqueeOffset(n, over[i]!, pause) : 0);
-              return <span key={col.id} fg={tone(c, v.tone ?? it.tone)}>{i < cols.length - 1 ? text + " ".repeat(GAP) : text}</span>;
+              const offset = it.id === selected ? marqueeOffset(n, over[i]!, pause) : 0;
+              const gap = i < cols.length - 1 ? " ".repeat(GAP) : "";
+              if (v.parts) return <CellParts key={col.id} parts={fitParts(v.parts, widths[i]!, col.align, offset)} rowTone={it.tone} gap={gap} />;
+              return <span key={col.id} fg={tone(c, v.tone ?? it.tone)}>{fit(v.text, widths[i]!, col.align, offset) + gap}</span>;
             }) : (
               <>
                 <span fg={tone(c, it.tone)}>{clean(it.label ?? "")}</span>

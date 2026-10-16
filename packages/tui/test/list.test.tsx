@@ -149,3 +149,19 @@ test("mouse: hover tints the row under the pointer (not the selected one) and re
   await t.click(10, y("179.199"));
   expect(pressed).toEqual(["b"]);
 });
+
+test("a cell made of toned parts keeps each tone, aligns like a string and cuts like one", async () => {
+  const cols: ListColumn[] = [{ id: "ip", width: 14 }, { id: "n", width: 6 }];
+  const rows: ListItem[] = [
+    { id: "a", cells: { ip: [{ text: "10.0.0.0", tone: "ip" }, { text: "/8" }], n: "x" } },
+    { id: "b", cells: { ip: [{ text: "172.16.0.0", tone: "ip" }, { text: "/12000" }], n: "y" } },
+  ];
+  const t = await mount(40, <Harness rows={rows} cols={cols} start={null} />);
+  expect(rowOf(t, "10.0.0.0/8")).toContain("x");
+  expect(rowOf(t, "x").indexOf("x")).toBe(rowOf(t, "y").indexOf("y")); // same column as the cut one
+  expect(rowOf(t, "172.16.0.0")).toContain("…");
+  const spans = t.spans().lines.find((line) => line.spans.some((span) => span.text.includes("10.0.0.0")))!.spans;
+  const address = spans.find((span) => span.text.includes("10.0.0.0"))!;
+  const prefix = spans.find((span) => span.text.startsWith("/8"))!;
+  expect(address.fg.equals(prefix.fg)).toBe(false); // the address has the ip token, the prefix the default tone
+});

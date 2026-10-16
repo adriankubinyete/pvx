@@ -789,8 +789,10 @@ export interface Conformity {
 
 /** A column of `List`: `width` is fixed (never shrinks), `grow` takes a share of what is left, neither sizes to the content. */
 export interface ListColumn { id: string; title?: string; width?: number; grow?: number; align?: "left" | "right" }
-/** A cell of a column-mode `List` item. */
-export type ListCell = string | { text: string; tone?: Tone };
+/** One piece of a cell made of several tones (`10.0.0.0` in `ip`, `/8` in the default tone). */
+export interface ListCellPart { text: string; tone?: Tone }
+/** A cell of a column-mode `List` item: a string, one toned text, or an array of toned parts (they join into one text for width and marquee). */
+export type ListCell = string | ListCellPart | ListCellPart[];
 export interface ListItem {
   id: string;
   /** One-string row (no columns). */
@@ -940,8 +942,12 @@ export interface SdkUi {
   /**
    * Children side by side, equal widths (give each Panel `grow` so they match in height). With `fit` each child keeps its own width, `gap` cells (default 0) separate them, and the ones that do not fit go to the next line:
    * a row of buttons, or a line made of styled pieces (`<Row fit><Text tone="accent" bold>lor</Text><Text>em</Text></Row>`).
+   * `right` is drawn at the right edge of the row, at its own width, one cell clear of the children: a button or a value at the end of a section line
+   * (`<Row fit gap={1} right={<Button label="aplicar" keys="a" onPress={apply} />}>…</Row>`).
    */
-  Row: Component<Kids & { fit?: boolean; gap?: number }>;
+  Row: Component<Kids & { fit?: boolean; gap?: number; right?: unknown }>;
+  /** The dim breadcrumb line of a screen that opens inside a tab page (a form, a review): `<Crumb parts={["Rotinas", "nova rotina"]} />` draws `Rotinas › nova rotina`. Put it first in the screen; no box. */
+  Crumb: Component<{ parts: string[] }>;
   Text: Component<Kids & { tone?: Tone; bold?: boolean }>;
   /**
    * `● label` with the dot in the level's color. With `state` it is a filter chip instead: ` label ` filled with the accent when `on`, on the panel fill when `off`;

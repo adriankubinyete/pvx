@@ -14,6 +14,8 @@ import { HostCtx, type HostPage } from "../src/sdk-ui/host.tsx";
 import { CopyBlock, CopyProvider } from "../src/sdk-ui/copy.tsx";
 import { barVersion } from "../src/tabs/bar.ts";
 import { copyText, detailColumnCount, detailColumns, meterBar, meterTone, percentText, sparkText } from "../src/sdk-ui/display.ts";
+import { Row } from "../src/sdk-ui/kit.tsx";
+import { Crumb } from "../src/menu/Crumb.tsx";
 import { buttonLook } from "../src/sdk-ui/button.tsx";
 
 const MODULE = join(import.meta.dir, "../../core/test/fixtures/jobmodules/primitives-demo");
@@ -419,4 +421,21 @@ test("scrollback: the time sits inline before the command and the result lines s
   const result = rowsOf(h).find((row) => row.includes("[✓] oi ana"))!;
   expect(result.indexOf("[✓]")).toBe(2); // the page padding and the block padding: the column of the time
   expect(result.indexOf("[✓]")).toBe(header.search(/\d/));
+});
+
+test("Row `right` sits at the right edge of the row; Crumb draws the dim breadcrumb", async () => {
+  const RowView = Row as (props: Parameters<typeof Row>[0]) => ReactNode;
+  const CrumbView = Crumb as (props: Parameters<typeof Crumb>[0]) => ReactNode;
+  h = await renderTui(
+    <ThemeProvider>
+      <CrumbView parts={["Firewall", "nova regra"]} />
+      <RowView fit gap={1} right={<text>{"[ aplicar ]"}</text>}><text>{"ATIVO"}</text><text>{"1 regra nova"}</text></RowView>
+    </ThemeProvider>,
+    { cols: 40, rows: 4 },
+  );
+  expect(h.frame()).toContain("Firewall › nova regra");
+  const row = h.frame().split("\n").find((line) => line.includes("ATIVO"))!;
+  expect(row).toContain("ATIVO 1 regra nova");
+  expect(row.trimEnd().endsWith("[ aplicar ]")).toBe(true);
+  expect(row.trimEnd().length).toBe(40);
 });

@@ -11,6 +11,7 @@ import { CopyBlock, useCopy } from "./copy.tsx";
 import { RunPanel } from "./run-panel.tsx";
 import { CommandResult } from "./command-result.tsx";
 import { Card, SdkCardGrid } from "./card.tsx";
+import { Crumb } from "../menu/Crumb.tsx";
 import { ConfirmPreview } from "../session/ConfirmDialog.tsx";
 
 /** `sdk.ui`: the one React copy of the process, handed to modules so they never import it. */
@@ -18,7 +19,7 @@ export const ui: SdkUi = {
   h: createElement as unknown as SdkUi["h"],
   Fragment,
   useState, useEffect, useMemo, useRef,
-  Panel, Row, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
+  Panel, Row, Crumb, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
   Conversation, Button, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel, CommandResult, Card, CardGrid: SdkCardGrid, ConfirmPreview,
   ...hooks,
 };
