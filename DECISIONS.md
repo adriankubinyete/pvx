@@ -127,6 +127,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `Fields` reativo: `FieldSpec.when` (campo condicional: sai do foco, do envio e da validação; a coluna dos rótulos conta os ocultos), `onChange(values)`, `summary(values)` (linha apagada sempre visível acima dos botões), o `detail` da opção escolhida sob um `choice` em `radio` ou `buttons`, `extraActions` (botões de envio depois do primário, validam e ocupam como ele) e `FieldSpec.width` (`short`, `normal`, `long`: a célula cresce com o formulário, 40% e 60% da largura, mínimo 30; valor longo sem edição mostra o começo e `…`) → [Fields reativo, botões extras e células largas](#2026-10-16--fields-reativo-botões-extras-e-células-largas)
 - `sdk.ui.ButtonRow` (uma fileira de botões é uma parada da seção; `←` `→` e `enter` com `focused`), `aside` do `Panel` no SDK, `useJobLog()` (abre `jobs log <módulo> <nome>` na aba Comando) e a ordem segura-primeiro nos comentários do SDK → [ButtonRow, Panel aside e useJobLog](#2026-10-16--buttonrow-panel-aside-e-usejoblog)
 - `sdk.cron.next(expressão, de?)`: a próxima execução em horário local, que pula o horário que o relógio salta e roda uma vez o que ele repete → [sdk.cron.next](#2026-10-16--sdkcronnext)
+- O `exec` de uma sonda (`ReadCtx.exec`) vai para o log do módulo em `debug`: a aba Logs a esconde em `info+` e a mostra em `debug+` → [exec das sondas no nível debug](#2026-10-16--exec-das-sondas-no-nível-debug)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
 
@@ -1634,3 +1635,15 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** nada que o usuário olha deve se mexer quando ele só move a seleção.
 
 **Limite:** só 3 argumentos aparecem ao mesmo tempo; em 80x24 a lista mostra 6 linhas. Teste: `palette.test.tsx` (bordas idênticas em 80x24 e 120x40).
+
+## 2026-10-16 — exec das sondas no nível debug
+
+**Status:** vigente.
+
+**Contexto:** cada sonda (`prove`, consulta, widget) escrevia `exec nft --version` e parecidos em `info` no log do módulo, e a aba Logs (`info+`) se enchia dessas linhas.
+
+**Decisão:** `ReadCtx.exec` registra a chamada em `debug`. Em `info+` ela não aparece; com o chip de nível em `debug+` aparece. A negação por permissão continua no log do módulo e no `core.log` como antes.
+
+**Motivo:** o técnico lê a aba Logs para achar o que aconteceu, não cada programa que uma leitura chamou.
+
+**Limite:** o `exec` de um comando (`CommandCtx`) nunca foi registrado e segue assim; uma falha de programa chega ao técnico pelo resultado do comando. Teste: `permissions.test.ts`.

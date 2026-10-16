@@ -549,7 +549,7 @@ Em um comando, `ctx.exec`, `ctx.net` e `ctx.fs` só aceitam o que o manifest lis
 | --- | --- |
 | `store` | Só `get`: não existe `set` nem `delete`. |
 | `fs` | Só as leituras (`read`, `exists`, `list`, `entries`, `stat`, `du`, `free`): não existem `write`, `append`, `mkdir` nem `remove`. Mesmas regras de caminho de `ctx.fs`. |
-| `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo. |
+| `exec` | A mesma lista de `permissions.exec`, o mesmo limite de tempo (30 s) e cada chamada vai para o log do módulo no nível `debug`: a aba Logs a esconde em `info+` e a mostra em `debug+`. |
 | `jobs` | Só `status`, `list` e `log` (veja Jobs em segundo plano). |
 | `shell` | Só `run` e `ok`, sobre o `exec` acima (mesma lista, mesmo log): uma sonda relata, não lança, então não existe `must`. Veja `ctx.shell`. |
 | `strategy` | O mesmo `pick` de `sdk.strategy`. |

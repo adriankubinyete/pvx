@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CommandCtx, Manifest } from "@pvx/sdk";
-import { createLogger, createReadCtx, createRegistry, execute, logsDir, moduleStateDir } from "../../src/index.ts";
+import { createLogger, parseLogEntry, createReadCtx, createRegistry, execute, logsDir, moduleStateDir } from "../../src/index.ts";
 
 let root = "";
 let ro = "";
@@ -171,6 +171,13 @@ describe("read-only context (prove, queries, widgets)", () => {
     const { registry } = await mk();
     expect(await registry.query("rc.peek")).toEqual({ k: "v", echo: "oi", file: "lido" });
     expect(logOf("rc")).toContain("exec echo oi");
+  });
+  test("the exec of a probe is logged at debug, so the Logs tab hides it at the default info+ level", async () => {
+    const { registry } = await mk();
+    await registry.query("rc.peek");
+    const exec = parseLogEntry(logOf("rc").trim().split("\n").find((line) => line.includes("exec echo oi"))!)!;
+    expect(exec.level).toBe("debug");
+    expect(exec.source).toBe("rc");
   });
   test("no store.set, fs.write, fs.append or fs.remove exist; exec outside the allowlist is denied", async () => {
     const { registry } = await mk();

@@ -199,7 +199,7 @@ export function createReadCtx(id: string, perms: Perms | undefined, makeLogger: 
   const log = makeLogger(id);
   const g = createGranted(id, perms, log, makeLogger("core"));
   const exec: ReadCtx["exec"] = (cmd, args, o) => {
-    log.info(`exec ${[cmd, ...(args ?? [])].join(" ")}`);
+    log.debug(`exec ${[cmd, ...(args ?? [])].join(" ")}`);
     return g.exec(cmd, args, o);
   };
   return {
