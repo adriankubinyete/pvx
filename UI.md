@@ -233,6 +233,7 @@ Exemplos no código:
 
 - Grade de cartões: 3 colunas a partir de 120 colunas de terminal, 2 a partir de 80, 1 abaixo.
 - Painéis lado a lado a partir de 100 colunas; abaixo disso, empilhados.
+- Seções lado a lado têm um respiro mínimo: `Row` deixa `SECTION_GAP_W` (3 células) entre os filhos, e a última coluna de uma `List` termina `LIST_RIGHT_MARGIN_W` (1 célula) antes da borda da seção, então o `…` nunca encosta no `▌` da vizinha.
 - Mínimo suportado: 80x24 (`MIN_COLS`, `MIN_ROWS`).
 - Nada é cortado pela moldura: conteúdo largo termina em `…` (seção 4).
 - Largura fixa pede `flexShrink={0}`; a linha principal de uma lista pede `minHeight={0}`.

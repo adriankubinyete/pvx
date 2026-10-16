@@ -976,7 +976,7 @@ export interface SdkUi {
    */
   Panel: Component<Kids & { title?: string; tone?: Tone; /** A dim note at the right end of the header line (`2 rotinas · próxima hoje 03:30`). Only with a `title`; one line, short: the title keeps its room. */ aside?: string; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
   /**
-   * Children side by side, equal widths (give each Panel `grow` so they match in height). With `fit` each child keeps its own width, `gap` cells (default 0) separate them, and the ones that do not fit go to the next line:
+   * Children side by side, equal widths, at least 3 cells apart (give each Panel `grow` so they match in height). With `fit` each child keeps its own width, `gap` cells (default 0) separate them, and the ones that do not fit go to the next line:
    * a row of buttons, or a line made of styled pieces (`<Row fit><Text tone="accent" bold>lor</Text><Text>em</Text></Row>`).
    * `right` is drawn at the right edge of the row, at its own width, one cell clear of the children: a button or a value at the end of a section line
    * (`<Row fit gap={1} right={<Button label="aplicar" keys="a" onPress={apply} />}>…</Row>`).

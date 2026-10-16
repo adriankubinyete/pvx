@@ -67,7 +67,7 @@ test("a cell that does not fit is cut with an ellipsis; fixed columns keep their
   const t = await mount(50, <Harness start={null} />);
   // 50 - 2 lead - 18 - 10 - 4 gaps = 16 cells for the grow column
   const row = rowOf(t, "179.199");
-  expect(row).toContain("MAGNUSBILLING P…");
+  expect(row).toContain("MAGNUSBILLING …");
   expect(row.indexOf("aceito")).toBe(lines(t)[0]!.indexOf("ESTADO"));
 });
 
@@ -82,7 +82,7 @@ test("right aligned cells end on the same column", async () => {
 test("marquee: the selected row's long cell scrolls and returns; other rows never move", async () => {
   const t = await mount(50, <Harness start="b" />);
   const start = rowOf(t, "179.199");
-  expect(start).toContain("MAGNUSBILLING P…");
+  expect(start).toContain("MAGNUSBILLING …");
   const untouched = [rowOf(t, "189.124"), rowOf(t, "192.168")];
   expect(await until(t, () => rowOf(t, "179.199") !== start)).toBe(true);
   expect(await until(t, () => rowOf(t, "179.199").includes("LONGO NOTA"))).toBe(true); // end visible, no ellipsis

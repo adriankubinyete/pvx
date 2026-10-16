@@ -83,11 +83,16 @@ export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, 
 /** A left border whose only drawn side is the vertical one; the other characters never show. */
 const GUTTER_CHARS = { topLeft: " ", topRight: " ", bottomLeft: " ", bottomRight: " ", horizontal: " ", vertical: " ", topT: " ", bottomT: " ", leftT: " ", rightT: " ", cross: " " };
 
+/** Least cells between sections side by side (the next section's `▌` gutter included in the room). */
+export const SECTION_GAP_W = 3;
+/** Cells a List keeps free at its right edge, so a cut `…` never touches the neighbor. */
+export const LIST_RIGHT_MARGIN_W = 1;
+
 /** The children of a `Row`: equal shares of the width, or (`fit`) each at its own width, wrapping. */
 function RowBody({ fit, gap, pieces }: { fit?: boolean; gap: number; pieces: ReactNode[] }) {
   if (fit) return <box flexDirection="row" flexWrap="wrap" flexGrow={1} flexShrink={1} columnGap={gap}>{pieces.map((piece, i) => <box key={i} flexShrink={0}>{piece}</box>)}</box>;
   return (
-    <box flexDirection="row" flexGrow={1} flexShrink={0}>
+    <box flexDirection="row" flexGrow={1} flexShrink={0} columnGap={Math.max(gap, SECTION_GAP_W)}>
       {pieces.map((ch, i) => <box key={i} flexGrow={1} flexBasis={0} flexDirection="column">{ch}</box>)}
     </box>
   );
@@ -219,7 +224,7 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
   const inPage = useContext(HostCtx) !== null;
   const cell = (it: Props<"List">["items"][number], id: string) => cellOf(it.cells?.[id]);
   const lead = CURSOR_WIDTH + (marks ? markWidth + 1 : 0);
-  const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, width - lead)) : [];
+  const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, width - lead - LIST_RIGHT_MARGIN_W)) : [];
   const sel = cols ? items.find((it) => it.id === selected) : undefined;
   const over = cols && sel ? cols.map((col, i) => overflow(cell(sel, col.id).text, widths[i]!)) : [];
   const moving = over.some((n) => n > 0);
