@@ -167,7 +167,8 @@ test("new log lines appear by themselves while live, and the tab stops reading w
   seed();
   const { t } = await mount({ cols: 120, rows: 40 });
   expect(t.frame()).not.toContain("linha nova do módulo");
-  write("firewall", "INFO", "linha nova do módulo", new Date());
+  // after every seeded line of today (the seed has fixed hours, so `new Date()` would sort before them in the morning)
+  write("firewall", "INFO", "linha nova do módulo", today(23, 59, 59));
   for (let i = 0; i < 30 && !t.frame().includes("linha nova do módulo"); i++) (await Bun.sleep(40), await t.flush());
   expect(t.frame()).toContain("linha nova do módulo");
   expect(rowOf(t, "linha nova do módulo")).toContain("»"); // live: the cursor is on the newest

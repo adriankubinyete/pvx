@@ -64,11 +64,12 @@ test("home.attention combines the profile's pending items with a module item; en
 test("refreshMs re-renders the home through the single scheduler", async () => {
   let n = 0;
   registry.register({ id: "tick", version: "1.0.0", entry: "x" }, {
-    widgets: { c: { slot: "home.chips", priority: 99, refreshMs: 20, data: () => [{ label: `tick${++n}`, level: "ok" as const }] } },
+    widgets: { c: { slot: "home.chips", priority: 99, refreshMs: 100, data: () => [{ label: `tick${++n}`, level: "ok" as const }] } },
   });
   const { t } = await mount({ cols: 120, rows: 40 });
   const seen = new Set<string>();
-  for (let i = 0; i < 8; i++) {
+  // refreshMs 100 leaves idle frames between ticks, so the harness flush can settle; poll until three ticks show
+  for (let i = 0; i < 50 && seen.size <= 2; i++) {
     for (const m of t.frame().matchAll(/tick(\d+)/g)) seen.add(m[1]!);
     await Bun.sleep(40);
     await t.flush();

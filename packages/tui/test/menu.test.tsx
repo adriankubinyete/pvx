@@ -378,7 +378,7 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
 
 test("every tab content and pushed screen uses the same title convention", async () => {
   const { t } = await mount({ cols: 120, rows: 30 });
-  expect(t.frame().split("\n")[2]).toMatch(/^\s+0\s+\[/); // row 0 is the bar, row 1 the rule, then the content (the first core): no frame, no repeated title
+  expect(t.frame().split("\n")[2]).toMatch(/^\s+1\s+\[/); // row 0 is the bar, row 1 the rule, then the content (the first core, labeled from 1): no frame, no repeated title
   await t.press("ARROW_UP");
   await t.press("TAB");
   expect(t.frame().split("\n")[2]).toMatch(/^\s+instalados \d+\s+catálogo/); // the filter chips: Módulos has cards, not a panel
