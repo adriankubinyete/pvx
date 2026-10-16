@@ -8,6 +8,7 @@ import { tokens } from "../src/theme.ts";
 import { saveFavorites } from "../src/palette/favorites.ts";
 import { snap } from "./machine-fixture.ts";
 import { MachineBlock } from "../src/tabs/HomeMachine.tsx";
+import { CONTENT_MAX_W } from "../src/layout.ts";
 
 const fixtures = join(import.meta.dir, "../../core/test/fixtures");
 let h: TuiHarness | undefined;
@@ -153,6 +154,16 @@ test("conformidade is not run on the first visit; r runs it and shows the pendin
   // the buttons of the items are one column
   const columns = lines(t).filter((l) => l.includes("[ corrigir ]")).map((l) => l.indexOf("[ corrigir ]"));
   expect(new Set(columns).size).toBe(1);
+});
+
+test("at 250x40 the button of an Atenção row sits right after its text, and the profile aside ends at the content width", async () => {
+  const { t } = await mount({ cols: 250, rows: 40, profile: "Principal" });
+  await t.press("r");
+  await t.flush();
+  const row = lines(t).find((l) => l.includes("[ corrigir ]"))!;
+  expect(row.indexOf("[ corrigir ]") - row.indexOf("pendente")).toBeLessThan(20);
+  expect(row.trimEnd().length).toBeLessThan(CONTENT_MAX_W);
+  expect(lines(t).find((l) => l.includes("perfil: Principal"))!.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
 });
 
 test("the ok line is dim, a blank row separates the content from the buttons, and the profile is on the right of the header", async () => {

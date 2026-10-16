@@ -4,7 +4,7 @@ import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
-import { useLayout } from "../layout.ts";
+import { capContent, useLayout } from "../layout.ts";
 import { useOver } from "../hover.ts";
 import { useNudge } from "../nudge.tsx";
 import { wrap } from "../panelnav.ts";
@@ -55,7 +55,7 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
   useScreenScope(edit ? "sistemaedit" : "sistema", 1);
   useEffect(() => void scroll.current?.scrollChildIntoView(`sistema:${row}`), [row]);
 
-  const width = cols - FRAME_W;
+  const width = capContent(cols - FRAME_W);
   const hex: HexTokens = hexTokensFor("custom", axes.custom)!;
   const setRow = (id: RowId) => (setWanted(id), edit && id !== row && setEdit(null));
   const press = (which: UpdateButton) => (setButton(which), which === "update" ? state.update() : void state.verify());

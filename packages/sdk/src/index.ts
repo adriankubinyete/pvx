@@ -811,7 +811,7 @@ export interface Conformity {
   apply(confirm: (step: ConformityStep) => StepAnswer | Promise<StepAnswer>): Promise<StepOutcome[]>;
 }
 
-/** A column of `List`: `width` is fixed (never shrinks), `grow` takes a share of what is left, neither sizes to the content. */
+/** A column of `List`: `width` is fixed (never shrinks), `grow` takes a share of what is left but never more than its content, neither sizes to the content. No column passes 60 cells: the rest is cut with `…`, and extra room stays blank at the right of the table. */
 export interface ListColumn { id: string; title?: string; width?: number; grow?: number; align?: "left" | "right" }
 /** One piece of a cell made of several tones (`10.0.0.0` in `ip`, `/8` in the default tone). */
 export interface ListCellPart { text: string; tone?: Tone }

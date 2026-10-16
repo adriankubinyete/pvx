@@ -3,6 +3,7 @@ import { RGBA, TextAttributes } from "@opentui/core";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadTuiState, logsDir, pvxHome, runCapture, tuiStatePath } from "@pvx/core";
 import { expectButtonsReachable, expectNoKeyboardTrap, renderTui, type TuiHarness } from "../../testing/src/index.ts";
+import { CONTENT_MAX_W } from "../src/layout.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
 import { TAB_IDS } from "../src/tabs/context.ts";
 import { hexTokensFor, tokens } from "../src/theme.ts";
@@ -489,4 +490,10 @@ test("pvx section: `u` updates from anywhere on the page, and a click on [ verif
   await t.click(verify.x + 2, verify.y);
   await new Promise((r) => setTimeout(r, 50));
   expect(t.frame()).toContain("consulta da última release falhou");
+});
+
+test("Sistema at 250x40 keeps every row within the content width, the preview included", async () => {
+  const t = await mount(250, 40);
+  const widest = Math.max(...t.frame().split("\n").slice(2).map((line) => line.trimEnd().length));
+  expect(widest).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
 });

@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { KeyRouter, ThemeProvider, tokens } from "../src/index.ts";
 import { HostCtx, type HostPage } from "../src/sdk-ui/host.tsx";
+import { capContent } from "../src/layout.ts";
 import { Fields } from "../src/sdk-ui/fields.tsx";
 import { refocus, valueWidth } from "../src/sdk-ui/reactive.ts";
 
@@ -229,7 +230,7 @@ for (const size of SIZES) {
     const fields = ["short", "normal", "long"].map((width) => ({ id: width, label: "Pasta", kind: "line" as const, width: width as "short" | "normal" | "long", help: `dica-${width}` }));
     const { t } = await mount({ fields }, size);
     const cell = (width: string) => columnOf(t, `dica-${width}`) - 2 - (2 + "Pasta".length + 2);
-    const formW = size.cols - 2;
+    const formW = capContent(size.cols - 2);
     expect(cell("short")).toBe(20);
     expect(cell("normal")).toBe(valueWidth("normal", formW, formW - 9));
     expect(cell("long")).toBe(valueWidth("long", formW, formW - 9));
@@ -248,6 +249,6 @@ for (const size of SIZES) {
     expect(row).toContain("/var/backups/clientes");
     expect(row).not.toContain("tar.gz");
     expect(row).toMatch(/…/);
-    expect(row.indexOf("…")).toBe(columnOf(t, "/var/backups") + valueWidth("long", size.cols - 2, size.cols - 2 - 9) - 1);
+    expect(row.indexOf("…")).toBe(columnOf(t, "/var/backups") + valueWidth("long", capContent(size.cols - 2), capContent(size.cols - 2) - 9) - 1);
   });
 }

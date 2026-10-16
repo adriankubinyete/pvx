@@ -1,6 +1,7 @@
 // What the Logs tab shows, as pure functions: filter, group by day, time and level words. No UI, so they test without rendering.
 import type { LogEntry, LogLevel } from "@pvx/core";
 import { LOG_LEVELS } from "@pvx/core";
+import { CONTENT_MAX_W } from "../layout.ts";
 import { clean } from "../palette/search.ts";
 
 /** The logger of the host is `core`; the technician reads it as `pvx`. */
@@ -88,6 +89,24 @@ const p2 = (n: number) => String(n).padStart(2, "0");
 export function timeText(at: number): string {
   const date = new Date(at);
   return `${p2(date.getHours())}:${p2(date.getMinutes())}:${p2(date.getSeconds())}`;
+}
+
+/** Cells before the message: the cursor column, the time (`13:39:04`) and its two blanks. */
+const LOG_LEAD_W = 2 + 8 + 2;
+/** Cells between the source and the level word, and between the word and the message. */
+const LOG_GAP_W = 2;
+
+/** Cells one entry takes on its row: the lead, the source column, the level word when it has one, and the message. */
+export function lineCells(entry: LogEntry, sourceWidth: number): number {
+  const word = LEVEL_WORD[entry.level];
+  const wordCells = word ? [...word].length + LOG_GAP_W : 0;
+  return LOG_LEAD_W + sourceWidth + LOG_GAP_W + wordCells + [...entry.message].length;
+}
+
+/** The width of every row (and of its highlight): the readable content width, or the longest entry when that is wider. Never the terminal's. */
+export function logRowWidth(lines: readonly LogLine[], sourceWidth: number): number {
+  const longest = Math.max(0, ...lines.map((line) => lineCells(line.entry, sourceWidth)));
+  return Math.max(CONTENT_MAX_W, longest);
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

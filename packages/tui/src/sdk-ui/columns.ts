@@ -9,8 +9,33 @@ const len = (s: string) => [...s].length;
 
 export interface Sizing { col: ListColumn; natural: number }
 
-/** Column widths for `avail` cells. Fixed never shrinks; auto (no width, no grow) shrinks first; grow splits the rest. */
-export function columnWidths(cols: Sizing[], avail: number | undefined): number[] {
+/** The widest a column gets, whatever its content or its `grow`: a longer text is cut with `…`. Extra room stays blank at the right of the table. */
+export const COLUMN_MAX_W = 60;
+
+/** Shares of `rest` cells by weight; a column never takes more than its own `limit`, and what it leaves goes to the others. */
+function shareGrowing(limits: number[], weights: number[], rest: number): number[] {
+  const widths = limits.map(() => MIN_W);
+  let open = limits.map((_, i) => i);
+  let left = rest - MIN_W * limits.length;
+  while (open.length && left > 0) {
+    const total = open.reduce((n, i) => n + weights[i]!, 0);
+    const capped = open.filter((i) => widths[i]! + Math.floor((left * weights[i]!) / total) >= limits[i]!);
+    if (!capped.length) {
+      open.forEach((i) => (widths[i] = widths[i]! + Math.floor((left * weights[i]!) / total)));
+      break;
+    }
+    capped.forEach((i) => {
+      left -= limits[i]! - widths[i]!;
+      widths[i] = limits[i]!;
+    });
+    open = open.filter((i) => !capped.includes(i));
+  }
+  return widths;
+}
+
+/** Column widths for `avail` cells. Fixed never shrinks; auto (no width, no grow) takes its content and shrinks first; grow takes what is left but never more than its content, and no column passes `COLUMN_MAX_W`. */
+export function columnWidths(sizings: Sizing[], avail: number | undefined): number[] {
+  const cols = sizings.map(({ col, natural }) => ({ col, natural: Math.min(natural, COLUMN_MAX_W) }));
   if (avail === undefined) return cols.map(({ col, natural }) => col.width ?? natural);
   const budget = Math.max(0, avail - GAP * (cols.length - 1));
   const fixed = cols.reduce((n, { col }) => n + (col.width ?? 0), 0);
@@ -27,13 +52,8 @@ export function columnWidths(cols: Sizing[], avail: number | undefined): number[
   }
   if (grows.length) {
     const rest = Math.max(minGrow, budget - fixed - autos.reduce((n, i) => n + w[i]!, 0));
-    const total = grows.reduce((n, i) => n + cols[i]!.col.grow!, 0);
-    let left = rest;
-    grows.forEach((i, k) => {
-      const share = k === grows.length - 1 ? left : Math.max(MIN_W, Math.floor((rest * cols[i]!.col.grow!) / total));
-      w[i] = share;
-      left -= share;
-    });
+    const shares = shareGrowing(grows.map((i) => Math.max(MIN_W, cols[i]!.natural)), grows.map((i) => cols[i]!.col.grow!), rest);
+    grows.forEach((i, k) => (w[i] = shares[k]!));
   }
   return w;
 }

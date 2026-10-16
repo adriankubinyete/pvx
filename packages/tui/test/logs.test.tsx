@@ -6,6 +6,7 @@ import { auditCommand, createLogger, createRegistry, createStore, logsDir, phase
 import { expectButtonsReachable, expectNoKeyboardTrap, renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
 import { tokens } from "../src/theme.ts";
+import { CONTENT_MAX_W } from "../src/layout.ts";
 
 let h: TuiHarness | undefined;
 let registry: Registry;
@@ -280,4 +281,15 @@ test("mouse: a click on a source chip filters, a click on a line selects it and 
   expect(t.frame()).toContain("○ pausado");
   await t.click(lines(t)[2]!.indexOf("○ pausado") + 2, 2);
   expect(t.frame()).toContain("● ao vivo");
+});
+
+test("at 250x40 the live chip sits at the content width and the selected line's highlight does not reach the terminal edge", async () => {
+  seed();
+  const { t } = await mount({ cols: 250, rows: 40 });
+  await t.flush();
+  expect(rowOf(t, "ao vivo")!.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W);
+  const selected = t.spans().lines.find((line) => line.spans.some((span) => span.text.startsWith("»")))!;
+  const fill = selected.spans.find((span) => span.text.startsWith("»"))!.bg;
+  const cells = selected.spans.filter((span) => span.bg.equals(fill)).reduce((sum, span) => sum + [...span.text].length, 0);
+  expect(cells).toBeLessThan(CONTENT_MAX_W + 2);
 });

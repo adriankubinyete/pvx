@@ -7,7 +7,7 @@ import { useOver } from "../hover.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { panelStep, usePanelNav, wrap } from "../panelnav.ts";
-import { useLayout } from "../layout.ts";
+import { capContent, useLayout } from "../layout.ts";
 import { useScreenScope } from "../router.tsx";
 import { loadFavorites } from "../palette/favorites.ts";
 import { Loading } from "../sdk-ui/flow.tsx";
@@ -18,7 +18,7 @@ import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
 import { conformityOf, conformityView } from "./conformity.ts";
 import { MachineBlock } from "./HomeMachine.tsx";
-import { ActionsLine, HomeRowView } from "./HomeRows.tsx";
+import { ActionsLine, HomeRowView, rowColumns } from "./HomeRows.tsx";
 import { actionButtons, ACTIONS_ROW_ID, activityRows, activitySummary, attentionRows, chipRows, ignoredTexts, memoryRows, NEW_NOTE_ROW_ID, NEW_NOTE_TEXT, noteRows, notesSummary, unverifiedRow, upToDateText, VERIFY_ROW_ID, type HomeAction, type HomeRow } from "./home-rows.ts";
 import { parseConformity, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
@@ -41,6 +41,8 @@ export const createHomeNav = (): HomeNav => ({ panel: "conformidade", inside: fa
 const SAMPLE_MS = 2000;
 /** Columns the frame and the page padding take from the terminal width (two on each side). */
 const FRAME_W = 4;
+/** The widest the core bars and the facts of the machine get: what they have at 120 columns (four bars across). A wider terminal does not stretch them. */
+const MACHINE_MAX_W = 120 - FRAME_W;
 /** Columns of a section's gutter (the `▌` and its padding). */
 const GUTTER_W = 2;
 /** Cells the label of a one-line section takes (`3 Atividade`) and the gap after it. */
@@ -64,7 +66,7 @@ interface HomeData {
 
 export function HomeTab({ store, nav, profile, registry, sampler, session = hostSession }: { store: SessionApi; nav: TabsNav; profile?: string | null; registry: Registry; sampler?: MachineSampler; session?: SessionInfo }) {
   const slots = registry.slots;
-  const { c, g, axes } = useTheme();
+  const { c, g, axes, result } = useTheme();
   const hidden = useMemo(() => new Set(axes.hiddenWidgets), [axes.hiddenWidgets]);
   const { cols } = useLayout();
   const tabs = useTabs();
@@ -214,14 +216,15 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     if (key.sequence === "/") return tabs?.goto("comando"), true;
   };
 
-  const width = cols - FRAME_W;
+  const width = capContent(cols - FRAME_W);
   const sectionRows = (panel: HomePanel) => {
     const active = focused && nav.home.panel === panel;
     const list = rows[panel].filter((row) => row.id !== ACTIONS_ROW_ID);
+    const columns = rowColumns(list, width - GUTTER_W, { c, result });
     return (
       <>
         {list.map((row) => (
-          <HomeRowView key={row.id} row={row} idPrefix={`home:${panel}`} width={width - GUTTER_W} on={active && nav.home.inside && row.id === current(panel)?.id}
+          <HomeRowView key={row.id} row={row} idPrefix={`home:${panel}`} columns={columns} on={active && nav.home.inside && row.id === current(panel)?.id}
             lit={hover(panel).hot === row.id && row.id !== current(panel)?.id} onOver={hover(panel).onOver} onOut={hover(panel).onOut} onPick={pickRow(panel)} />
         ))}
       </>
@@ -279,7 +282,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   return (
     <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
       <box flexDirection="column" paddingX={1} flexShrink={0}>
-        <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={width} />
+        <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={Math.min(cols - FRAME_W, MACHINE_MAX_W)} />
         {sections.map((panel) => {
           if (panel === "conformidade") return frame(panel, attentionBody, profile ? `perfil: ${profile}` : "sem perfil");
           if (!expanded(panel)) return oneLine(panel);

@@ -18,13 +18,15 @@ interface Props {
   /** The `↳ fase … · tarefa …` line of a job's line, shown while it is the current one. */
   hint?: string;
   sourceWidth: number;
+  /** Cells of the row and of its highlight (`logRowWidth`). */
+  width: number;
   onOver: (id: string) => void;
   onOut: (id: string) => void;
   onPick: (line: LogLine) => void;
 }
 
 /** One entry: `13:00:41  alfa  aviso  text`. Only a warning or an error says its level; the current line shows the lines that continue it and, for a job, where it is. */
-export function LogRowView({ line, on, current, lit, opened, hint, sourceWidth, onOver, onOut, onPick }: Props) {
+export function LogRowView({ line, on, current, lit, opened, hint, sourceWidth, width, onOver, onOut, onPick }: Props) {
   const { c, g } = useTheme();
   const { entry } = line;
   const word = LEVEL_WORD[entry.level];
@@ -32,7 +34,7 @@ export function LogRowView({ line, on, current, lit, opened, hint, sourceWidth, 
   const marker = on ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{lit || current ? `${g.query} ` : " ".repeat(CURSOR_W)}</span>;
   return (
     <box id={`log:${line.id}`} flexDirection="column" flexShrink={0}>
-      <box flexShrink={0} backgroundColor={on ? c.selected : lit ? c.panel : undefined} onMouseOver={() => onOver(line.id)} onMouseOut={() => onOut(line.id)} onMouseDown={() => onPick(line)}>
+      <box flexShrink={0} width={width} backgroundColor={on ? c.selected : lit ? c.panel : undefined} onMouseOver={() => onOver(line.id)} onMouseOut={() => onOut(line.id)} onMouseDown={() => onPick(line)}>
         <text wrapMode="none">
           {marker}
           <span fg={c.text}>{`${timeText(entry.at)}  `}</span>

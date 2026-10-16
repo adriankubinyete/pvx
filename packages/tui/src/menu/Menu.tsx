@@ -5,7 +5,7 @@ import { addModule, catalogHas, isModuleUrl, resolveModuleRef, removeModule, set
 import { matchKey } from "../keymap.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
 import { FilterChips } from "../sdk-ui/filter-chips.tsx";
-import { useLayout } from "../layout.ts";
+import { CONTENT_MAX_W, useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
 import { deliveredTail, reloadAndReport } from "../modules/actions.ts";
 import { defaultCatalog, useModuleRows, useModulesDeps, useRegistryRev } from "../modules/deps.ts";
@@ -296,7 +296,7 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
       ) : null}
       {view.kind === "list" && !path.length ? (
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          <box flexShrink={0} paddingX={1} flexDirection="row" justifyContent="space-between">
+          <box flexShrink={0} paddingX={1} flexDirection="row" justifyContent="space-between" maxWidth={CONTENT_MAX_W}>
             <FilterChips chips={chips} selected={catalog ? "catalog" : "installed"} cursor={chipFocus && (tabs?.focused ?? true) ? chipFocus : undefined} onSelect={(id) => setCatalog(id === "catalog")} />
             {working ? <Loading label={`${working}…`} /> : !catalog && !loaded ? <Loading label="lendo os módulos…" /> : catalog && cat ? <text fg={c.dim} wrapMode="none">{source(cat)}</text> : null}
           </box>

@@ -5,6 +5,7 @@ import type { Component, ListCell, ListCellPart, ListItem, SdkUi, Tone } from "@
 import { followProps } from "../follow.ts";
 import { clean } from "../palette/search.ts";
 import { columnWidths, fit, fitParts, GAP, marquee, marqueeOffset, overflow } from "./columns.ts";
+import { CONTENT_MAX_W } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
 import { toneColor as tone } from "./tones.ts";
 import { Button } from "./button.tsx";
@@ -73,7 +74,7 @@ export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, 
   const active = t !== undefined;
   const gutter = section ? { border: ["left" as const], borderColor: active ? tone(c, t) : c.bg, customBorderChars: { ...GUTTER_CHARS, vertical: active ? g.gutter : " " }, paddingLeft: 1 } : {};
   return (
-    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(section ? { maxWidth: CONTENT_MAX_W } : {})} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
       {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} aside={aside} inline={inline} /> : null}
       {children as ReactNode}
     </box>
@@ -100,13 +101,13 @@ function RowBody({ fit, gap, pieces }: { fit?: boolean; gap: number; pieces: Rea
 
 /**
  * Children side by side. By default equal shares of the width; with `fit` each keeps its own width, `gap` cells apart, and the ones that do not fit go to the next line (a row of buttons, a line made of styled pieces).
- * `right` sits at the right edge of the row, at its own width (a button or a value at the end of a section line).
+ * `right` sits at the right edge of the row, at its own width (a button or a value at the end of a section line); the row is no wider than the readable content width, so on a wide terminal the value stays beside its content.
  */
 export function Row({ fit, gap = 0, right, children }: Props<"Row">) {
   const body = <RowBody fit={fit} gap={gap} pieces={Children.toArray(children as ReactNode)} />;
   if (right === undefined) return <box flexDirection="row" flexShrink={0}>{body}</box>;
   return (
-    <box flexDirection="row" flexShrink={0}>
+    <box flexDirection="row" flexShrink={0} maxWidth={CONTENT_MAX_W}>
       {body}
       <box flexShrink={0} paddingLeft={1}>{right as ReactNode}</box>
     </box>
@@ -211,6 +212,19 @@ function CellParts({ parts, rowTone, gap }: { parts: ListCellPart[]; rowTone: To
   );
 }
 
+/** Cells of a table's columns and the gaps between them. */
+function columnsWidth(widths: number[]): number {
+  const cells = widths.reduce((sum, width) => sum + width, 0);
+  return cells + GAP * Math.max(0, widths.length - 1);
+}
+
+/** Cells the widest row of a list without columns takes: the label and the detail after it. */
+function plainRowsWidth(items: ListItem[]): number {
+  const detailGap = 2;
+  const rowWidth = (item: ListItem) => len(clean(item.label ?? "")) + (item.detail ? detailGap + len(clean(item.detail)) : 0);
+  return Math.max(0, ...items.map(rowWidth));
+}
+
 export function List({ items, selected, columns, onPress, onHover, maxRows, onAction, actionLabel = DEFAULT_ACTION_LABEL, actionOnClick = true }: Props<"List">) {
   const { c, g } = useTheme();
   const [over0, setOver] = useState<string | undefined>(undefined); // the row under the mouse
@@ -224,7 +238,8 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
   const inPage = useContext(HostCtx) !== null;
   const cell = (it: Props<"List">["items"][number], id: string) => cellOf(it.cells?.[id]);
   const lead = CURSOR_WIDTH + (marks ? markWidth + 1 : 0);
-  const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, width - lead - LIST_RIGHT_MARGIN_W)) : [];
+  const widths = cols ? columnWidths(cols.map((col) => ({ col, natural: Math.max(len(col.title ?? ""), ...items.map((it) => len(cell(it, col.id).text))) })), width === undefined ? undefined : Math.max(0, Math.min(width, CONTENT_MAX_W) - lead - LIST_RIGHT_MARGIN_W)) : [];
+  const tableWidth = cols ? lead + columnsWidth(widths) : lead + plainRowsWidth(items);
   const sel = cols ? items.find((it) => it.id === selected) : undefined;
   const over = cols && sel ? cols.map((col, i) => overflow(cell(sel, col.id).text, widths[i]!)) : [];
   const moving = over.some((n) => n > 0);
@@ -256,7 +271,7 @@ export function List({ items, selected, columns, onPress, onHover, maxRows, onAc
       {visible.map((it) => {
         const hot = it.id === over0 && it.id !== selected; // hover only tints (panel background and a dim ›): it never looks selected
         return (
-        <box key={it.id} flexShrink={0} backgroundColor={it.id === selected ? c.selected : hot ? c.panel : undefined}
+        <box key={it.id} flexShrink={0} width={tableWidth} backgroundColor={it.id === selected ? c.selected : hot ? c.panel : undefined}
           onMouseOver={() => (setOver(it.id), onHover?.(it.id))} onMouseOut={() => (setOver((o) => (o === it.id ? undefined : o)), onHover?.(undefined))} onMouseDown={onPress || onAction ? () => pressRow(it.id) : undefined}>
           <text wrapMode="none">
             {it.id === selected ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{hot ? `${g.query} ` : " ".repeat(CURSOR_WIDTH)}</span>}
@@ -370,7 +385,7 @@ export function Notice({ level, action, children }: Props<"Notice">) {
   const { marker, color } = result(level);
   const text = textOf(children);
   return (
-    <box flexDirection="row" flexShrink={0} columnGap={NOTICE_ACTION_GAP}>
+    <box flexDirection="row" flexShrink={0} columnGap={NOTICE_ACTION_GAP} maxWidth={CONTENT_MAX_W}>
       <box flexGrow={1} flexShrink={1}>
         <text flexShrink={0}>
           <span fg={color}>{`${marker} `}</span>

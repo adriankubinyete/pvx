@@ -83,7 +83,7 @@ Exemplos no código:
 
 - Wrap-around: `↓` no último item vai ao primeiro; `↑` no primeiro vai ao último (`usePanels().wrap`).
 - Botões de ação ("+ adicionar…") são linhas navegáveis no fim da lista.
-- Mais de um dado por linha: colunas alinhadas, com cabeçalho (`List` com `columns`).
+- Mais de um dado por linha: colunas alinhadas, com cabeçalho (`List` com `columns`). A coluna toma a largura do conteúdo, no máximo 60 células; `grow` cresce só até o conteúdo e esse teto. A sobra de um terminal largo fica em branco à direita da tabela, e a linha selecionada se destaca só até o fim da tabela (seção 9).
 - Texto que não cabe termina em `…`.
 - Só a linha selecionada da lista ativa rola o texto cortado (letreiro, vai e volta).
 - Seleção por id, nunca por índice: a lista muda de ordem e de tamanho.
@@ -173,14 +173,14 @@ O desenho, sem exceção:
 
 - **Título e descrição.** O título (negrito) vem de `title` (em `Form`: o `title` do comando, senão o `help`); a descrição apagada, de uma linha, vem de `description`. O título aparece uma só vez: um `Panel` em volta com o mesmo título é erro.
 - **Rótulo e obrigatório.** Rótulos alinhados numa coluna. O obrigatório é um `*` vermelho (token `error`) logo depois do rótulo, nunca verde nem de acento. Campo opcional não leva marca.
-- **Célula de valor.** Todo campo de texto tem uma célula com fundo preenchido (token `panel`), mesmo vazia. A largura cresce com o formulário: o padrão (`normal`) toma 40% da largura, no mínimo 30 colunas (31 a 80 colunas de terminal, 47 a 120); `width: "long"` toma 60% (um caminho: 46 e 70) e `width: "short"` fica em 20 (um código, uma hora). A célula nunca passa do que sobra depois do rótulo. Um valor mais longo que a célula, enquanto o campo não está em edição, mostra o começo e termina em `…` (o início de um caminho nunca some); ele só rola com o foco no campo. A célula do campo em foco tem fundo mais forte (`selected`) e o cursor. Em temas sem fundo próprio (Terminal) o cursor continua visível.
+- **Célula de valor.** Todo campo de texto tem uma célula com fundo preenchido (token `panel`), mesmo vazia. A largura cresce com o formulário: o padrão (`normal`) toma 40% da largura, no mínimo 30 colunas (31 a 80 colunas de terminal, 43 a 120), e a largura do formulário nunca passa de `CONTENT_MAX_W` (seção 9); `width: "long"` toma 60% (um caminho: 46 e 64) e `width: "short"` fica em 20 (um código, uma hora). A célula nunca passa do que sobra depois do rótulo. Um valor mais longo que a célula, enquanto o campo não está em edição, mostra o começo e termina em `…` (o início de um caminho nunca some); ele só rola com o foco no campo. A célula do campo em foco tem fundo mais forte (`selected`) e o cursor. Em temas sem fundo próprio (Terminal) o cursor continua visível.
 - **Marcador de foco.** O `›` do campo em foco mora numa coluna própria de 2 células: ele nunca desloca rótulo nem valor.
 - **Espaço entre campos.** Uma linha em branco entre campos. Se o terminal for baixo, a área dos campos rola (acompanha o foco) e mantém o espaço; os botões ficam fixos embaixo.
 - **Dica.** Dica só quando ajuda a preencher; nada de explicar o óbvio. Uma dica é uma restrição que o técnico precisa saber ("letras, números e hífen"), ou a descrição curta de uma opção que não se explica sozinha. Não explique o motivo de um desenho ("nunca as de hoje: o dia ainda não acabou", "sorteado entre 01h e 05h"), nem repita o rótulo. Ela fica apagada à direita do valor, curta (corta com `…` e some se não couber). Nada de `stdin`, `PVX_SECRET_*`, "prompt" ou "(segredo)".
 - **Erro.** Vermelho, na linha abaixo do valor, começando com `✗`. `required` vazio mostra "preencha este campo"; `validate` põe o resto.
 - **Segredo.** `secret` mostra `••••` (`g.mask`); `ctrl+r` mostra ou oculta; a tecla `generate` do campo gera e mostra.
 - **Colar funciona em todo campo.** O terminal manda o colado como um evento só (paste com colchetes), e o `KeyRouter` o entrega só a quem tem campo de texto (`useKeys(…, { paste: true })`). O campo em foco é dono do colado: `editLine` o insere no cursor, como digitado, e o campo rola na horizontal. Campo de uma linha: o colado perde escapes ANSI, caracteres de controle e quebras de linha (`\r`, `\n`, as de dentro também: o texto é juntado, não recusado), então uma senha colada com `\n` no fim fica inteira. Segredo continua mascarado (`•` por caractere) e o colado não vai a nenhum outro lugar (log, scrollback, histórico, aviso). Sem campo em foco (barra de abas, botão, caixa de marcar, lista) o colado não faz nada e nunca vira atalho. Vale para `Fields`/`Form`, respostas da conversa e do modal de segredo, a linha do Comando, a busca e os campos da palette, o `AddBox` e o editor de tema; a `area` (várias linhas) usa o colado do próprio `textarea`. Um campo novo usa `editLine` e registra `paste: true`.
-- **Botões.** Todos `[ rótulo ]`, na regra da seção 12: só o botão em foco vem cheio (acento; `error` no perigoso) e sublinhado. O primário (`submitLabel`, padrão `salvar`) sem foco é `[ salvar ]` em negrito no acento; os botões de envio extras (`extraActions`, abaixo) vêm logo depois dele; `[ cancelar ]` vem depois deles; `[ remover ]` é opcional (`onDelete`), no tom `error`, e pergunta no diálogo da seção 18. Uma linha em branco separa o conteúdo dos botões. Todos clicáveis.
+- **Botões.** Todos `[ rótulo ]`, na regra da seção 12: só o botão em foco vem cheio (acento; `error` no perigoso) e sublinhado. O primário (`submitLabel`, padrão `salvar`) sem foco é `[ salvar ]` em negrito no acento; os botões de envio extras (`extraActions`, abaixo) vêm logo depois dele; `[ cancelar ]` vem depois deles; `[ remover ]` é opcional (`onDelete`), o último da mesma fileira (`[ salvar ]  [ cancelar ]  [ remover ]`, nunca empurrado para a borda direita), no tom `error`, e pergunta no diálogo da seção 18. Uma linha em branco separa o conteúdo dos botões. Todos clicáveis.
 - **Comando.** O formulário de um comando não mostra a linha `$ pvx …` nem "segredo fora da linha". `ctrl+d` (e `?`, fora de campo de texto) mostra a linha, apagada, numa só linha.
 - **Campo derivado.** `derive(values)` faz o campo seguir os outros enquanto o técnico não o editou. Editar para de seguir e guarda o texto; apagar até ficar vazio volta a seguir. A tela não diz nada sobre isso: o campo só mostra o valor, e ele continua editável. Exemplo: `Pasta no UOE` vira `clientes/<id-cliente>-<id-contrato>-<empresa>` conforme se digita.
 - **Teclas.** `↑↓` e `Tab` andam entre campos e botões (as setas dão a volta; `tab` no último ponto e `shift+tab` no primeiro vão para o host, seção 1); `enter` avança e, no último campo, salva; `espaço` marca uma caixa ou uma opção; `ctrl+s` salva e `esc` sai do campo: o módulo ouve `onCancel` e o formulário devolve o teclado à página (o segundo `esc` chega à barra; `enter` volta para dentro). Nas pontas de `choice` e `multi` em lista, `↑↓` passam ao campo vizinho; em `radio`, `buttons` e `row` (seção 19), `←→` movem a escolha e `↑↓` vão ao campo vizinho.
@@ -235,6 +235,26 @@ Exemplos no código:
 - Painéis lado a lado a partir de 100 colunas; abaixo disso, empilhados.
 - Seções lado a lado têm um respiro mínimo: `Row` deixa `SECTION_GAP_W` (3 células) entre os filhos, e a última coluna de uma `List` termina `LIST_RIGHT_MARGIN_W` (1 célula) antes da borda da seção, então o `…` nunca encosta no `▌` da vizinha.
 - Mínimo suportado: 80x24 (`MIN_COLS`, `MIN_ROWS`).
+- **Nada longe do seu conteúdo.** O conteúdo tem uma largura legível máxima, `CONTENT_MAX_W` (110 células, `packages/tui/src/layout.ts`). Seção (`Panel` com cabeçalho), formulário, aviso com botão (`Notice`) e linha com `Row right` ficam dentro dela. O que é "à direita" (`Row right`, `aside` do `Panel`, o botão de um aviso, o `ao vivo` de Logs) alinha ao fim da largura do conteúdo, nunca à borda do terminal. Seções lado a lado podem usar mais do terminal, cada uma com o seu teto. A sobra fica em branco, à direita.
+- **Coluna do tamanho do conteúdo.** Numa `List`, cada coluna toma a largura do que mostra (no máximo 60 células, o resto vira `…`); a coluna `grow` cresce só até o conteúdo e esse teto. A tabela tem a largura das colunas, e a linha selecionada se destaca só até o fim dela. Nenhuma coluna se estica para encher o terminal.
+- **Botão perto da linha.** Os botões de linha do Início (`[ corrigir ]`) ficam numa coluna logo depois do texto mais largo da seção, e os botões de um formulário ficam juntos numa fileira só: `[ salvar ]  [ cancelar ]  [ remover ]`, o `remover` por último, no tom `error`, nunca empurrado para a borda.
+
+```text
+ 250 colunas
+ ┌─ errado ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+   1 Módulos
+   » alfa      Lorem ipsum dolor                                                                                                                              já instalado
+   [ salvar ]  [ cancelar ]                                                                                                                                      [ remover ]
+ └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ ┌─ certo ────────────────────────────────────────────────┐
+   1 Módulos                                  2 módulos      ← aside no fim do conteúdo (110)
+   » alfa      Lorem ipsum dolor  já instalado             ← a linha selecionada acaba na tabela
+     beta      Sit amet           em breve
+   [ salvar ]  [ cancelar ]  [ remover ]                   ← uma fileira, remover por último
+   <──────────────── no máximo 110 células ────────────>  sobra em branco → → →
+ └────────────────────────────────────────────────────────┘
+```
+
 - Nada é cortado pela moldura: conteúdo largo termina em `…` (seção 4).
 - Largura fixa pede `flexShrink={0}`; a linha principal de uma lista pede `minHeight={0}`.
 

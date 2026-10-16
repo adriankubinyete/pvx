@@ -3,7 +3,7 @@ import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { Component, SdkUi } from "@pvx/sdk";
 import { useKeys } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
-import { useLayout } from "../layout.ts";
+import { capContent, useLayout } from "../layout.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
 import { matchKey } from "../keymap.ts";
 import { LineText } from "../LineText.tsx";
@@ -386,7 +386,7 @@ export const Fields: Component<Props> = (props) => {
   const stacked = labelW > LABEL_MAX;
   const labelCol = stacked ? 0 : labelW + 2;
   const col = MARK_W + labelCol; // where the input and the text under it start
-  const formW = cols - PAGE_PADDING;
+  const formW = capContent(cols - PAGE_PADDING);
   const cellOf = (f: Field): number => valueWidth(f.width, formW, formW - col);
   /** Columns left for a hint after `used` columns of value. */
   const hintRoom = (used: number) => formW - col - used - HINT_GAP;
@@ -550,13 +550,11 @@ export const Fields: Component<Props> = (props) => {
       {summaryLine ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{summaryLine}</text> : null}
       {details && detailsOpen ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(details(currentValues))}</text> : null}
       {showButtons ? <text flexShrink={0}> </text> : null}
-      {showButtons ? <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
-        <box flexDirection="row" flexShrink={0} gap={2}>
-          {focusMark(button !== undefined && live)}
-          {btn("save", clean(submitLabel))}
-          {extraActions.map((action, index) => btn(extraButton(index), clean(action.label)))}
-          {btn("cancel", "cancelar")}
-        </box>
+      {showButtons ? <box flexDirection="row" flexShrink={0} gap={2}>
+        {focusMark(button !== undefined && live)}
+        {btn("save", clean(submitLabel))}
+        {extraActions.map((action, index) => btn(extraButton(index), clean(action.label)))}
+        {btn("cancel", "cancelar")}
         {onDelete ? btn("remove", clean(deleteLabel)) : null}
       </box> : null}
       {confirm ? (

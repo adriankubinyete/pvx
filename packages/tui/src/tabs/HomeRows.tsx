@@ -13,42 +13,70 @@ const BUTTON_CHROME_W = 4;
 const ACTIONS_INDENT_W = 4;
 const ACTIONS_GAP_W = 3;
 
+/** Where the columns of a section's rows end: the text (with its marker and note) and the button after it. */
+export interface RowColumns {
+  /** Cells of the left part of every row: the cursor, the marker, the text and the note. */
+  leftW: number;
+  /** Cells of the whole row, and of its highlight. */
+  rowW: number;
+}
+
 interface RowViewProps {
   row: HomeRow;
   /** The cursor is on this row of the active list. */
   on: boolean;
   /** The mouse is over it. */
   lit: boolean;
-  /** Cells the row may use. */
-  width: number;
+  columns: RowColumns;
   idPrefix: string;
   onOver: (row: HomeRow) => void;
   onOut: (row: HomeRow) => void;
   onPick: (row: HomeRow) => void;
 }
 
-function useMarker(row: HomeRow): { text: string; color: string } | undefined {
-  const { c, result } = useTheme();
+type Theme = Pick<ReturnType<typeof useTheme>, "c" | "result">;
+
+function rowMarker(row: HomeRow, theme: Theme): { text: string; color: string } | undefined {
   if (row.level) {
-    const { marker, color } = result(row.level);
+    const { marker, color } = theme.result(row.level);
     return { text: `${marker} `, color };
   }
-  if (row.glyph) return { text: `${row.glyph[0]} `, color: toneColor(c, row.glyph[1]) };
+  if (row.glyph) return { text: `${row.glyph[0]} `, color: toneColor(theme.c, row.glyph[1]) };
   return undefined;
 }
 
-/** One row of a section: the marker, the text cut to fit, a dim note, and the button at the end when it has one. */
-export function HomeRowView({ row, on, lit, width, idPrefix, onOver, onOut, onPick }: RowViewProps) {
-  const { c, g } = useTheme();
-  const marker = useMarker(row);
-  const buttonCells = row.button ? BUTTON_GAP_W + [...row.button].length + BUTTON_CHROME_W : 0;
-  const note = row.note ? ` ${row.note}` : "";
-  const room = width - CURSOR_W - [...(marker?.text ?? "")].length - buttonCells - [...note].length;
+const cellsOf = (text: string): number => [...text].length;
+const noteOf = (row: HomeRow): string => (row.note ? ` ${row.note}` : "");
+const buttonCells = (row: HomeRow): number => (row.button ? cellsOf(row.button) + BUTTON_CHROME_W : 0);
+
+/** Cells the left part of a row wants: the cursor, the marker, the whole text and the note. */
+function leftCells(row: HomeRow, theme: Theme): number {
+  return CURSOR_W + cellsOf(rowMarker(row, theme)?.text ?? "") + cellsOf(row.text) + cellsOf(noteOf(row));
+}
+
+/**
+ * The columns of a section's rows in `width` cells. The button column starts right after the widest text, not at the edge of the section: a button far from its row goes unseen.
+ * A text too long for the room is cut by the row.
+ */
+export function rowColumns(rows: readonly HomeRow[], width: number, theme: Theme): RowColumns {
+  const buttonW = Math.max(0, ...rows.map(buttonCells));
+  const gap = buttonW ? BUTTON_GAP_W : 0;
+  const widest = Math.max(0, ...rows.map((row) => leftCells(row, theme)));
+  const leftW = Math.min(widest, Math.max(CURSOR_W, width - buttonW - gap));
+  return { leftW, rowW: leftW + gap + buttonW };
+}
+
+/** One row of a section: the marker, the text cut to fit, a dim note, and the button after the text column when it has one. */
+export function HomeRowView({ row, on, lit, columns, idPrefix, onOver, onOut, onPick }: RowViewProps) {
+  const { c, g, result } = useTheme();
+  const marker = rowMarker(row, { c, result });
+  const note = noteOf(row);
+  const room = columns.leftW - CURSOR_W - cellsOf(marker?.text ?? "") - cellsOf(note);
   const cursor = on ? <span fg={c.accent}>{`${g.cursor} `}</span> : <span fg={c.dim}>{lit ? `${g.query} ` : " ".repeat(CURSOR_W)}</span>;
   return (
-    <box id={`${idPrefix}:${row.id}`} flexShrink={0} flexDirection="row" justifyContent="space-between" backgroundColor={on ? c.selected : lit ? c.panel : undefined}
+    <box id={`${idPrefix}:${row.id}`} flexShrink={0} flexDirection="row" width={columns.rowW} backgroundColor={on ? c.selected : lit ? c.panel : undefined}
       onMouseOver={() => onOver(row)} onMouseOut={() => onOut(row)}>
-      <box flexShrink={1} onMouseDown={() => onPick(row)}>
+      <box width={columns.leftW} flexShrink={0} onMouseDown={() => onPick(row)}>
         <text wrapMode="none">
           {cursor}
           {marker ? <span fg={marker.color}>{marker.text}</span> : null}
@@ -56,7 +84,7 @@ export function HomeRowView({ row, on, lit, width, idPrefix, onOver, onOut, onPi
           <span fg={c.dim}>{note}</span>
         </text>
       </box>
-      {row.button ? <Button label={row.button} focused={false} onPress={() => onPick(row)} /> : null}
+      {row.button ? <box marginLeft={BUTTON_GAP_W} flexShrink={0}><Button label={row.button} focused={false} onPress={() => onPick(row)} /></box> : null}
     </box>
   );
 }

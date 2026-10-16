@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import type { Registry, Task } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
-import { useLayout } from "../layout.ts";
+import { capContent, useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
 import { wrap } from "../panelnav.ts";
 import { useRouter, useScreenScope } from "../router.tsx";
@@ -97,7 +97,7 @@ export function TarefasTab({ store, registry, tasks, now, selected, onSelect }: 
   useKeys((key) => (focused ? onKey(key) : undefined));
 
   const active = focused ? stop.section : undefined;
-  const width = cols - FRAME_W - GUTTER_W;
+  const width = capContent(cols - FRAME_W) - GUTTER_W;
   const select = (id: string) => onSelect(id);
   const section = (id: SectionId, title: string, empty: string, body: React.ReactNode, count: number, aside?: string) => (
     <Panel title={title} tone={active === id ? "accent" : undefined} aside={aside} onPress={() => jump(id)}>

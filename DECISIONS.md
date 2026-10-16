@@ -127,6 +127,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `Fields` reativo: `FieldSpec.when` (campo condicional: sai do foco, do envio e da validação; a coluna dos rótulos conta os ocultos), `onChange(values)`, `summary(values)` (linha apagada sempre visível acima dos botões), o `detail` da opção escolhida sob um `choice` em `radio` ou `buttons`, `extraActions` (botões de envio depois do primário, validam e ocupam como ele) e `FieldSpec.width` (`short`, `normal`, `long`: a célula cresce com o formulário, 40% e 60% da largura, mínimo 30; valor longo sem edição mostra o começo e `…`) → [Fields reativo, botões extras e células largas](#2026-10-16--fields-reativo-botões-extras-e-células-largas)
 - `sdk.ui.ButtonRow` (uma fileira de botões é uma parada da seção; `←` `→` e `enter` com `focused`), `aside` do `Panel` no SDK, `useJobLog()` (abre `jobs log <módulo> <nome>` na aba Comando) e a ordem segura-primeiro nos comentários do SDK → [ButtonRow, Panel aside e useJobLog](#2026-10-16--buttonrow-panel-aside-e-usejoblog)
 - `sdk.cron.next(expressão, de?)`: a próxima execução em horário local, que pula o horário que o relógio salta e roda uma vez o que ele repete → [sdk.cron.next](#2026-10-16--sdkcronnext)
+- Nada longe do seu conteúdo: largura legível `CONTENT_MAX_W` (110), colunas do tamanho do conteúdo (teto de 60 células, `grow` só até o conteúdo), tabela e destaque com a largura das colunas, `Row right`, `aside`, botão de aviso e botões de formulário (`remover` por último, na mesma fileira) no fim do conteúdo, nunca na borda do terminal → [Nada longe do seu conteúdo](#2026-10-16--nada-longe-do-seu-conteúdo)
 - O `exec` de uma sonda (`ReadCtx.exec`) vai para o log do módulo em `debug`: a aba Logs a esconde em `info+` e a mostra em `debug+` → [exec das sondas no nível debug](#2026-10-16--exec-das-sondas-no-nível-debug)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1647,3 +1648,20 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o técnico lê a aba Logs para achar o que aconteceu, não cada programa que uma leitura chamou.
 
 **Limite:** o `exec` de um comando (`CommandCtx`) nunca foi registrado e segue assim; uma falha de programa chega ao técnico pelo resultado do comando. Teste: `permissions.test.ts`.
+
+## 2026-10-16 — Nada longe do seu conteúdo
+
+**Status:** vigente.
+
+**Contexto:** num terminal de 250 colunas, a última coluna do hub do Issabel (`já instalado`) ia para a borda direita, longe do resto da linha, e no formulário do Firewall o `[ remover ]` ficava na borda enquanto `[ salvar ]  [ cancelar ]` ficavam à esquerda. "O usuário nem sabe que o botão existe, por que ele olharia pro lado."
+
+**Decisão:**
+
+- `CONTENT_MAX_W` (110, `layout.ts`) é a largura legível do conteúdo. `Panel` com cabeçalho, `Notice`, `Row right` e a linha de filtros de Logs e de Módulos têm no máximo essa largura; o formulário calcula a célula de valor sobre ela. `aside`, `Row right`, o botão de um `Notice` e o `ao vivo` de Logs alinham ao fim dela, não ao do terminal. Seções lado a lado dividem o terminal e cada uma tem o seu teto.
+- Numa `List`, a coluna toma a largura do conteúdo, no máximo `COLUMN_MAX_W` (60) com `…`; `grow` cresce só até o conteúdo e esse teto (o que um `grow` não usa vai para os outros). A tabela tem a largura das colunas e a linha selecionada se destaca só até o fim dela; uma lista sem colunas, até o fim do texto mais largo.
+- Os botões de um formulário (`Fields`) ficam juntos numa fileira: `[ salvar ]  [ cancelar ]  [ remover ]`, o `remover` por último, no tom `error`.
+- Início: o botão de uma linha de Atenção fica numa coluna logo depois do texto mais largo da seção, e a linha se destaca até o botão. Sistema, Tarefas e Logs usam a mesma largura; em Logs a linha tem a largura do conteúdo ou a da entrada mais longa, se maior. O bloco da máquina (barras dos núcleos e fatos) para de crescer nas 116 colunas que tem em 120.
+
+**Motivo:** o olho do técnico não percorre 250 colunas; o que age sobre uma linha tem de ficar junto dela.
+
+**Limite:** o Comando (scrollback) e a grade de cartões de Módulos continuam usando a largura toda: um é um terminal, o outro uma grade. Um módulo que desenha à mão com `justifyContent` ou largura do terminal (`useViewport`) segue por conta própria. Testes: `wide.test.tsx` (250x40) e os de `home`, `logs`, `sistema` e `tarefas`.

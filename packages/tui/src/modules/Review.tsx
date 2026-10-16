@@ -6,7 +6,7 @@ import { codeDiff, listCode, readCode, reviewModule, trustModule, updateLines, u
 import { join } from "node:path";
 import { addPageRow, matchKey, reviewRows } from "../keymap.ts";
 import { useKeys } from "../keys.tsx";
-import { useLayout } from "../layout.ts";
+import { CONTENT_MAX_W, useLayout } from "../layout.ts";
 import { Result } from "../menu/Result.tsx";
 import { useNudge } from "../nudge.tsx";
 import { clean } from "../palette/search.ts";
@@ -119,7 +119,7 @@ function Gutter({ n, marked }: { n: number; marked: Set<number> }) {
 /** Left and right ends of a line; when they do not fit, the `cut` side gives way. */
 function Split({ left, right, cut = "left" }: { left: ReactNode; right?: ReactNode; cut?: "left" | "right" }) {
   return (
-    <box flexDirection="row" flexShrink={0} justifyContent="space-between">
+    <box flexDirection="row" flexShrink={0} justifyContent="space-between" maxWidth={CONTENT_MAX_W}>
       <box flexShrink={cut === "left" ? 1 : 0} minWidth={0} overflow="hidden">{left}</box>
       {right ? <box flexShrink={cut === "right" ? 1 : 0} minWidth={0} overflow="hidden" paddingLeft={2}>{right}</box> : null}
     </box>

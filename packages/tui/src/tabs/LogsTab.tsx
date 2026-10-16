@@ -6,6 +6,7 @@ import { matchKey } from "../keymap.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
 import { LineText } from "../LineText.tsx";
 import { useKeys, type RoutedKey } from "../keys.tsx";
+import { CONTENT_MAX_W } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
 import { useScreenScope } from "../router.tsx";
 import { useOver } from "../hover.ts";
@@ -16,7 +17,7 @@ import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
 import { LogRowView } from "./LogRows.tsx";
-import { ALL_SOURCES, AUDIT_SOURCE, filterEntries, groupByDay, jobHint, levelChipLabel, MAX_SHOWN, nextLevel, phaseAt, sourceChips, sourceLabel, stepSource, withIds, type LogLine } from "./logs-view.ts";
+import { ALL_SOURCES, AUDIT_SOURCE, filterEntries, groupByDay, jobHint, levelChipLabel, logRowWidth, MAX_SHOWN, nextLevel, phaseAt, sourceChips, sourceLabel, stepSource, withIds, type LogLine } from "./logs-view.ts";
 import { useLogEntries } from "./useLogEntries.ts";
 
 /** What the Logs tab remembers across a tab switch (the tab unmounts): the chips, the search and which log. */
@@ -121,8 +122,9 @@ export function LogsTab({ store, registry, nav, refreshMs }: { store: SessionApi
   }, [job?.module, job?.name, currentLine?.id]);
   const sourceWidth = Math.min(14, Math.max(0, ...lines.map((line) => [...sourceLabel(line.entry.source)].length)));
 
+  const rowWidth = logRowWidth(lines, sourceWidth);
   const chipsLine = (
-    <box flexDirection="row" justifyContent="space-between" flexShrink={0} paddingX={1}>
+    <box flexDirection="row" justifyContent="space-between" flexShrink={0} paddingX={1} maxWidth={CONTENT_MAX_W}>
       <box flexDirection="row" flexWrap="wrap" columnGap={1} flexShrink={1}>
         {nav.audit
           ? <FilterChips chips={[{ id: AUDIT_SOURCE, label: AUDIT_SOURCE }]} selected={AUDIT_SOURCE} onSelect={toggleAudit} />
@@ -144,7 +146,7 @@ export function LogsTab({ store, registry, nav, refreshMs }: { store: SessionApi
           {rows.length === 0 ? <text wrapMode="none" fg={c.dim} flexShrink={0}>{nav.search || nav.level !== "info" || source !== ALL_SOURCES ? "nada com este filtro" : "sem registros"}</text> : null}
           {rows.map((row) => row.kind === "day"
             ? <text key={row.id} wrapMode="none" flexShrink={0} fg={c.dim}>{row.label}</text>
-            : <LogRowView key={row.id} line={row.line} on={focused && row.line.id === currentLine?.id} current={row.line.id === currentLine?.id} lit={over.over === row.id} opened={opened && row.line.id === currentLine?.id} hint={row.line.id === currentLine?.id ? hint : undefined} sourceWidth={sourceWidth} onOver={over.enter} onOut={over.leave} onPick={(line) => select(line.id)} />)}
+            : <LogRowView key={row.id} line={row.line} on={focused && row.line.id === currentLine?.id} current={row.line.id === currentLine?.id} lit={over.over === row.id} opened={opened && row.line.id === currentLine?.id} hint={row.line.id === currentLine?.id ? hint : undefined} sourceWidth={sourceWidth} width={rowWidth} onOver={over.enter} onOut={over.leave} onPick={(line) => select(line.id)} />)}
         </box>
       </scrollbox>
     </box>

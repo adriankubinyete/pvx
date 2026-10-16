@@ -5,6 +5,7 @@ import { RGBA } from "@opentui/core";
 import { createLogger, createRegistry, createStore, jobsConfig, loadModules, logsDir, phasesKey, pvxHome, runCapture, tuiStatePath, writeJobState, appendJobLog, readJobState, type Registry } from "@pvx/core";
 import type { PhasesState } from "@pvx/sdk";
 import { expectButtonsReachable, expectNoKeyboardTrap, renderTui, type TuiHarness } from "../../testing/src/index.ts";
+import { CONTENT_MAX_W } from "../src/layout.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme, ui } from "../src/index.ts";
 import { tokens } from "../src/theme.ts";
 
@@ -248,4 +249,12 @@ test("with tasks the keyboard is free too: esc from inside reaches the bar", asy
   const { t } = await mount({ cols: 120, rows: 40 });
   await gotoTarefas(t);
   await expectNoKeyboardTrap(t);
+});
+
+test("Tarefas at 250x40 keeps the lists and the log rule within the content width", async () => {
+  seedTasks();
+  const { t } = await mount({ cols: 250, rows: 40 });
+  await gotoTarefas(t);
+  const widest = Math.max(...lines(t).slice(2).map((line) => line.trimEnd().length));
+  expect(widest).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
 });
