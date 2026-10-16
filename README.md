@@ -31,6 +31,18 @@ sudo pvx uninstall --purge    # remove também /etc/pvx
 
 `--purge` nunca apaga `notes.jsonl` nem `usermodules/` sem confirmação: no terminal ele pergunta; sem terminal, só com `--purge-notes-and-modules` (`--yes` não basta).
 
+## Notas
+
+Recados para os outros técnicos, guardados em `/etc/pvx/notes.jsonl`.
+
+```sh
+sudo pvx nota add "trocar a senha do tronco" --assinatura "Ana"   # a assinatura é opcional
+sudo pvx nota remove 3      # pede confirmação; --yes fora de um terminal
+pvx nota list               # as mais novas primeiro, com o número de cada uma
+```
+
+No Início, a seção `2 Notas` mostra cada nota como `dd/mm  texto  — assinatura`; `+ nova nota` (ou `n`) abre o formulário e `enter` numa nota oferece removê-la. O texto fica legível para todos os técnicos: não cole senhas.
+
 ## Compilar do código-fonte
 
 Requer [Bun](https://bun.com).

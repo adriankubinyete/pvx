@@ -1,5 +1,5 @@
 // The rows of the three sections of Início, as plain data: the component only draws them.
-import type { Tone } from "@pvx/sdk";
+import type { HomeNote, Tone } from "@pvx/sdk";
 import { clean } from "../palette/search.ts";
 import type { Glyphs } from "../theme.ts";
 import { activity, relTime, type Att, type Chip, type Conformity, type Level } from "./home.ts";
@@ -31,6 +31,8 @@ export interface HomeRow {
   dim?: boolean;
   /** When it happened (ms), for a row of the activity. */
   at?: number;
+  /** The command line that removes the row (a note); `enter` runs it and the session asks first. */
+  remove?: string;
 }
 
 /** The row that checks the conformity when it was never checked. */
@@ -74,8 +76,23 @@ export function upToDateText(count: number): string | undefined {
 /** The pending items someone ignored for 24 hours, as dim lines (their text already says until when). */
 export const ignoredTexts = (done: Conformity | undefined): string[] => done?.ignored ?? [];
 
-export function noteRows(notes: readonly string[], canCompose: boolean): HomeRow[] {
-  const rows = notes.map((text, index): HomeRow => ({ id: `note:${index}`, text: clean(text) }));
+/** `16/10`, local time. */
+export function dayMonth(at: string): string {
+  const date = new Date(at);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}`;
+}
+
+/** `16/10  texto  — assinatura`: the text on one line, the signature when there is one. */
+export function noteText(note: HomeNote): string {
+  const text = clean(note.text).replace(/\n+/g, " ").trim();
+  const signature = note.signature ? `  — ${clean(note.signature)}` : "";
+  return `${dayMonth(note.at)}  ${text}${signature}`;
+}
+
+/** The notes as rows, newest first (the slot's order), and `+ nova nota` after them when something can write one. `removeLine` is the command that removes a note, to which its number is added. */
+export function noteRows(notes: readonly HomeNote[], canCompose: boolean, removeLine?: string): HomeRow[] {
+  const rows = notes.map((note): HomeRow => ({ id: `note:${note.n}`, text: noteText(note), remove: removeLine ? `${removeLine} ${note.n}` : undefined }));
   return canCompose ? [...rows, { id: NEW_NOTE_ROW_ID, text: NEW_NOTE_TEXT, action: true }] : rows;
 }
 

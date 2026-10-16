@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { ConfirmOptions, Logger, OutLine, SessionInfo } from "@pvx/sdk";
+import type { CommandDef, ConfirmOptions, Logger, OutLine, SessionInfo } from "@pvx/sdk";
 import { secretEnv } from "../palette/form.ts";
 import { interactiveProgram, spawnShell, type ShellRun } from "./shell.ts";
 import { auditCommand, execute, requiresRoot, type CoreLine, resolveCommand, resolvePage, rootMessage, tokenize, type Registry } from "@pvx/core";
@@ -75,8 +75,8 @@ export interface SessionApi {
   getSnapshot(): SessionState;
 }
 
-/** The question before a destructive command runs. */
-const destructiveCommandQuestion = (key: string): ConfirmOptions => ({ title: `rodar ${key}?`, description: "este comando é destrutivo", destructive: true });
+/** The question before a destructive command runs: the command's own words (`CommandDef.confirm`) over the default ones. */
+const destructiveCommandQuestion = (key: string, own?: CommandDef["confirm"]): ConfirmOptions => ({ title: `rodar ${key}?`, description: "este comando é destrutivo", ...own, destructive: true });
 
 /** The question before a host mutation (trust, update, remove...) runs. */
 const hostActionQuestion = (line: string): ConfirmOptions => ({ title: `rodar ${line}?`, destructive: true });
@@ -168,7 +168,7 @@ export function createSessionStore(opts: SessionOpts): SessionApi {
     let lines: OutLine[];
     try {
       const denied = !isRoot && requiresRoot(registry, argv);
-      const confirmed = !denied && found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", ...destructiveCommandQuestion(found.key) }) : false;
+      const confirmed = !denied && found?.cmd.destructive ? await ask<boolean>({ kind: "confirm", ...destructiveCommandQuestion(found.key, found.cmd.confirm) }) : false;
       if (denied) lines = [{ kind: "error", text: rootMessage() }];
       else if (line.startsWith("#")) lines = [{ kind: "error", text: `página não encontrada: ${line.slice(1).trim()}` }];
       else if (found?.cmd.destructive && !confirmed) lines = [{ kind: "warning", text: "cancelado" }];

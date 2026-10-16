@@ -1,7 +1,7 @@
 import { hostname } from "node:os";
 import { EXIT } from "@pvx/sdk";
 import { fg } from "../ansi.ts";
-import { activeIgnores, auditLogin, currentUser, lastSeen, readSnapshot } from "../journal/index.ts";
+import { activeIgnores, auditLogin, currentUser, readSnapshot } from "../journal/index.ts";
 import type { CoreCommand } from "./core.ts";
 import type { CliIO } from "./run.ts";
 
@@ -9,14 +9,11 @@ const MAX_PENDING = 5;
 const MAX_NOTES = 3;
 const DEFAULT_COLS = 80;
 
-/** The folded note the notes role returns (shape fixed by the `notesState` role in the SDK). */
+/** The note the notes role returns (shape fixed by the `notesState` role in the SDK). */
 interface NoteState {
-  author: string;
   at: string;
   text: string;
-  pinned: boolean;
-  login?: boolean;
-  resolved: boolean;
+  signature?: string;
 }
 
 const one = (s: string) => s.replace(/\s+/g, " ").trim();
@@ -28,19 +25,20 @@ function ago(ms: number): string {
   return m < 1 ? "agora" : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`;
 }
 
-/** Pinned (or login-flagged) open notes, newest first, and how many open notes by others are newer than the user's marker. */
-async function readNotes(io: CliIO, me: string): Promise<{ shown: NoteState[]; fresh: number } | undefined> {
+/** The newest open notes, at most `MAX_NOTES`. */
+async function readNotes(io: CliIO): Promise<NoteState[] | undefined> {
   const q = io.registry.roles.get("notesState")?.name;
   if (!q) return undefined;
   try {
-    const open = ((await io.registry.query(q)) as NoteState[]).filter((n) => !n.resolved);
-    const seen = lastSeen(me) ?? 0;
-    const shown = open.filter((n) => n.pinned || n.login).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.at.localeCompare(a.at));
-    return { shown: shown.slice(0, MAX_NOTES), fresh: open.filter((n) => n.author !== me && Date.parse(n.at) > seen).length };
+    const open = (await io.registry.query(q)) as NoteState[];
+    return [...open].sort((a, b) => b.at.localeCompare(a.at)).slice(0, MAX_NOTES);
   } catch {
     return undefined; // a source that fails is skipped, never the login
   }
 }
+
+/** `texto — assinatura`, or just the text when nobody signed. */
+const noteText = (note: NoteState): string => (note.signature ? `${one(note.text)} — ${one(note.signature)}` : one(note.text));
 
 /**
  * The login banner: plain text from what is already on disk (the last conformity snapshot) and one registry query for
@@ -51,7 +49,6 @@ export async function bannerLines(io: CliIO, now = Date.now()): Promise<string[]
   const accent = (s: string) => fg(io.theme.accent, s);
   const dim = (s: string) => fg(io.theme.info, s);
   const level = { ok: ["✓", io.theme.ok], warn: ["!", io.theme.warn], error: ["✗", io.theme.error] } as const;
-  const me = currentUser(io.env);
   const rule = accent("═".repeat(Math.min(cols, 78)));
   const body: string[] = [];
 
@@ -69,10 +66,10 @@ export async function bannerLines(io: CliIO, now = Date.now()): Promise<string[]
     if (pending.length > MAX_PENDING) body.push(dim(cut(`+${pending.length - MAX_PENDING} pendência(s): pvx conformidade`, cols)));
   }
 
-  const notes = await readNotes(io, me);
-  if (notes && (notes.shown.length || notes.fresh)) {
-    body.push(cut(`notas${notes.fresh ? ` · ${notes.fresh} ${notes.fresh === 1 ? "nova" : "novas"} para você` : ""}`, cols));
-    for (const n of notes.shown) body.push(`  ${accent("▸")} ${cut(`${one(n.author)}: ${one(n.text)}`, cols - 4)}`);
+  const notes = await readNotes(io);
+  if (notes?.length) {
+    body.push("notas");
+    for (const n of notes) body.push(`  ${accent("▸")} ${cut(noteText(n), cols - 4)}`);
   }
 
   const profile = snap ? ` · perfil ${snap.profile}` : "";

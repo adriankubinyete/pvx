@@ -3,7 +3,7 @@ import conformidade from "./conformidade/src/index.tsx";
 import conformidadeManifest from "./conformidade/pvx-module.json";
 import motd from "./motd/src/index.ts";
 import motdManifest from "./motd/pvx-module.json";
-import notas from "./notas/src/index.tsx";
+import notas from "./notas/src/index.ts";
 import notasManifest from "./notas/pvx-module.json";
 
 /**

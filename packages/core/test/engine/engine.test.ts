@@ -115,10 +115,9 @@ describe("roles", () => {
 
   test("a page role and a module role resolve without the module name; unregister drops them", () => {
     const r = createRegistry();
-    r.register(m("a"), { pages: { one: { ...page, role: "plan" }, two: page }, roles: { compose: "q.compose" } });
+    r.register(m("a"), { pages: { one: { ...page, role: "plan" }, two: page }, roles: { removeNote: "a remove" } });
     expect(pageWithRole(r, "plan")?.key).toBe("a.one");
-    expect(pageWithRole(r, "notes")).toBeUndefined();
-    expect(r.roles.get("compose")).toEqual({ moduleId: "a", name: "q.compose" });
+    expect(r.roles.get("removeNote")).toEqual({ moduleId: "a", name: "a remove" });
     r.unregister("a");
     expect(pageWithRole(r, "plan")).toBeUndefined();
     expect(r.roles.size).toBe(0);

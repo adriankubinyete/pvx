@@ -1,7 +1,7 @@
 {
   "id": "nota",
-  "version": "1.0.0",
-  "entry": "src/index.tsx",
-  "permissions": { "fs": ["rw:$PVX_HOME/notes.jsonl", "rw:$PVX_HOME/seen/", "rw:$PVX_HOME/people.json"] },
-  "contributes": { "commands": ["nota add", "nota list", "nota fixar", "nota desfixar", "nota resolver", "nota editar"], "pages": ["notas"], "widgets": ["home"] }
+  "version": "2.0.0",
+  "entry": "src/index.ts",
+  "permissions": { "fs": ["rw:$PVX_HOME/notes.jsonl"] },
+  "contributes": { "commands": ["nota add", "nota remove", "nota list"], "widgets": ["home"] }
 }

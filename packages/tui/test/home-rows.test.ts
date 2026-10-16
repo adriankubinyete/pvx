@@ -24,8 +24,18 @@ test("the plan button counts the steps, and exists only with a plan page and ste
   expect(actionButtons(0, true, true).map((button) => button.action)).toEqual(["verify"]);
 });
 
-test("the notes get a `+ nova nota` row only when a module can compose, and text is cut with an ellipsis", () => {
-  expect(noteRows(["14/10 troca"], true).map((row) => row.id)).toEqual(["note:0", "nova"]);
+test("the notes are `dd/mm  texto  — assinatura` rows in the order given, each with the command that removes it, and `+ nova nota` only when something can write one", () => {
+  const notes = [
+    { n: 3, at: "2026-10-16T10:00:00", text: "troca do tronco\nconcluída", signature: "Ana" },
+    { n: 1, at: "2026-10-02T10:00:00", text: "sem assinatura" },
+  ];
+  const rows = noteRows(notes, true, "nota remove");
+  expect(rows.map((row) => [row.id, row.text, row.remove])).toEqual([
+    ["note:3", "16/10  troca do tronco concluída  — Ana", "nota remove 3"],
+    ["note:1", "02/10  sem assinatura", "nota remove 1"],
+    ["nova", "+ nova nota", undefined],
+  ]);
+  expect(noteRows(notes, false).map((row) => row.id)).toEqual(["note:3", "note:1"]);
   expect(noteRows([], false)).toEqual([]);
   expect(truncate("abcdef", 4)).toBe("abc…");
   expect(truncate("abc", 4)).toBe("abc");

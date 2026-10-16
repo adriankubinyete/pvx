@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
-import { activeIgnores, addIgnore, auditLogin, createRegistry, driftOf, execute, lastSeen, markSeen, pvxHome, runCli, type CliIO, type Registry } from "../../src/index.ts";
+import { activeIgnores, addIgnore, auditLogin, createRegistry, driftOf, execute, pvxHome, runCli, type CliIO, type Registry } from "../../src/index.ts";
 import { appendJsonl, readJsonl } from "../../src/journal/jsonl.ts";
 
 const noop = () => {};
@@ -11,7 +11,7 @@ const theme = { text: "#fff", accent: "#0f0", ok: "#0f0", warn: "#ff0", error: "
 const lines = (file: string) => (existsSync(join(pvxHome(), file)) ? readFileSync(join(pvxHome(), file), "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l)) : []);
 
 let level: "ok" | "warn" | "error" = "ok";
-const notes: string[][] = [];
+const notes: string[] = [];
 function build(withNotas = false): Registry {
   const r = createRegistry();
   r.register(
@@ -25,7 +25,7 @@ function build(withNotas = false): Registry {
       capabilities: [{ id: "t.cap", title: "cap", goal: "g", fix: "t read", prove: () => ({ level, text: `nível ${level}` }) }],
     },
   );
-  if (withNotas) r.register({ id: "nota", version: "1", entry: "x" }, { roles: { addNote: "nota add" }, commands: { add: { help: "h", args: [{ name: "tag", help: "", kind: "option" }, { name: "ref", help: "", kind: "option" }, { name: "text", help: "", kind: "positional" }], run: (c) => void notes.push([String(c.args.tag), String(c.args.ref), String(c.args.text)]) } } });
+  if (withNotas) r.register({ id: "nota", version: "1", entry: "x" }, { roles: { addNote: "nota add" }, commands: { add: { help: "h", args: [{ name: "text", help: "", kind: "positional" }], run: (c) => void notes.push(String(c.args.text)) } } });
   return r;
 }
 const withEnv = async (env: Record<string, string | undefined>, fn: () => Promise<void> | void) => {
@@ -142,7 +142,7 @@ describe("ignore", () => {
     const r = build(true);
     const out: string[] = [];
     expect(await runCli(io(["conformidade", "ignorar", "t.cap", "--motivo", "cliente pediu"], r, out))).toBe(0);
-    expect(notes).toEqual([["ignorado", "cap:t.cap", "cliente pediu"]]);
+    expect(notes).toEqual(["ignorado t.cap: cliente pediu"]);
     expect(activeIgnores()[0]).toMatchObject({ id: "t.cap", reason: "cliente pediu" });
     const plan: string[] = [];
     await runCli(io(["plano"], r, plan));
@@ -162,15 +162,5 @@ describe("ignore", () => {
     expect(activeIgnores()[0]!.reason).toBe("x");
     expect(await runCli(io(["conformidade", "ignorar", "nope", "--motivo", "x"], build(), []))).toBe(2);
     expect(await runCli(io(["conformidade", "ignorar", "t.cap"], build(), []))).toBe(2);
-  });
-});
-
-describe("seen", () => {
-  test("markSeen writes a per-user marker that lastSeen reads", () => {
-    expect(lastSeen("ana")).toBeUndefined();
-    markSeen("ana", 1_000_000);
-    expect(JSON.parse(readFileSync(join(pvxHome(), "seen", "ana.json"), "utf8"))).toEqual({ at: new Date(1_000_000).toISOString() });
-    expect(lastSeen("ana")).toBe(1_000_000);
-    expect(lastSeen("carlos")).toBeUndefined();
   });
 });

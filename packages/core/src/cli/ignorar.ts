@@ -12,6 +12,9 @@ const ignorarArgs: ArgSpec[] = [
   { name: "capacidade", help: "Id da capacidade pendente", kind: "positional", required: true },
   { name: "motivo", help: "Por que ignorar (vira nota ligada à capacidade)", kind: "option", required: true },
 ];
+/** What the note says: which capability was ignored and why. */
+const ignoredNoteText = (capability: string, reason: string): string => `ignorado ${capability}: ${reason}`;
+
 export const IGNORE_COMMANDS: CoreCommand[] = [
   {
     key: "conformidade ignorar",
@@ -30,12 +33,12 @@ export const IGNORE_COMMANDS: CoreCommand[] = [
       // The note goes through the normal command path (log, audit, scrollback), by the command a module declared as role `addNote`.
       // Without one the reason stays here.
       const addNote = io.registry.roles.get("addNote")?.name.split(" ") ?? [];
-      const argv = [...addNote, "--tag", "ignorado", "--ref", `cap:${id}`, reason];
+      const argv = [...addNote, ignoredNoteText(id, reason)];
       if (!addNote.length || !resolveCommand(io.registry, argv)) o.line({ kind: "warning", text: "módulo de notas não carregado: o motivo ficou só no registro de ignorados" });
       else {
         const r = await execute(io.registry, argv, { makeLogger: io.makeLogger, confirmed: true, isRoot: io.isRoot, env: io.env });
         if (!r.ok) o.line({ kind: "warning", text: `a nota não foi criada (${r.lines.find((l) => l.kind === "error")?.text ?? `exit ${r.exit}`}); o motivo ficou no registro de ignorados` });
-        else o.line({ kind: "info", text: `nota criada: ${lineOf(addNote)} --ref cap:${id}` });
+        else o.line({ kind: "info", text: `nota criada: ${lineOf(addNote)}` });
       }
       return EXIT.OK;
     },

@@ -51,7 +51,7 @@ export default factory;
 
 A chave em `commands` é o caminho do comando com espaços (`"ip trust"`); o usuário digita `pvx <módulo> <caminho>`. O mesmo `run()` serve à CLI e à TUI.
 
-`CommandDef`: `help`, `title` (o título humano do formulário, em pt-BR), `args`, `destructive`, `page`, `run(ctx)`.
+`CommandDef`: `help`, `title` (o título humano do formulário, em pt-BR), `args`, `destructive`, `confirm`, `page`, `run(ctx)`.
 
 `ctx` traz `args`, `out` (`success`, `warning`, `error`, `info`, `plain`), `log`, `store`, `query`, `isRoot` e `signal`. `ctx.isRoot` é `true` quando o pvx roda como root (no Windows é sempre `true`): use-o em vez de ler o uid do processo (o `ReadCtx` também o tem). `ctx.signal` aborta quando o host para o job em que o comando roda (`jobs.stop`); fora de um job nunca aborta.
 
@@ -94,7 +94,7 @@ const factory: ModuleFactory = () => ({
 export default factory;
 ```
 
-`destructive: true` exige `--yes` fora de TTY; a TUI usa a confirmação do host.
+`destructive: true` exige `--yes` fora de TTY; a TUI usa a confirmação do host. `confirm` dá as palavras do diálogo da TUI (`title`, `description`, `confirmLabel`, `cancelLabel`), por exemplo `remover nota` e `manter`; sem ele o diálogo pergunta `rodar <comando>?` com `[ cancelar ]  [ confirmar ]`.
 
 **Flags globais.** `--json`, `--yes` e `--help`/`-h` valem em qualquer posição da linha, antes de um `--` (`pvx firewall status --json`). Se o comando declara um arg com o mesmo nome, o arg é do comando e a flag global não age.
 
@@ -456,7 +456,7 @@ export default (sdk: Sdk) => {
 | `home.attention`, `home.configured` | `{ level, title, fix? }[]` |
 | `home.summary` | `string` |
 | `home.product` | `string`: o produto da central, na linha da máquina do Início (`Issabel 5`) |
-| `home.notes` | `string[]` |
+| `home.notes` | `{ n, at, text, signature? }[]` (`HomeNote`): as notas abertas, as mais novas primeiro; o Início as mostra como `dd/mm  texto  — assinatura` |
 | `home.panel` | forma ainda em definição |
 
 `priority` ordena os widgets dentro do slot. `data(ctx)` recebe o `ReadCtx` (só leitura) e pode ser assíncrona; é chamada de novo a cada `refreshMs`, se houver. Um `data()` que passa de 2 s é removido: dê um `timeoutMs` curto ao `ctx.exec` que usar. O contrato dos widgets segue os tipos de `src/index.ts` (`WidgetDef`, `SlotId`, `SlotData`): em caso de dúvida, os tipos valem.
@@ -485,27 +485,24 @@ O host não cita módulo pelo nome (nem `nota`, nem `conformidade`). Quando prec
 | Papel | Onde se declara | O que o host faz com ele |
 | --- | --- | --- |
 | `role: "plan"` | `PageDef.role` | A página do plano: hoje a página do módulo `conformidade`, com os painéis resultados e plano. O host a abre como tela empilhada, sem nomear o módulo. |
-| `role: "notes"` | `PageDef.role` | O Início abre essa página (tela empilhada) no `n` e no painel de notas. |
-| `roles.compose` | `ModuleDef.roles` | Nome de uma consulta: o `n` do Início a chama para abrir o editor de nota. |
-| `roles.notesState` | `ModuleDef.roles` | Nome de uma consulta que devolve as notas dobradas (`{ author, at, text, pinned, login?, resolved }[]`): o banner de login lê as fixadas por ela. |
-| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, aceita `--tag`, `--ref` e o texto): `conformidade ignorar` grava o motivo com ele. |
+| `roles.notesState` | `ModuleDef.roles` | Nome de uma consulta que devolve as notas abertas (`{ at, text, signature? }[]`): o banner de login mostra as três mais novas. |
+| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, o texto e `--assinatura`): o `+ nova nota` do Início monta o formulário padrão a partir dos `args` dele, e `conformidade ignorar` grava o motivo com ele. |
+| `roles.removeNote` | `ModuleDef.roles` | Comando que remove nota (`"<id> remove"`, o número `n` que o slot `home.notes` traz): o `enter` numa nota do Início o roda, e a sessão pergunta antes se ele é `destructive`. |
 
-Cada papel tem um dono só: um segundo módulo que o declare é recusado ("conflito"). Sem dono, a função some em silêncio (sem notas, o `n` do Início não faz nada).
+Cada papel tem um dono só: um segundo módulo que o declare é recusado ("conflito"). Sem dono, a função some em silêncio (sem `addNote`, o Início não oferece `+ nova nota`).
 
 <!-- test -->
-```tsx
-/** @jsxRuntime classic */
-/** @jsx h */
+```ts
 import type { ModuleFactory } from "@pvx/sdk";
 
-const factory: ModuleFactory = (sdk) => ({
-  commands: { add: { help: "Cria uma nota", run: (ctx) => ctx.out.success("criada") } },
-  queries: {
-    "notas.compose": () => undefined,
-    "notas.state": () => [],
+const factory: ModuleFactory = () => ({
+  commands: {
+    add: { help: "Cria uma nota", run: (ctx) => ctx.out.success("criada") },
+    remove: { help: "Remove uma nota", destructive: true, confirm: { title: "remover a nota?", confirmLabel: "remover nota", cancelLabel: "manter" }, run: (ctx) => ctx.out.success("removida") },
   },
-  pages: { notas: { title: "notas", render: () => <sdk.ui.Text>notas</sdk.ui.Text>, role: "notes" } },
-  roles: { compose: "notas.compose", notesState: "notas.state", addNote: "doc add" },
+  queries: { "notas.state": () => [] },
+  widgets: { notas: { slot: "home.notes", priority: 0, data: () => [{ n: 1, at: "2026-10-16T10:00:00.000Z", text: "troca do tronco", signature: "Ana" }] } },
+  roles: { notesState: "notas.state", addNote: "doc add", removeNote: "doc remove" },
 });
 export default factory;
 ```

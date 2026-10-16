@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { createMachineSampler, hostSession, pageWithRole, type MachineSampler, type Registry } from "@pvx/core";
-import type { SessionInfo } from "@pvx/sdk";
+import type { HomeNote, SessionInfo } from "@pvx/sdk";
 import { matchKey } from "../keymap.ts";
 import { useOver } from "../hover.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { panelStep, usePanelNav, wrap } from "../panelnav.ts";
 import { capContent, useLayout } from "../layout.ts";
-import { useScreenScope } from "../router.tsx";
+import { useRouter, useScreenScope } from "../router.tsx";
+import { SessionModals } from "../session/Modals.tsx";
 import { loadFavorites } from "../palette/favorites.ts";
 import { Loading } from "../sdk-ui/flow.tsx";
 import { usePages } from "../sdk-ui/host.tsx";
@@ -19,6 +20,7 @@ import { useTabs } from "./context.ts";
 import { conformityOf, conformityView } from "./conformity.ts";
 import { MachineBlock } from "./HomeMachine.tsx";
 import { ActionsLine, HomeRowView, rowColumns } from "./HomeRows.tsx";
+import { NoteComposer, outcomeOfRun } from "./HomeNote.tsx";
 import { actionButtons, ACTIONS_ROW_ID, activityRows, activitySummary, attentionRows, chipRows, ignoredTexts, memoryRows, NEW_NOTE_ROW_ID, NEW_NOTE_TEXT, noteRows, notesSummary, unverifiedRow, upToDateText, VERIFY_ROW_ID, type HomeAction, type HomeRow } from "./home-rows.ts";
 import { parseConformity, slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
@@ -73,8 +75,10 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const nudge = useNudge();
   const panels = usePanelNav();
   const focused = tabs?.focused ?? true;
-  useScreenScope(nav.home.inside ? "homein" : "home", 1); // inside a section the footer changes; the tab bar (rank 2) still outranks it
-  const { history, blocks } = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const [composing, setComposing] = useState(false); // the `+ nova nota` form takes the place of the page
+  useScreenScope(composing ? "form" : nav.home.inside ? "homein" : "home", 1); // inside a section the footer changes; the tab bar (rank 2) still outranks it
+  const { history, blocks, pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
+  const router = useRouter();
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const machine = useMemo(() => sampler ?? (shared ??= createMachineSampler()), [sampler]);
   const [sample, setSample] = useState(() => machine.sample());
@@ -99,22 +103,22 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const done = snap.conformidade ? parseConformity(snap.conformidade) : undefined;
   syncHost(slots, done, registry.warnings); // the profile's items and the load avisos go through the same slots the modules use
 
-  // `n` on Início opens the composer of whichever module declared the roles: the page with role `notes` and the `compose` query.
-  const notesPage = pageWithRole(registry, "notes");
-  const compose = registry.roles.get("compose")?.name;
-  const canCompose = Boolean(notesPage && compose);
+  // The notes come from the `home.notes` slot and go through the commands of the `addNote` and `removeNote` roles: Início names no module.
+  const addNote = registry.roles.get("addNote")?.name;
+  const removeNote = registry.roles.get("removeNote")?.name;
+  const canCompose = addNote !== undefined && registry.commands.has(addNote);
   const planPage = pageWithRole(registry, "plan");
   const planSteps = conformityView(snap).plan.steps.length;
   const buttons = actionButtons(planSteps, Boolean(planPage), Boolean(snap.conformidade));
 
   const attention = slotItems<Att>(slots, "home.attention", hidden);
-  const notes = slotItems<string>(slots, "home.notes", hidden);
+  const notes = slotItems<HomeNote>(slots, "home.notes", hidden);
   const checked = Boolean(snap.conformidade);
   const chips = slotItems<Chip>(slots, "home.chips", hidden);
   const notices = [...attentionRows(attention, slots.broken("home.attention", hidden)), ...chipRows(chips, slots.broken("home.chips", hidden)), ...memoryRows(sample.mem), ...(checked || snap.running ? [] : [unverifiedRow()])];
   const rows: RowsBySection = {
     conformidade: [...notices, ...(checked ? [{ id: ACTIONS_ROW_ID, text: "" }] : [])],
-    notas: noteRows(notes, canCompose),
+    notas: noteRows(notes, canCompose, removeNote),
     atividade: activityRows(history, blocks, favorites, now, g),
   };
   const sections: readonly HomePanel[] = rows.notas.length ? ["conformidade", "notas", "atividade"] : ["conformidade", "atividade"];
@@ -128,8 +132,15 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const current = (panel: HomePanel) => rows[panel].find((row) => row.id === nav.home.sel[panel]) ?? rows[panel][0];
   const select = (panel: HomePanel, id: string) => (nav.home.sel[panel] = id, nav.home.panel = panel, nav.home.inside = true, bump());
   const refresh = () => (conf.refresh(), void slots.refresh());
-  const goNotes = () => notesPage && void store.run(`#${notesPage.key}`); // a pushed page, not a tab
   const goPlan = () => planPage && void store.run(`#${planPage.key}`);
+  /** `enter` on a note: its command runs, and the session asks first (the command is destructive). */
+  const removeNoteRow = async (row: HomeRow) => {
+    if (!row.remove) return;
+    const { exit } = await store.run(row.remove);
+    void slots.refresh();
+    const outcome = outcomeOfRun(store.blocks.at(-1), exit);
+    if (outcome) nudge(outcome.text, outcome.tone);
+  };
   const useCommand = (row?: HomeRow) => {
     if (!row?.use) return;
     nav.draft = row.use;
@@ -144,7 +155,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     if (!row) return;
     if (row.id === ACTIONS_ROW_ID) return press(nav.home.action);
     if (row.id === VERIFY_ROW_ID) return refresh();
-    if (panel === "notas") return row.id === NEW_NOTE_ROW_ID ? (void registry.query(compose!), goNotes()) : goNotes();
+    if (panel === "notas") return row.id === NEW_NOTE_ROW_ID ? setComposing(true) : void removeNoteRow(row);
     useCommand(row);
   };
 
@@ -184,7 +195,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   }, [cursorId, focused]);
 
   useKeys((key) => {
-    if (!focused) return;
+    if (!focused || composing) return;
     const direction = arrowOf(key);
     if (direction && onActionsRow(section, nav, current(section)) && switchAction(direction, nav, buttons, bump)) return true;
     const step = stepOf(key, section, nav, panels, rows);
@@ -209,7 +220,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const shortcut = (key: RoutedKey) => {
     const jump = sections[Number(key.sequence) - 1];
     if (jump && !key.ctrl) return nav.home.panel = jump, nav.home.inside = false, bump(), true;
-    if (matchKey(key, "n") && canCompose) return void registry.query(compose!), goNotes(), true;
+    if (matchKey(key, "n") && canCompose) return setComposing(true), true;
     if (matchKey(key, "esc")) return tabs?.focusBar(), true; // one level up: the section, then the bar
     if (matchKey(key, "p") && planPage && planSteps > 0) return goPlan(), true;
     if (matchKey(key, "r")) return refresh(), true;
@@ -279,17 +290,21 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     );
   };
 
+  if (composing) return <NoteComposer store={store} registry={registry} line={addNote!} onClose={() => setComposing(false)} onSaved={() => void slots.refresh()} />;
   return (
-    <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
-      <box flexDirection="column" paddingX={1} flexShrink={0}>
-        <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={Math.min(cols - FRAME_W, MACHINE_MAX_W)} />
-        {sections.map((panel) => {
-          if (panel === "conformidade") return frame(panel, attentionBody, profile ? `perfil: ${profile}` : "sem perfil");
-          if (!expanded(panel)) return oneLine(panel);
-          return frame(panel, sectionRows(panel));
-        })}
-      </box>
-    </scrollbox>
+    <>
+      <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
+        <box flexDirection="column" paddingX={1} flexShrink={0}>
+          <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={Math.min(cols - FRAME_W, MACHINE_MAX_W)} />
+          {sections.map((panel) => {
+            if (panel === "conformidade") return frame(panel, attentionBody, profile ? `perfil: ${profile}` : "sem perfil");
+            if (!expanded(panel)) return oneLine(panel);
+            return frame(panel, sectionRows(panel));
+          })}
+        </box>
+      </scrollbox>
+      {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}
+    </>
   );
 }
 

@@ -49,7 +49,7 @@ test("fresh server: core commands and the built-in pages are listed; `conf` find
   expect(search(registry, "#").every((x) => x.page)).toBe(true);
   expect(search(registry, "#").length).toBeGreaterThan(0);
   expect(search(registry, "@nucleo").every((x) => x.core)).toBe(true);
-  expect(keys("!")).toEqual([]);
+  expect(keys("!")).toEqual(["nota remove"]); // the only destructive command of a fresh server
 });
 
 test("running a core command from the palette lands in the scrollback", async () => {

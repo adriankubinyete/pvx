@@ -41,16 +41,16 @@ export interface ModuleDef {
 }
 
 /**
- * Host-defined roles. `compose` and `notesState` name one of this module's queries, `addNote` one of its commands
- * (a key of `commands`, with the module id first on the line: `"<id> add"`).
+ * Host-defined roles: each names one of this module's queries or commands (a key of `commands`, with the module id first on the line: `"<id> add"`).
+ * Início draws the notes from the `home.notes` slot and writes them through `addNote` and `removeNote`.
  */
 export interface Roles {
-  /** Query that opens the note composer (Início `n`). */
-  compose?: string;
-  /** Query that returns the folded notes (`{id, author, at, text, pinned, resolved, login}[]`), for the login banner. */
+  /** Query that returns the open notes (`{ at, text, signature? }[]`, newest first), for the login banner. */
   notesState?: string;
-  /** Command that adds a note: `<line> --tag T --ref R <text>` (`conformidade ignorar` records its reason with it). */
+  /** Command that adds a note: `<line> <text> [--assinatura <name>]`. Início's `+ nova nota` form is built from its `args`; `conformidade ignorar` records its reason with it. */
   addNote?: string;
+  /** Command that removes a note: `<line> <n>`, where `n` is the number the `home.notes` slot gives. Should be `destructive`, so the TUI asks first. */
+  removeNote?: string;
 }
 
 export interface CommandDef {
@@ -60,6 +60,8 @@ export interface CommandDef {
   args?: ArgSpec[];
   /** Marked with ! and confirmed in the plan. */
   destructive?: boolean;
+  /** What the TUI's confirmation dialog of a `destructive` command says. The default asks `rodar <comando>?` with `[ cancelar ]  [ confirmar ]`; a command that knows better names its action (`remover nota` / `manter`). */
+  confirm?: Omit<ConfirmOptions, "destructive">;
   /** Name of one of this module's pages: opened after the command runs ok. */
   page?: string;
   /** Only reads: runs without root (the host's strict-root rule skips it). Never set it on a command that mutates central data. */
@@ -653,8 +655,8 @@ export interface PageDef {
   keys?: KeySpec[];
   /** Also a tab in the tab bar, after the core tabs (sorted by `order`, then label). */
   tab?: boolean | { label: string; order?: number };
-  /** What the host may open without naming a module: the page with role `plan` is where the plan is shown, Início goes to `notes`. */
-  role?: "plan" | "notes";
+  /** What the host may open without naming a module: the page with role `plan` is where the plan is shown. */
+  role?: "plan";
 }
 
 export interface KeySpec {
@@ -730,11 +732,21 @@ export interface FieldOption {
  */
 export type SlotId = "home.chips" | "home.attention" | "home.configured" | "home.summary" | "home.product" | "home.notes" | "home.panel";
 
+/** One note of the `home.notes` slot: Início shows `dd/mm  text  — signature`, newest first. `n` is what `roles.removeNote` takes. */
+export interface HomeNote {
+  n: number;
+  /** ISO time the note was written. */
+  at: string;
+  text: string;
+  /** Who wrote it, when they said. */
+  signature?: string;
+}
+
 export type SlotData =
   | { label: string; level: Level; detail?: string }[] // home.chips
   | { level: Level; title: string; fix?: string }[] // home.attention, home.configured
   | string // home.summary, home.product
-  | string[]; // home.notes (home.panel is reserved)
+  | HomeNote[]; // home.notes (home.panel is reserved)
 
 export interface WidgetDef {
   slot: SlotId;

@@ -27,9 +27,8 @@ function seed(o: { agoMs?: number; notes?: boolean; results?: object[] } = {}) {
   writeFileSync(join(pvxHome(), "conformity-snapshot.json"), JSON.stringify({ at: Date.now() - (o.agoMs ?? 2 * 3600_000), profile: "Central Phonevox", results }));
   if (o.notes === false) return;
   const ev = [
-    { v: 1, id: "a1", at: "2026-10-09T10:00:00Z", ev: "add", author: "ana", text: "não reiniciar o asterisk antes das 18h" },
-    { v: 1, id: "a1", at: "2026-10-09T10:01:00Z", ev: "pin", author: "ana" },
-    { v: 1, id: "b2", at: "2026-10-09T11:00:00Z", ev: "add", author: "ana", text: "nota solta, não fixada" },
+    { v: 2, id: "a1", at: "2026-10-09T10:00:00Z", ev: "add", author: "ana", text: "não reiniciar o asterisk antes das 18h", signature: "Ana" },
+    { v: 2, id: "b2", at: "2026-10-09T11:00:00Z", ev: "add", author: "ana", text: "nota sem assinatura" },
   ];
   writeFileSync(join(pvxHome(), "notes.jsonl"), ev.map((e) => JSON.stringify(e)).join("\n") + "\n");
 }
@@ -63,9 +62,10 @@ test("sections, in under 1 s with the network unavailable and no evaluation", as
     expect(b.text).toContain("checklist 1/3 · verificado há 2 h");
     expect(b.text).toContain("[✗] SSL: certificado expirado\n    → pvx ssl renew");
     expect(b.text).toContain("[!] Backup: sem rotina");
-    expect(b.text).toContain("notas · 2 novas para você"); // both open notes are by someone else and newer than the (missing) marker
-    expect(b.text).toContain("▸ ana: não reiniciar o asterisk antes das 18h");
-    expect(b.text).not.toContain("nota solta"); // not pinned
+    expect(b.text).toContain("notas");
+    expect(b.text).toContain("▸ não reiniciar o asterisk antes das 18h — Ana");
+    expect(b.text).toContain("▸ nota sem assinatura");
+    expect(b.text.indexOf("nota sem assinatura")).toBeLessThan(b.text.indexOf("não reiniciar")); // newest first
     expect(b.out[0]).toMatch(/^═+$/);
     expect(b.out.at(-1)).toBe("digite pvx para abrir · PVX_QUIET=1 silencia");
     expect(proved).toBe(0); // it never evaluates
@@ -79,7 +79,7 @@ test("at most 5 pending items and 3 notes; an ignored item is not pending", asyn
   const results = Array.from({ length: 8 }, (_, i) => ({ id: `t.c${i}`, level: "error", text: `Item ${i}: falhou`, fix: `pvx fix ${i}` }));
   seed({ results, notes: false });
   writeFileSync(join(pvxHome(), "ignores.json"), JSON.stringify([{ id: "t.c0", until: new Date(Date.now() + 3600_000).toISOString(), reason: "r", author: "ana" }]));
-  const ev = Array.from({ length: 5 }, (_, i) => [{ v: 1, id: `n${i}`, at: `2026-10-09T10:0${i}:00Z`, ev: "add", author: "ana", text: `nota ${i}` }, { v: 1, id: `n${i}`, at: `2026-10-09T10:1${i}:00Z`, ev: "pin", author: "ana" }]).flat();
+  const ev = Array.from({ length: 5 }, (_, i) => ({ v: 2, id: `n${i}`, at: `2026-10-09T10:0${i}:00Z`, ev: "add", author: "ana", text: `nota ${i}` }));
   writeFileSync(join(pvxHome(), "notes.jsonl"), ev.map((e) => JSON.stringify(e)).join("\n") + "\n");
   const b = await banner(await registryWith());
   expect(b.text).toContain("checklist 0/7");
@@ -145,7 +145,7 @@ test("the real entrypoint prints it without waiting on the network (built-ins on
   expect(exit).toBe(0);
   expect(ms).toBeLessThan(1000);
   expect(text).toContain("checklist 1/3");
-  expect(text).toContain("▸ ana:");
+  expect(text).toContain("▸ não reiniciar o asterisk antes das 18h — Ana");
 });
 
 // ---- the motd module: the login hook ----

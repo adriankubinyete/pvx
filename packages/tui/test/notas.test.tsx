@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { builtin } from "../../builtin/index.ts";
-import { fold, parseEvents } from "../../builtin/notas/src/notes.ts";
+import { openNotes, parseEvents } from "../../builtin/notas/src/notes.ts";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme, ui } from "../src/index.ts";
 
@@ -21,17 +21,15 @@ beforeEach(async () => {
   await loadModules(registry, { hostVersion: "0.1.0", makeLogger: quiet, ui, builtin });
 });
 
-const write = (e: object) => (mkdirSync(pvxHome(), { recursive: true }), appendFileSync(file(), `${JSON.stringify({ v: 1, at: new Date().toISOString(), ...e })}\n`));
-const note = (id: string, author: string, text: string, extra: object = {}) => write({ id, ev: "add", author, text, ...extra });
-const pin = (id: string, author = "carlos") => write({ id, ev: "pin", author });
+const write = (e: object) => (mkdirSync(pvxHome(), { recursive: true }), appendFileSync(file(), `${JSON.stringify({ v: 2, at: new Date().toISOString(), ...e })}\n`));
+const note = (id: string, text: string, extra: object = {}) => write({ id, ev: "add", author: "carlos", text, ...extra });
+const notes = () => (existsSync(file()) ? openNotes(parseEvents(readFileSync(file(), "utf8"))) : []);
 
-let cur: ReturnType<typeof createSessionStore> | undefined;
 async function mount(opts: { cols?: number; rows?: number; root?: boolean } = {}) {
   const store = createSessionStore({
     registry, makeLogger, isRoot: opts.root ?? true, historyPath: join(pvxHome(), "tui-history"),
     core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: "", version: "0.1.0", theme }, argv),
   });
-  cur = store;
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(
     <App root={root} logger={quiet()} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} pages={{ session: store, registry, makeLogger }} />,
@@ -41,154 +39,126 @@ async function mount(opts: { cols?: number; rows?: number; root?: boolean } = {}
   await h.flush();
   return { t: h, store };
 }
-/** Notas is a page, not a tab: opened as a pushed screen (what the Módulos list does on enter). */
-const goNotas = async (t: TuiHarness) => {
-  await cur!.run("#nota.notas");
-  await t.flush();
+const openNotesSection = async (t: TuiHarness) => {
+  await t.press("2");
+  await t.press("RETURN");
 };
+const lines = (t: TuiHarness) => t.frame().split("\n");
 
-test("Início shows the notes section with `+ nova nota` and, when the slot has data, the pinned notes and the count of new ones", async () => {
+test("Início has a Notas section that says `nenhuma` and offers `+ nova nota`", async () => {
   const { t } = await mount();
   expect(t.frame()).toContain("2 Notas");
-  expect(t.frame()).toContain("+ nova nota");
-  expect(t.frame()).not.toContain("carlos:");
-  t.destroy();
-  note("a1a1a1", "carlos", "token trocado: feito relogin");
-  pin("a1a1a1");
-  note("b2b2b2", "carlos", "solta, nao fixada");
-  const m = await mount();
-  const f = m.t.frame();
-  expect(f).toContain("2 Notas");
-  expect(f).toContain("+ nova nota");
-  expect(f).toContain("2 Notas   2 novas"); // one line until enter opens it
-  expect(f).not.toContain("carlos: token trocado");
-  await m.t.press("2");
-  await m.t.press("RETURN");
-  expect(m.t.frame()).toContain("carlos: token trocado: feito relogin");
-  expect(m.t.frame()).not.toContain("solta, nao fixada");
+  expect(t.frame()).toMatch(/2 Notas\s+nenhuma\s+\+ nova nota/);
+  expect(registry.pages.has("nota.notas")).toBe(false); // no separate page any more
 });
 
-test("80x24: the notes section fits in one column and each fixed line stays alone on its line", async () => {
-  note("a1a1a1", "carlos", "token trocado");
-  pin("a1a1a1");
+test("the notes show as `dd/mm  texto  — assinatura`, newest first, and the first one is on the collapsed line", async () => {
+  note("a1a1a1", "token trocado", { at: "2026-10-14T10:00:00.000", signature: "Carlos" });
+  note("b2b2b2", "solta, sem assinatura", { at: "2026-10-15T10:00:00.000" });
+  const { t } = await mount();
+  expect(t.frame()).toMatch(/2 Notas\s+15\/10  solta, sem assinatura\s+\+ nova nota/);
+  await openNotesSection(t);
+  const rows = lines(t).filter((line) => /\d\d\/\d\d  /.test(line));
+  expect(rows[0]).toMatch(/15\/10  solta, sem assinatura\s*$/);
+  expect(rows[1]).toMatch(/14\/10  token trocado  — Carlos\s*$/);
+  expect(t.frame()).toContain("+ nova nota");
+});
+
+test("80x24: the notes section fits in one column and the footer is intact", async () => {
+  note("a1a1a1", "token trocado", { signature: "Carlos" });
   const { t } = await mount({ cols: 80, rows: 24 });
-  const lines = t.frame().split("\n");
-  expect(lines[0]).toMatch(/^\s*Início\s+Módulos/);
-  expect(lines.filter((l) => l.includes("2 Notas"))).toHaveLength(1);
-  expect(lines.filter((l) => l.trim()).at(-1)).toContain("? ajuda"); // the footer line is intact
+  const all = lines(t);
+  expect(all.filter((l) => l.includes("2 Notas"))).toHaveLength(1);
+  expect(all.filter((l) => l.trim()).at(-1)).toContain("? ajuda");
   await t.press("2");
   expect(t.frame()).toContain("▌ 2 Notas");
-  await t.press("RETURN"); // opens the notes
+  await t.press("RETURN");
   await Bun.sleep(30);
   await t.flush();
-  expect(t.frame()).toContain("carlos: token trocado"); // the section is scrolled into view
+  expect(t.frame()).toContain("token trocado  — Carlos");
 });
 
-test("a note with ANSI shows as inert text in the Notas page and in Início", async () => {
-  note("c3c3c3", "carlos", "\u001b[31mvermelho\u001b[0m \u001b]0;x\u0007ok", { tags: ["t\u001b[2J"] });
-  pin("c3c3c3");
+test("a note with ANSI shows as inert text in Início", async () => {
+  note("c3c3c3", "\u001b[31mvermelho\u001b[0m \u001b]0;x\u0007ok", { signature: "m\u001b[1mal" });
   const { t } = await mount();
-  await t.press("2");
-  await t.press("RETURN"); // opens the notes of Início
-  expect(t.frame()).toContain("vermelho ok");
-  await goNotas(t);
-  expect(t.frame()).toContain("vermelho ok");
+  await openNotesSection(t);
+  expect(t.frame()).toContain("vermelho ok  — mal");
   expect(t.frame()).not.toMatch(/\u001b|\[31m|\[0m/);
 });
 
-test("Notas page: list with the unread dot, filters, and p / x on the note under the cursor", async () => {
-  note("a1a1a1", "carlos", "primeira", { tags: ["sip"] });
-  note("b2b2b2", "ana", "segunda da ana");
-  const { t } = await mount();
-  await goNotas(t);
-  expect(t.frame()).toContain("● carlos");
-  expect(t.frame()).not.toContain("● ana"); // the author's own note is never new
-  expect(t.frame()).toMatch(/\[todas\]\s+fixadas 0\s+novas 1\s+minhas 1\s+#sip/);
-  await t.press("f"); // fixadas
-  expect(t.frame()).toContain("nenhuma nota aqui");
-  await t.press("f"); // novas
-  expect(t.frame()).toContain("primeira");
-  expect(t.frame()).not.toContain("segunda da ana");
-  await t.press("p"); // pin the one under the cursor
-  await t.flush();
-  expect(readFileSync(file(), "utf8")).toContain('"ev":"pin","author":"ana"');
-  await t.press("x"); // resolve it
-  await t.flush();
-  expect(fold(parseEvents(readFileSync(file(), "utf8"))).find((n) => n.id === "a1a1a1")).toMatchObject({ pinned: true, resolved: true });
-  expect(t.frame()).toContain("resolvida");
-});
-
-test("the composer saves through `nota add`: scrollback, history and the list show it; esc discards", async () => {
+test("`+ nova nota` opens the standard form: Nota is required, Assinatura is optional; ctrl+s saves through `nota add`", async () => {
   const { t, store } = await mount();
-  await goNotas(t);
-  await t.press("n");
-  expect(t.frame()).toContain("nova nota");
-  expect(t.frame()).toContain("nunca cole senhas ou tokens");
-  expect(t.frame()).toContain("ctrl+s salva");
-  await t.type("primeira linha");
-  await t.press("RETURN"); // Enter is a line break in the text area, not a submit
-  await t.type("segunda");
+  await openNotesSection(t); // the row `+ nova nota`
+  await t.press("RETURN");
+  const f = t.frame();
+  expect(f).toContain("Nova nota");
+  expect(f).toMatch(/Nota \*/);
+  expect(f).toMatch(/Assinatura(?! \*)/);
+  expect(f).toContain("[ salvar nota ]");
+  expect(f).toContain("[ cancelar ]");
+  await t.press("s", { ctrl: true }); // empty
+  expect(t.frame()).toContain("preencha este campo");
+  expect(notes()).toHaveLength(0);
+  await t.type("trocar a senha do trunk");
   await t.press("TAB");
-  await t.type("sip trunk");
-  await t.press("TAB"); // nome exibido
-  await t.press("TAB"); // fixar
-  await t.press(" ");
+  await t.type("Ana");
   await t.press("s", { ctrl: true });
   await t.flush();
-  const [add, pinned] = parseEvents(readFileSync(file(), "utf8"));
-  expect(add).toMatchObject({ ev: "add", author: "ana", text: "primeira linha\nsegunda", tags: ["sip", "trunk"], login: false });
-  expect(pinned).toMatchObject({ ev: "pin" });
-  expect(t.frame()).toContain("primeira linha segunda"); // back in the list
-  expect(t.frame()).toContain("#sip #trunk · fixada");
-  expect(store.blocks.at(-1)!.line).toBe("nota add --tag sip --tag trunk --fixar");
-  expect(store.history.at(-1)).toBe("nota add --tag sip --tag trunk --fixar");
-  expect(readFileSync(join(pvxHome(), "tui-history"), "utf8")).not.toContain("primeira"); // the text is not in the history file
-
-  await t.press("n");
-  await t.type("descartada");
-  await t.press("ESCAPE");
-  expect(t.frame()).not.toContain("nova nota");
-  expect(readFileSync(file(), "utf8").split("\n").filter(Boolean)).toHaveLength(2);
+  await Bun.sleep(50);
+  await t.flush();
+  expect(notes().map((n) => [n.n, n.text, n.signature])).toEqual([[1, "trocar a senha do trunk", "Ana"]]);
+  expect(store.blocks.at(-1)!.line).toBe('nota add "trocar a senha do trunk" --assinatura Ana');
+  expect(t.frame()).not.toContain("Nova nota"); // back in Início
+  expect(t.frame()).toContain("nota criada");
+  expect(t.frame()).toMatch(/\d\d\/\d\d  trocar a senha do trunk  — Ana/);
 });
 
-test("a save without root shows `rode com sudo` and stays in the composer with the text", async () => {
+test("`n` opens the form from Início, and esc discards it", async () => {
+  const { t } = await mount();
+  await t.press("n");
+  expect(t.frame()).toContain("Nova nota");
+  await t.type("descartada");
+  await t.press("ESCAPE");
+  expect(t.frame()).not.toContain("Nova nota");
+  expect(lines(t)[0]).toMatch(/Início/); // the tab bar is still there
+  expect(existsSync(file())).toBe(false); // nothing was written
+});
+
+test("a save without root shows `rode com sudo` and stays in the form with the text", async () => {
   const { t } = await mount({ root: false });
-  await goNotas(t);
   await t.press("n");
   await t.type("texto");
   await t.press("s", { ctrl: true });
   await t.flush();
+  await Bun.sleep(50);
+  await t.flush();
   expect(t.frame()).toContain("rode com sudo");
+  expect(t.frame()).toContain("Nova nota");
   expect(t.frame()).toContain("texto");
-  expect(t.frame()).toContain("nova nota");
 });
 
-test("`n` on Início opens the composer on the Notas page; the editable display name goes with --apelido", async () => {
-  const { t } = await mount();
-  await t.press("n");
-  expect(t.frame()).toContain("nova nota");
-  expect(t.frame()).toContain("autor ana");
-  await t.type("oi");
-  await t.press("TAB");
-  await t.press("TAB"); // nome exibido
-  await t.press("a", { ctrl: true });
-  await t.type("A");
-  await t.press("s", { ctrl: true });
+test("enter on a note asks `remover nota` / `manter`; manter keeps it, remover takes it out", async () => {
+  note("a1a1a1", "primeira", { signature: "Carlos" });
+  note("b2b2b2", "segunda");
+  const { t, store } = await mount();
+  await openNotesSection(t);
+  await t.press("ARROW_DOWN"); // second row: `primeira` (the newest, `segunda`, is first)
+  await t.press("RETURN");
+  const dialog = t.frame();
+  expect(dialog).toContain("remover a nota?");
+  expect(dialog).toContain("[ manter ]  [ remover nota ]");
+  await t.press("RETURN"); // the safe option has the focus
   await t.flush();
-  expect(JSON.parse(readFileSync(join(pvxHome(), "people.json"), "utf8"))).toEqual({ ana: "Aana" });
-});
-
-test("editing a note: `e` opens the composer with its text, ctrl+s writes an edit event", async () => {
-  note("a1a1a1", "ana", "texto velho", { tags: ["sip"] });
-  const { t } = await mount();
-  await goNotas(t);
-  await t.press("e");
-  expect(t.frame()).toContain("editar nota a1a1a1");
-  expect(t.frame()).toContain("texto velho");
-  await t.type("!");
-  await t.press("s", { ctrl: true });
+  expect(notes()).toHaveLength(2);
+  expect(t.frame()).not.toContain("nota removida");
+  await t.press("RETURN");
+  await t.press("ARROW_RIGHT");
+  await t.press("RETURN");
   await t.flush();
-  const n = fold(parseEvents(readFileSync(file(), "utf8")))[0]!;
-  expect(n.text).toContain("!");
-  expect(n.tags).toEqual(["sip"]);
+  await Bun.sleep(50);
+  await t.flush();
+  expect(notes().map((n) => n.text)).toEqual(["segunda"]);
+  expect(store.blocks.at(-1)!.line).toBe("nota remove 1");
+  expect(t.frame()).toContain("nota removida");
+  expect(t.frame()).not.toContain("primeira");
 });

@@ -128,6 +128,8 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `sdk.ui.ButtonRow` (uma fileira de botões é uma parada da seção; `←` `→` e `enter` com `focused`), `aside` do `Panel` no SDK, `useJobLog()` (abre `jobs log <módulo> <nome>` na aba Comando) e a ordem segura-primeiro nos comentários do SDK → [ButtonRow, Panel aside e useJobLog](#2026-10-16--buttonrow-panel-aside-e-usejoblog)
 - `sdk.cron.next(expressão, de?)`: a próxima execução em horário local, que pula o horário que o relógio salta e roda uma vez o que ele repete → [sdk.cron.next](#2026-10-16--sdkcronnext)
 - Nada longe do seu conteúdo: largura legível `CONTENT_MAX_W` (110), colunas do tamanho do conteúdo (teto de 60 células, `grow` só até o conteúdo), tabela e destaque com a largura das colunas, `Row right`, `aside`, botão de aviso e botões de formulário (`remover` por último, na mesma fileira) no fim do conteúdo, nunca na borda do terminal → [Nada longe do seu conteúdo](#2026-10-16--nada-longe-do-seu-conteúdo)
+- O módulo `nota` só tem `add`, `remove` e `list`; sem página, etiquetas, fixar, editar, resolver nem apelido; as notas antigas migram na leitura (texto, data e autor) → [Notas simples](#2026-10-16--notas-simples)
+- `CommandDef.confirm` dá as palavras do diálogo de um comando `destructive`; os papéis `notesState`, `addNote` e `removeNote` e o slot `home.notes` com `HomeNote` substituem `compose` e o papel de página `notes` → [Notas simples](#2026-10-16--notas-simples)
 - O `exec` de uma sonda (`ReadCtx.exec`) vai para o log do módulo em `debug`: a aba Logs a esconde em `info+` e a mostra em `debug+` → [exec das sondas no nível debug](#2026-10-16--exec-das-sondas-no-nível-debug)
 
 ## 2026-10-09 — Protótipo ausente: núcleo reconstruído a partir da spec
@@ -1665,3 +1667,24 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o olho do técnico não percorre 250 colunas; o que age sobre uma linha tem de ficar junto dela.
 
 **Limite:** o Comando (scrollback) e a grade de cartões de Módulos continuam usando a largura toda: um é um terminal, o outro uma grade. Um módulo que desenha à mão com `justifyContent` ou largura do terminal (`useViewport`) segue por conta própria. Testes: `wide.test.tsx` (250x40) e os de `home`, `logs`, `sistema` e `tarefas`.
+
+## 2026-10-16 — Notas simples
+
+**Status:** vigente. Substitui em parte [Módulo `notas` embutido (Fase 6A)](#2026-10-09--módulo-notas-embutido-fase-6a): a página, as etiquetas, o fixar, o editar, o resolver, o apelido, o "novo para você" e o aviso no composer saíram.
+
+**Contexto:** o módulo tinha seis comandos, uma página com filtros e um composer de várias teclas. O dono achou complexo demais para o que é: deixar um recado para o próximo técnico.
+
+**Decisão:**
+
+- Três comandos: `nota add "texto" [--assinatura "nome"]` (a assinatura é opcional, rótulo "Assinatura"), `nota remove <n>` (destrutivo) e `nota list` (sem root, das mais novas às mais velhas, `n  dd/mm  texto  — assinatura`).
+- `CommandDef.confirm` põe as palavras do diálogo da TUI num comando `destructive`; `nota remove` pergunta `remover a nota?` com `[ manter ]  [ remover nota ]`.
+- O número `n` é a ordem de criação (a de cada `add` no arquivo); uma nota removida guarda o seu número, então nenhum outro muda.
+- O arquivo continua `notes.jsonl`, só de acréscimo (o `uninstall` o protege). Eventos novos são `v: 2`: `add` com `signature` e `remove`. A leitura entende os da versão 1: `edit` troca o texto, `resolve` conta como `remove`, `pin`, `unpin`, etiquetas, `login` e `ref` são ignorados, e o autor de um `add` antigo vira a assinatura. Nada é regravado.
+- O host não nomeia o módulo: o slot `home.notes` traz `HomeNote { n, at, text, signature? }` (mais novas primeiro); os papéis `addNote` (o formulário do `+ nova nota` nasce dos `args` do comando) e `removeNote` (o `enter` numa nota roda `<comando> <n>` pela sessão, que pergunta) saem do módulo. Saem `roles.compose` e `PageDef.role: "notes"`.
+- O banner de login mostra as três notas mais novas (antes, só as fixadas ou marcadas para o login), sem a contagem de "novas": o marcador `seen/` e `lastSeen` foram removidos.
+- `conformidade ignorar` grava `ignorado <capacidade>: <motivo>` como o texto da nota (antes: `--tag ignorado --ref cap:<id>`).
+- O formulário usa o formulário padrão, então o texto vai na linha do comando (scrollback e histórico), como qualquer argumento.
+
+**Motivo:** menos para aprender, para manter e para testar; o que um recado precisa é texto, data e quem escreveu.
+
+**Limite:** quem usava etiquetas, fixadas e editar perde isso; uma nota se corrige removendo e escrevendo de novo. A lista do Início não tem ordem manual. Testes: `test/notas.test.ts`, `packages/tui/test/notas.test.tsx`, `test/banner.test.ts`, `home-rows.test.ts`.
