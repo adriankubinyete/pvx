@@ -127,6 +127,7 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - `Fields` reativo: `FieldSpec.when` (campo condicional: sai do foco, do envio e da validação; a coluna dos rótulos conta os ocultos), `onChange(values)`, `summary(values)` (linha apagada sempre visível acima dos botões), o `detail` da opção escolhida sob um `choice` em `radio` ou `buttons`, `extraActions` (botões de envio depois do primário, validam e ocupam como ele) e `FieldSpec.width` (`short`, `normal`, `long`: a célula cresce com o formulário, 40% e 60% da largura, mínimo 30; valor longo sem edição mostra o começo e `…`) → [Fields reativo, botões extras e células largas](#2026-10-16--fields-reativo-botões-extras-e-células-largas)
 - `sdk.ui.ButtonRow` (uma fileira de botões é uma parada da seção; `←` `→` e `enter` com `focused`), `aside` do `Panel` no SDK, `useJobLog()` (abre `jobs log <módulo> <nome>` na aba Comando) e a ordem segura-primeiro nos comentários do SDK → [ButtonRow, Panel aside e useJobLog](#2026-10-16--buttonrow-panel-aside-e-usejoblog)
 - Botão desenhado é navegável; atalho é extra: `expectButtonsReachable` falha num botão que só `keys` alcança → [Botão desenhado é navegável](#2026-10-16--botão-desenhado-é-navegável)
+- Seção como quadro: `sdk.ui.Frame` (borda única, título na borda de cima, `aside`, acento quando ativa) é a única borda numa página, nunca aninhada; `Panel` continua como o estilo de cabeçalho com calha; o Início e a aba do firewall usam `Frame` → [Quadro: `sdk.ui.Frame`](#2026-10-16--quadro-sdkuiframe)
 - `sdk.cron.next(expressão, de?)`: a próxima execução em horário local, que pula o horário que o relógio salta e roda uma vez o que ele repete → [sdk.cron.next](#2026-10-16--sdkcronnext)
 - Nada longe do seu conteúdo: largura legível `CONTENT_MAX_W` (110), colunas do tamanho do conteúdo (teto de 60 células, `grow` só até o conteúdo), tabela e destaque com a largura das colunas, `Row right`, `aside`, botão de aviso e botões de formulário (`remover` por último, na mesma fileira) no fim do conteúdo, nunca na borda do terminal → [Nada longe do seu conteúdo](#2026-10-16--nada-longe-do-seu-conteúdo)
 - O módulo `nota` só tem `add`, `remove` e `list`; sem página, etiquetas, fixar, editar, resolver nem apelido; as notas antigas migram na leitura (texto, data e autor) → [Notas simples](#2026-10-16--notas-simples)
@@ -1704,3 +1705,20 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o `[ aplicar ]  [ cancelar ]` do firewall aparecia como botão e o cursor não andava entre eles; só o rodapé dizia como agir.
 
 **Limite:** `focused` sempre verdadeiro numa página de um botão só desenha o botão cheio o tempo todo. Teste: `layout.test.tsx` (fixture `layout-demo`).
+
+## 2026-10-16 — Quadro: `sdk.ui.Frame`
+
+**Status:** vigente. Exceção à regra "no máximo uma borda" (UI.md, seção 15) só para o quadro.
+
+**Decisão:** nova primitiva `Frame` ao lado do `Panel`, que não muda.
+
+- API: `title` (na borda de cima, à esquerda), `aside` (apagado, na borda de cima, à direita), `active` (borda e título em `accent`, título em negrito; inativo: token `border` e título `dim`), `grow`, `shrink`, `panelRef`, `onPress`.
+- Sem linha em branco entre a borda e o conteúdo; 1 célula de respiro; ocupa 2 linhas. Usa o dimensionamento do `Panel` (`sectionSizing`): teto `CONTENT_MAX_W`, `grow`, `shrink`, vão de 3 células lado a lado. Seção vazia continua selecionável.
+- Aninhar `Frame` em `Frame` lança um erro (erro de quem desenvolve); está documentado como proibido.
+- Exceção à borda única: o quadro substitui o cabeçalho da seção, não fica dentro de outra caixa, e modais flutuam sobre ele.
+- Usos: as três seções do Início (`1 Atenção` com `perfil: …` ou `sem perfil`, `2 Notas` com a contagem, `3 Atividade`; a seção recolhida mostra o resumo dentro do quadro) e a aba Firewall (`1 Status`, `2 IPs` e `3 Portas` com `aside` de contagem, `13` ou `3/13`, mais `· 1 nova`). O bloco da máquina no topo do Início fica sem quadro.
+- O firewall tirou a linha em branco entre os selos e os detalhes do Status; a conta de altura (`layout.ts`) conta as duas bordas no lugar da linha em branco e do cabeçalho.
+
+**Motivo:** o título na borda dá ao bloco de dados um contorno claro sem gastar uma linha de cabeçalho com espaço em branco; a borda em acento mostra onde está o foco.
+
+**Limite:** a calha `▌` não existe no quadro; com largura fracionária (duas colunas de 58,5 células) o vão entre dois quadros pode ter 4 células. Testes: `packages/tui/test/frame.test.tsx`, `home.test.tsx`, o `test/page.test.ts` do firewall.

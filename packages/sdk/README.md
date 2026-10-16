@@ -234,7 +234,7 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Panel` (`title`, `aside`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda, de no máximo 110 células de largura; veja Páginas), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`, `right`), `Crumb` (`parts`), `Chip`, `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ButtonRow`, `ProgressBar`, `CellGrid`, `Loading`, `RunPanel` e `CommandResult` (veja Componentes de fluxo).
+- **Componentes:** `Frame` (`title`, `active`, `aside`, `grow`, `shrink`: uma seção desenhada como quadro, com o título na borda de cima; veja Páginas), `Panel` (`title`, `aside`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda, de no máximo 110 células de largura; veja Páginas), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`, `right`), `Crumb` (`parts`), `Chip`, `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ButtonRow`, `ProgressBar`, `CellGrid`, `Loading`, `RunPanel` e `CommandResult` (veja Componentes de fluxo).
 - **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem (também quando o nome ou os argumentos mudam: `data` segue com o valor anterior e `loading` vira `true`) e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useConfirm()` (diálogo de confirmação, abaixo); `useJobLog()` (o log inteiro de um job, veja Jobs em segundo plano); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info` (azul), `accent`, `dim`, `text`, `ip` (rosa, para endereços IP). Nunca escreva cor hex: use os tons.
 
@@ -373,6 +373,7 @@ Na CLI (sem TUI) `sdk.ui` aceita ser desestruturado, mas qualquer chamada lança
   ```
 - `keys` em `PageDef` (`{ keys, label, run }[]`) continua valendo para teclas que não precisam do estado do componente; entram na mesma tabela de atalhos.
 - **Sem moldura.** A aba já nomeia a página: uma página de aba não tem borda nem título, e uma página empilhada mostra só uma linha apagada de migalhas (`Autobackup › nova rotina`). Seção é cabeçalho, não caixa: `<Panel title="[1] rotinas" tone={ativo ? "accent" : undefined}>` desenha `1 Rotinas` (um `[n] ` no começo vira o número; o primeiro caractere vira maiúscula), uma linha em branco acima, e, com `tone`, o cabeçalho no tom e a calha `▌` ao lado do conteúdo; sem `tone` a calha fica em branco e nada se move. `aside` é uma nota apagada na ponta direita da linha de cabeçalho (`<Panel title="[1] Rotinas" aside="2 rotinas · próxima hoje 03:30">`): uma linha curta, só com `title`; o título tem a preferência se a largura falta. Um `Panel` sem `title` nem `tone` é só o contêiner (a raiz da página). Nunca ponha uma caixa em volta de uma seção, de um formulário ou de outra seção: no máximo uma borda (UI.md, seção 15). Um `Panel` titulado consome 2 linhas (cabeçalho e a linha em branco), as mesmas que a borda consumia: as contas de altura continuam valendo. Um `Panel` com título que carrega um formulário ou uma lista longa leva `shrink`, para a página nunca empurrar o rodapé do host para fora da tela.
+- **`Frame`: a outra forma de seção.** `<Frame title="1 Status" aside="13" active={ativo}>` desenha um quadro de borda única com o título na borda de cima (`╭─ 1 Status ──── 13 ─╮`). `active` (a seção tem o foco) põe a borda em acento e o título em negrito; inativo é borda apagada e título apagado. `aside` é uma nota apagada na borda de cima, à direita. Sem linha em branco entre a borda e o conteúdo e com 1 célula de respiro de cada lado. Tem a mesma navegação do `Panel`: `panelRef`, `onPress`, `grow`, `shrink`, o teto de 110 células, as seções vazias continuam selecionáveis e, lado a lado (`Row`), 3 células de vão. Ocupa 2 linhas (as duas bordas). **Nunca ponha um `Frame` dentro de outro `Frame`:** é erro de desenvolvimento (lança). Escolha uma forma por página: `Frame` quando a seção é um bloco de dados (status, listas), `Panel` quando é um cabeçalho com texto corrido (UI.md, seção 15).
 - **Ações da página.** Todo controle alcança-se pelo teclado (UI.md, seção 17). Uma ação da página (`rodar agora`) é uma linha no fim da lista da seção a que pertence (alcançada por `↑↓`) e/ou uma fileira `ButtonRow`. Botão desenhado é navegável; atalho é extra: um `Button` sem `focused` (ou fora de um `ButtonRow`) falha em `expectButtonsReachable()` (`@pvx/testing`), mesmo com `keys`.
 
 **Aba (opcional; módulos não são obrigados a expor aba).** Sem `tab`, a página aparece na lista do módulo em Módulos (marca `§`) e abre como tela empilhada; `esc` volta. Com `tab: true` ou `tab: { label, order }` põe a página também na barra de abas, depois das abas do núcleo, ordenada por `order` e depois por rótulo. A aba visitada continua montada enquanto a tela de abas existe.
@@ -413,6 +414,39 @@ export default (sdk: Sdk) => {
       },
     },
   };
+};
+```
+
+<!-- test -->
+```tsx
+/** @jsxRuntime classic */
+/** @jsx h */
+/** @jsxFrag Fragment */
+import type { Sdk } from "@pvx/sdk";
+
+export default (sdk: Sdk) => {
+  const { h, Frame, Row, Text, usePanels, useState } = sdk.ui;
+
+  function Quadros() {
+    const panels = usePanels();
+    const [ativo, setAtivo] = useState<"status" | "lista">("status");
+    return (
+      <>
+        <Frame title="1 Status" active={ativo === "status"} panelRef={panels.ref("status")} onPress={() => setAtivo("status")}>
+          <Text>ativo</Text>
+        </Frame>
+        <Row>
+          <Frame title="2 Lista" aside="2" active={ativo === "lista"} grow panelRef={panels.ref("lista")} onPress={() => setAtivo("lista")}>
+            <Text>lorem</Text>
+            <Text>ipsum</Text>
+          </Frame>
+          <Frame title="3 Vazio" aside="0" grow />
+        </Row>
+      </>
+    );
+  }
+
+  return { pages: { quadros: { title: "Quadros", render: () => <Quadros /> } } };
 };
 ```
 

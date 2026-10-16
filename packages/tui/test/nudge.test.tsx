@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { activeFrames } from "./frame-helpers.ts";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
@@ -52,8 +53,7 @@ test("↓ at the end of a list nudges; ↑ at the top goes to the bar without a 
   expect(footer(t)).toContain("↓/enter entra na aba");
 });
 
-/** The numbers of the sections that carry the `▌` gutter: the active one. */
-const activeSections = (t: TuiHarness) => t.frame().split("\n").flatMap((l) => /▌ (\d) /.exec(l)?.[1] ?? []);
+const activeSections = activeFrames;
 
 test("Início: arrows are spatial; nothing on a side nudges; the numbers jump and stay as labels", async () => {
   const t = await mount();

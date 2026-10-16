@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { activeFrames } from "./frame-helpers.ts";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type MachineSnap, type Registry } from "@pvx/core";
 import { RGBA } from "@opentui/core";
@@ -38,8 +39,7 @@ async function mount(opts: MountOpts = {}) {
 }
 
 const lines = (t: TuiHarness) => t.frame().split("\n");
-/** The numbers of the sections that carry the `▌` gutter: the active one. */
-const activeSections = (t: TuiHarness) => lines(t).flatMap((line) => /▌ (\d) /.exec(line)?.[1] ?? []);
+const activeSections = activeFrames;
 const BAR = "tab próxima aba";
 
 test("Início at 120x40 has the bars, the facts, the sections and the footer, and 80x24 keeps the same content with the facts under the bars when it must", async () => {
@@ -146,7 +146,7 @@ test("conformidade is not run on the first visit; r runs it and shows the pendin
   await t.press("r");
   await t.flush();
   expect(t.frame()).toMatch(/\[✗\] cap-fixture\.a: pendente\s+\[ corrigir \]/);
-  expect(t.frame()).toMatch(/\[!\] manual: sem fix\s*$/m); // no fix, no button
+  expect(t.frame()).toMatch(/\[!\] manual: sem fix\s*│/m); // no fix, no button
   expect(t.frame()).toMatch(/\[✓\] 1 capacidade em dia/);
   expect(t.frame()).toContain("[ verificar de novo ]");
   expect(store.blocks).toEqual([]);
@@ -162,7 +162,7 @@ test("at 250x40 the button of an Atenção row sits right after its text, and th
   await t.flush();
   const row = lines(t).find((l) => l.includes("[ corrigir ]"))!;
   expect(row.indexOf("[ corrigir ]") - row.indexOf("pendente")).toBeLessThan(20);
-  expect(row.trimEnd().length).toBeLessThan(CONTENT_MAX_W);
+  expect(row.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2); // the frame plus the page margin
   expect(lines(t).find((l) => l.includes("perfil: Principal"))!.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
 });
 
@@ -172,11 +172,11 @@ test("the ok line is dim, a blank row separates the content from the buttons, an
   await t.flush();
   const all = lines(t);
   const ok = all.findIndex((l) => l.includes("capacidade em dia"));
-  expect(all[ok + 1]).toMatch(/^\s+▌?\s*$/);
+  expect(all[ok + 1]).toMatch(/^\s+│\s+│\s*$/);
   expect(all[ok + 2]).toContain("[ verificar de novo ]");
   const text = t.spans().lines[ok]!.spans.find((span) => span.text.includes("capacidade em dia"))!;
   expect(text.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
-  expect(all.find((l) => l.includes("1 Atenção"))).toMatch(/1 Atenção\s+perfil: Principal\s*$/);
+  expect(all.find((l) => l.includes("1 Atenção"))).toMatch(/1 Atenção ─+ perfil: Principal ─╮/);
 });
 
 test("enter on a pending item puts its fix in the Comando input and runs nothing", async () => {
@@ -200,8 +200,8 @@ test("the actions row is one stop: ← and → choose the button, enter presses 
   await t.press("r");
   await t.flush();
   await t.press("RETURN");
-  for (let i = 0; i < 14 && lines(t).some((l) => /▌ »/.test(l)); i++) await t.press("ARROW_DOWN"); // the items, then the actions row
-  expect(t.frame().match(/▌ » /g) ?? []).toHaveLength(0); // the buttons carry the cursor, not a row marker
+  for (let i = 0; i < 14 && lines(t).some((l) => /│ »/.test(l)); i++) await t.press("ARROW_DOWN"); // the items, then the actions row
+  expect(t.frame().match(/│ » /g) ?? []).toHaveLength(0); // the buttons carry the cursor, not a row marker
   const before = store.blocks.length;
   await t.press("ARROW_LEFT"); // wraps inside the row: never leaves it
   await t.press("ARROW_RIGHT");
@@ -278,7 +278,7 @@ test("a page taller than the screen scrolls to keep the cursor in view", async (
   await t.press("2");
   await Bun.sleep(30); // the scroll follows on the next tick
   await t.flush();
-  expect(t.frame()).toContain("▌ 2 Atividade");
+  expect(activeFrames(t)).toEqual(["2"]);
   await t.press("RETURN");
   await Bun.sleep(30);
   await t.flush();
@@ -426,8 +426,8 @@ test("Notas and Atividade are one line each until enter opens them, and stay sel
   const { t, store } = await mount({ cols: 120, rows: 40 });
   await store.run("demo remember");
   await t.flush();
-  const line = lines(t).find((l) => l.includes("2 Atividade"))!;
-  expect(line).toMatch(/2 Atividade\s+demo greet · .*demo remember/); // the recent activity in one line
+  const top = lines(t).findIndex((l) => l.includes("2 Atividade"));
+  expect(lines(t)[top + 1]).toMatch(/│ demo greet · .*demo remember/); // the recent activity in one line
   expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1);
   await t.press("2");
   await t.press("RETURN"); // opens: the rows
@@ -461,3 +461,18 @@ for (const cols of [80, 120]) {
     }
   });
 }
+
+// The three sections are Frames: the title and aside sit in the top border, every frame has a closed box, and none is wider than the readable width.
+test.each([[80, 24], [120, 40], [250, 40]] as const)("Início sections are Frames at %ix%i", async (cols, rows) => {
+  const { t } = await mount({ cols, rows, profile: "Principal" });
+  const all = lines(t);
+  const tops = all.filter((l) => l.includes("╭─ "));
+  expect(tops.length).toBeGreaterThanOrEqual(2);
+  expect(tops[0]).toMatch(/╭─ 1 Atenção ─+ perfil: Principal ─╮/);
+  const bottoms = all.filter((l) => l.includes("╰"));
+  expect(bottoms).toHaveLength(tops.length);
+  for (const top of tops) expect(top.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
+  expect(activeFrames(t)).toEqual(["1"]);
+  await t.press("ARROW_DOWN");
+  expect(activeFrames(t)).toEqual(["2"]);
+});

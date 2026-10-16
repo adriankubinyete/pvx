@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { activeFrames } from "./frame-helpers.ts";
 import { join } from "node:path";
 import { createLogger, createRegistry, logsDir, pvxHome, runCapture, tuiStatePath } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
@@ -71,8 +72,7 @@ const clickSection = async (t: TuiHarness, title: string) => {
   expect(y).toBeGreaterThan(-1);
   await t.click(lines[y]!.indexOf(title) + 4, y);
 };
-/** The numbers of the sections that carry the `▌` gutter: the active one. */
-const focusedPanels = (t: TuiHarness) => t.frame().split("\n").flatMap((l) => /▌ (\d) /.exec(l)?.[1] ?? []);
+const focusedPanels = activeFrames;
 
 test("Início, bar focused: a click on section 1 focuses section 1 (not the last one, section 2)", async () => {
   const t = await mount();

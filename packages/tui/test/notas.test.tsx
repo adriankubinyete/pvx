@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { activeFrames } from "./frame-helpers.ts";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
@@ -48,7 +49,7 @@ const lines = (t: TuiHarness) => t.frame().split("\n");
 test("Início has a Notas section that says `nenhuma` and offers `+ nova nota`", async () => {
   const { t } = await mount();
   expect(t.frame()).toContain("2 Notas");
-  expect(t.frame()).toMatch(/2 Notas\s+nenhuma\s+\+ nova nota/);
+  expect(t.frame()).toMatch(/│ nenhuma\s+\+ nova nota/);
   expect(registry.pages.has("nota.notas")).toBe(false); // no separate page any more
 });
 
@@ -56,11 +57,11 @@ test("the notes show as `dd/mm  texto  — assinatura`, newest first, and the fi
   note("a1a1a1", "token trocado", { at: "2026-10-14T10:00:00.000", signature: "Carlos" });
   note("b2b2b2", "solta, sem assinatura", { at: "2026-10-15T10:00:00.000" });
   const { t } = await mount();
-  expect(t.frame()).toMatch(/2 Notas\s+15\/10  solta, sem assinatura\s+\+ nova nota/);
+  expect(t.frame()).toMatch(/│ 15\/10  solta, sem assinatura\s+\+ nova nota/);
   await openNotesSection(t);
   const rows = lines(t).filter((line) => /\d\d\/\d\d  /.test(line));
-  expect(rows[0]).toMatch(/15\/10  solta, sem assinatura\s*$/);
-  expect(rows[1]).toMatch(/14\/10  token trocado  — Carlos\s*$/);
+  expect(rows[0]).toMatch(/15\/10  solta, sem assinatura\s*│/);
+  expect(rows[1]).toMatch(/14\/10  token trocado  — Carlos\s*│/);
   expect(t.frame()).toContain("+ nova nota");
 });
 
@@ -71,7 +72,7 @@ test("80x24: the notes section fits in one column and the footer is intact", asy
   expect(all.filter((l) => l.includes("2 Notas"))).toHaveLength(1);
   expect(all.filter((l) => l.trim()).at(-1)).toContain("? ajuda");
   await t.press("2");
-  expect(t.frame()).toContain("▌ 2 Notas");
+  expect(activeFrames(t)).toEqual(["2"]);
   await t.press("RETURN");
   await Bun.sleep(30);
   await t.flush();

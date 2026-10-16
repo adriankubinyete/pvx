@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { activeFrames } from "./frame-helpers.ts";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
@@ -41,7 +42,7 @@ test("widgets fill their slots by priority; the throwing and the hanging ones ar
   expect(f).toContain("widget quebrou: widget-demo.hang");
   expect(readFileSync(join(logsDir(), "core.log"), "utf8")).toMatch(/widget widget-demo\.boom quebrou: widget explodiu[\s\S]*widget widget-demo\.hang quebrou: passou de 60 ms/);
   await t.press("ARROW_DOWN"); // the home keeps responding: atividade is below
-  expect(t.frame()).toMatch(/▌ 2 Atividade/);
+  expect(activeFrames(t)).toEqual(["2"]);
 });
 
 test("home.attention combines the profile's pending items with a module item; enter puts the fix in the draft", async () => {
@@ -81,7 +82,7 @@ test.each([[80, 40], [230, 40]] as const)("the notices of the modules are rows o
   const { t } = await mount({ cols, rows });
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Início");
-  const header = lines.findIndex((l) => l.includes("▌ 1 Atenção"));
+  const header = lines.findIndex((l) => l.includes("╭─ 1 Atenção"));
   const notice = lines.findIndex((l) => l.includes("[i] demo: tudo certo"));
   expect(header).toBeGreaterThan(-1);
   expect(notice).toBeGreaterThan(header); // under the header, as a row with the glyph of its level

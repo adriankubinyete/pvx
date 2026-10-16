@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import { activeFrames } from "./frame-helpers.ts";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, loadTuiState, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
@@ -191,7 +192,7 @@ test("Comando: esc focuses the last block, up on the first block focuses the bar
 
 test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", async () => {
   const { t } = await mount();
-  expect(t.frame()).toContain("▌ 1 Atenção");
+  expect(activeFrames(t)).toEqual(["1"]);
   await t.press("TAB");
   expect(t.frame()).toContain("instalados");
     await t.press("TAB"); // Logs

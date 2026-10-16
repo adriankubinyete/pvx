@@ -988,6 +988,12 @@ export interface SdkUi {
    */
   Panel: Component<Kids & { title?: string; tone?: Tone; /** A dim note at the right end of the header line (`2 rotinas · próxima hoje 03:30`). Only with a `title`; one line, short: the title keeps its room. */ aside?: string; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
   /**
+   * A section drawn as a single-border frame with its title in the top border (`╭ 1 Status ───── 13 ─╮`): the other section style next to `Panel`. `active` (the section has focus) gives
+   * an accent border and a bold title; inactive is a faint border and a dim title. `aside` is a dim note in the top border, right side. No blank row under the border, 1 cell of padding inside.
+   * Same navigation as `Panel` (`panelRef`, `onPress`, `grow`, `shrink`). **Never nest a Frame in a Frame** (it throws); a page with Frames has no other box.
+   */
+  Frame: Component<Kids & { title: string; active?: boolean; aside?: string; grow?: boolean; shrink?: boolean; panelRef?: unknown; onPress?: () => void }>;
+  /**
    * Children side by side, equal widths, at least 3 cells apart (give each Panel `grow` so they match in height). With `fit` each child keeps its own width, `gap` cells (default 0) separate them, and the ones that do not fit go to the next line:
    * a row of buttons, or a line made of styled pieces (`<Row fit><Text tone="accent" bold>lor</Text><Text>em</Text></Row>`).
    * `right` is drawn at the right edge of the row, at its own width, one cell clear of the children: a button or a value at the end of a section line

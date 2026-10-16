@@ -1,7 +1,7 @@
 import { createElement, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { SdkUi } from "@pvx/sdk";
 import { hooks } from "./host.tsx";
-import { Chip, KeyHint, List, LogTail, Notice, Panel, Row, Scroll, Spacer, Steps, Table, Text } from "./kit.tsx";
+import { Chip, Frame, KeyHint, List, LogTail, Notice, Panel, Row, Scroll, Spacer, Steps, Table, Text } from "./kit.tsx";
 import { Badge, BarMeter, Details, Meter, Spark } from "./display.tsx";
 import { Button, ButtonRow } from "./button.tsx";
 import { Fields } from "./fields.tsx";
@@ -19,7 +19,7 @@ export const ui: SdkUi = {
   h: createElement as unknown as SdkUi["h"],
   Fragment,
   useState, useEffect, useMemo, useRef,
-  Panel, Row, Crumb, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
+  Panel, Frame, Row, Crumb, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
   Conversation, Button, ButtonRow, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel, CommandResult, Card, CardGrid: SdkCardGrid, ConfirmPreview,
   ...hooks,
 };

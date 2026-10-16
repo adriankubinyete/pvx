@@ -378,6 +378,8 @@ Uma borda por cima de outra é proibida. Seção de página é cabeçalho e espa
 
 - Seção (`Panel`): linha de cabeçalho numerada (`1 Rotinas`) em acento e negrito quando ativa, apagada nas outras, com uma linha em branco acima. O indicador de ativa é a calha `▌` em acento ao lado do conteúdo; sem foco a calha fica em branco e o conteúdo não se move.
 - `Panel` sem `title` nem `tone` é só um contêiner (a raiz da página).
+- **Quadro (`Frame`): a única borda permitida numa página.** Uma seção desenhada como quadro de borda única, com o título na borda de cima e, opcional, uma nota (`aside`) apagada à direita. Ativa: borda e título em acento, título em negrito; inativa: borda apagada (`border`) e título apagado. Sem linha em branco entre a borda e o conteúdo; 1 célula de respiro dentro. Lado a lado, 3 células de vão; empilhados, colados. Seção vazia continua selecionável (o quadro e a linha de vazio aparecem). Exceção à regra da borda única: o quadro **substitui** o cabeçalho da seção, não está dentro de nenhuma outra caixa, e diálogos e menus continuam flutuando sobre ele. **Quadro dentro de quadro é proibido** (o `Frame` lança). Navegação, `panelRef`, `onPress`, `grow`, `shrink` e o teto de 110 células são os do `Panel`.
+- **Quando usar cada um.** `Frame` para blocos de dados que o técnico percorre e compara (Status, listas de IPs e Portas; as três seções do Início). `Panel` para uma seção de cabeçalho e texto corrido, e para a raiz da página. Uma página usa uma forma só: não misture quadros e cabeçalhos com calha.
 - Formulário dentro de uma seção: sem caixa em volta (seção 7).
 - Uma grade de cartões é permitida: cada cartão é um item da grade (a aba Módulos), com uma borda só, e nada o envolve. Caixa dentro de caixa não é.
 - Diálogos e menus que flutuam (confirmação, menu de ações, palette) têm uma borda só, porque flutuam sobre a tela.
@@ -395,7 +397,19 @@ Uma borda por cima de outra é proibida. Seção de página é cabeçalho e espa
  ╰──────────────────────────────╯           token válido
 ```
 
-Exemplos no código: `packages/tui/src/sdk-ui/kit.tsx` (`Panel`, `headerParts`).
+```text
+╭─ 1 Status ───────────────────────────────────────────╮
+│ ATIVO  DESATUALIZADO  1 regra nova…  [ aplicar ]     │
+│ motor  nftables (automático)  no boot  desligado     │
+╰──────────────────────────────────────────────────────╯
+╭─ 2 IPs ─────────── 13 ─╮   ╭─ 3 Portas ── 20 · 1 nova ─╮
+│ valor   ação           │   │ valor   ação              │
+│ 127.0.0.1  aceitar     │   │ 5060/udp  aceitar         │
+╰────────────────────────╯   ╰───────────────────────────╯
+```
+
+Exemplos no código: `packages/tui/src/sdk-ui/kit.tsx` (`Panel`, `Frame`, `headerParts`).
+`packages/tui/src/tabs/HomeTab.tsx` (as três seções do Início são quadros) e o módulo `pvx-firewall` (`StatusSection`, `EntryPanel`).
 
 ## 16. Formulário fala a língua do técnico
 

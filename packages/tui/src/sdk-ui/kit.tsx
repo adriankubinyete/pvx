@@ -1,4 +1,4 @@
-import { Children, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { Children, createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useKeyboard } from "@opentui/react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { Component, ListCell, ListCellPart, ListItem, SdkUi, Tone } from "@pvx/sdk";
@@ -74,9 +74,57 @@ export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, 
   const active = t !== undefined;
   const gutter = section ? { border: ["left" as const], borderColor: active ? tone(c, t) : c.bg, customBorderChars: { ...GUTTER_CHARS, vertical: active ? g.gutter : " " }, paddingLeft: 1 } : {};
   return (
-    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...(shrink || !section ? SHRINKABLE : { flexShrink: 0 })} {...(section ? { maxWidth: CONTENT_MAX_W } : {})} {...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {})} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...sectionSizing({ shrink, grow, capped: section })} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
       {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} aside={aside} inline={inline} /> : null}
       {children as ReactNode}
+    </box>
+  );
+}
+
+/** The sizing Panel and Frame share: gives up height when `shrink`, grows when `grow`, readable width cap on sections. */
+function sectionSizing({ shrink, grow, capped }: { shrink?: boolean; grow?: boolean; capped: boolean }) {
+  return {
+    ...(shrink || !capped ? SHRINKABLE : { flexShrink: 0 }),
+    ...(capped ? { maxWidth: CONTENT_MAX_W } : {}),
+    ...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {}),
+  };
+}
+
+/** True inside a Frame: a Frame in a Frame is a dev error. */
+const InsideFrame = createContext(false);
+
+/** The top border: corner, bold title when active, a rule that fills the width, the dim aside, corner. */
+function FrameTop({ title, aside, active }: { title: string; aside?: string; active: boolean }) {
+  const { c, g } = useTheme();
+  const color = active ? c.accent : c.border;
+  const label = clean(title);
+  return (
+    <box flexDirection="row" flexShrink={0} height={1}>
+      <text wrapMode="none" flexShrink={0} fg={color}>{`${g.corners[0]}${g.hline} `}</text>
+      <text wrapMode="none" flexShrink={0} fg={active ? c.accent : c.dim}>{active ? <b>{label}</b> : label}</text>
+      <text wrapMode="none" flexShrink={0} fg={color} bg={c.bg}>{" "}</text>
+      <box flexGrow={1} flexBasis={0} minWidth={0} overflow="hidden"><text wrapMode="none" fg={color}>{g.hline.repeat(CONTENT_MAX_W)}</text></box>
+      {aside ? <text wrapMode="none" flexShrink={0} fg={c.dim} bg={c.bg}>{` ${clean(aside)} `}</text> : null}
+      <text wrapMode="none" flexShrink={0} fg={color}>{`${g.hline}${g.corners[1]}`}</text>
+    </box>
+  );
+}
+
+/**
+ * A section drawn as a frame: one border with the title in the top border (`╭ 1 Status ──── aside ─╮`). Active: accent border and bold title; inactive: faint border, dim title.
+ * Content starts on the row under the border with one cell of padding. Never inside another Frame.
+ */
+export function Frame({ title, active, aside, grow, shrink, panelRef, onPress, children }: Props<"Frame">) {
+  const { c, g } = useTheme();
+  if (useContext(InsideFrame)) throw new Error("Frame inside a Frame: a Frame is the only border of a page, never nested");
+  const color = active ? c.accent : c.border;
+  const chars = { topLeft: g.corners[0]!, topRight: g.corners[1]!, bottomLeft: g.corners[2]!, bottomRight: g.corners[3]!, horizontal: g.hline, vertical: g.sepBar, topT: g.hline, bottomT: g.hline, leftT: g.sepBar, rightT: g.sepBar, cross: g.hline };
+  return (
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...sectionSizing({ shrink, grow, capped: true })}>
+      <FrameTop title={title} aside={aside} active={Boolean(active)} />
+      <box flexDirection="column" flexGrow={1} flexShrink={shrink ? 1 : 0} minHeight={0} overflow="hidden" border={["left", "right", "bottom"]} customBorderChars={chars} borderColor={color} paddingX={1}>
+        <InsideFrame.Provider value={true}>{children as ReactNode}</InsideFrame.Provider>
+      </box>
     </box>
   );
 }

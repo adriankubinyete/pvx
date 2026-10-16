@@ -13,7 +13,7 @@ import { SessionModals } from "../session/Modals.tsx";
 import { loadFavorites } from "../palette/favorites.ts";
 import { Loading } from "../sdk-ui/flow.tsx";
 import { usePages } from "../sdk-ui/host.tsx";
-import { Panel } from "../sdk-ui/kit.tsx";
+import { Frame, headerParts } from "../sdk-ui/kit.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
@@ -45,10 +45,8 @@ const SAMPLE_MS = 2000;
 const FRAME_W = 4;
 /** The widest the core bars and the facts of the machine get: what they have at 120 columns (four bars across). A wider terminal does not stretch them. */
 const MACHINE_MAX_W = 120 - FRAME_W;
-/** Columns of a section's gutter (the `▌` and its padding). */
-const GUTTER_W = 2;
-/** Cells the label of a one-line section takes (`3 Atividade`) and the gap after it. */
-const SUMMARY_LABEL_W = 14;
+/** Columns a section's Frame takes inside the content width: two borders and two cells of padding. */
+const GUTTER_W = 4;
 /** Cells of `   + nova nota`. */
 const NEW_NOTE_W = 14;
 let shared: MachineSampler | undefined;
@@ -241,13 +239,13 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
       </>
     );
   };
-  const sectionTitle = (panel: HomePanel) => `[${sections.indexOf(panel) + 1}] ${SECTION_TITLES[panel]}`;
-  const sectionTone = (panel: HomePanel) => (focused && nav.home.panel === panel ? ("accent" as const) : undefined);
+  const sectionTitle = (panel: HomePanel) => `${sections.indexOf(panel) + 1} ${headerParts(SECTION_TITLES[panel], "").label}`;
+  const sectionActive = (panel: HomePanel) => focused && nav.home.panel === panel;
   const frame = (panel: HomePanel, children: React.ReactNode, aside?: string) => (
     <box key={panel} id={`home:${panel}`} flexShrink={0}>
-      <Panel panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} tone={sectionTone(panel)} aside={aside}>
+      <Frame panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} active={sectionActive(panel)} aside={aside}>
         {children}
-      </Panel>
+      </Frame>
     </box>
   );
 
@@ -270,7 +268,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     nav.home.inside = rows[panel].length > 0;
     bump();
   };
-  const summaryRoom = Math.max(10, width - GUTTER_W - SUMMARY_LABEL_W - (canCompose ? NEW_NOTE_W : 0));
+  const summaryRoom = Math.max(10, width - GUTTER_W - (canCompose ? NEW_NOTE_W : 0));
   const summaries: Record<"notas" | "atividade", React.ReactNode> = {
     notas: (
       <text wrapMode="none" onMouseDown={() => openSection("notas")}>
@@ -280,15 +278,8 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     ),
     atividade: <text wrapMode="none" fg={c.dim} onMouseDown={() => openSection("atividade")}>{activitySummary(rows.atividade, summaryRoom)}</text>,
   };
-  const oneLine = (panel: "notas" | "atividade") => {
-    const above = sections[sections.indexOf(panel) - 1];
-    const tight = panel === "atividade" && above === "notas" && !expanded("notas");
-    return (
-      <box key={panel} id={`home:${panel}`} flexShrink={0}>
-        <Panel panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} tone={sectionTone(panel)} inline={summaries[panel]} tight={tight} />
-      </box>
-    );
-  };
+  const noteCount = rows.notas.filter((row) => !row.action).length;
+  const asides: Partial<Record<HomePanel, string>> = { conformidade: profile ? `perfil: ${profile}` : "sem perfil", notas: String(noteCount) };
 
   if (composing) return <NoteComposer store={store} registry={registry} line={addNote!} onClose={() => setComposing(false)} onSaved={() => void slots.refresh()} />;
   return (
@@ -297,9 +288,9 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
         <box flexDirection="column" paddingX={1} flexShrink={0}>
           <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={Math.min(cols - FRAME_W, MACHINE_MAX_W)} />
           {sections.map((panel) => {
-            if (panel === "conformidade") return frame(panel, attentionBody, profile ? `perfil: ${profile}` : "sem perfil");
-            if (!expanded(panel)) return oneLine(panel);
-            return frame(panel, sectionRows(panel));
+            if (panel === "conformidade") return frame(panel, attentionBody, asides[panel]);
+            if (!expanded(panel)) return frame(panel, summaries[panel], asides[panel]);
+            return frame(panel, sectionRows(panel), asides[panel]);
           })}
         </box>
       </scrollbox>

@@ -134,7 +134,7 @@ test("Início: `p` and the plan button open the plan page of the module that has
   expect(t.frame()).toContain("1. cap-fixture fix-a para cap-fixture.a");
   await t.press("ESCAPE");
   await t.press("RETURN"); // inside atenção
-  for (let i = 0; i < 14 && lines(t).some((l) => /▌ »/.test(l)); i++) await t.press("ARROW_DOWN"); // down to the actions row: the plan is its first button
+  for (let i = 0; i < 14 && lines(t).some((l) => /│ »/.test(l)); i++) await t.press("ARROW_DOWN"); // down to the actions row: the plan is its first button
   await t.press("ARROW_LEFT");
   await t.press("RETURN");
   await t.flush();
