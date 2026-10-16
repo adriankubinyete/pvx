@@ -739,7 +739,7 @@ export default factory;
 
 ## `sdk.cron`, `sdk.crontab` e `sdk.validate`
 
-**`sdk.cron`** (puro). `validate(expressão)` devolve `undefined` se são cinco campos válidos (minuto hora dia-do-mês mês dia-da-semana; `*`, `5`, `1-5`, listas com vírgula, `/passo`; 0 e 7 são domingo) ou um texto em pt-BR que diz o campo errado e a faixa (`agendamento inválido, minuto: use de 0 a 59`). Recusa `@reboot`, nomes (`mon`), `%` e aspas: o texto vai parar num crontab. `describe(expressão)` dá um texto curto: `diário 03:30`, `semanal dom 02:00`, `mensal dia 5 03:30`, `a cada 15 min`, `de hora em hora`, `a cada 2 h`; o que não cabe nesses ritmos volta normalizado, como foi escrito. `normalize(expressão)` deixa um espaço entre os campos.
+**`sdk.cron`** (puro). `validate(expressão)` devolve `undefined` se são cinco campos válidos (minuto hora dia-do-mês mês dia-da-semana; `*`, `5`, `1-5`, listas com vírgula, `/passo`; 0 e 7 são domingo) ou um texto em pt-BR que diz o campo errado e a faixa (`agendamento inválido, minuto: use de 0 a 59`). Recusa `@reboot`, nomes (`mon`), `%` e aspas: o texto vai parar num crontab. `describe(expressão)` dá um texto curto: `diário 03:30`, `semanal dom 02:00`, `mensal dia 5 03:30`, `a cada 15 min`, `de hora em hora`, `a cada 2 h`; o que não cabe nesses ritmos volta normalizado, como foi escrito. `normalize(expressão)` deixa um espaço entre os campos. `next(expressão, de?)` devolve a próxima execução depois de `de` (padrão: agora) como `Date` no horário local, ou `undefined` para uma expressão inválida ou que nunca roda (`0 0 31 2 *`). Com dia do mês e dia da semana restritos, vale o dia que casa com qualquer um dos dois (como o cron). A virada do horário de verão não erra: um horário que o relógio pula não é execução, e um que ele repete roda uma vez. Exemplo: `sdk.cron.next("30 3 * * *")?.toLocaleString("pt-BR")`.
 
 **`sdk.validate.firstProblem(...problemas)`** devolve o primeiro texto de problema de uma lista de checagens (cada uma `string | undefined`, como `sdk.cron.validate` responde), ou `undefined`. Não é o `sdk.proof.firstProblem`: aquele roda passos que devolvem `Proof` e é assíncrono; este só escolhe entre textos já calculados.
 
@@ -780,7 +780,8 @@ const factory: ModuleFactory = (sdk) => {
             ctx.out.error(sdk.crontab.isError(error) ? error.message : sdk.errors.describeFailure(error));
             return;
           }
-          ctx.out.success(`agendado: ${sdk.cron.describe(quando)}`);
+          const proxima = sdk.cron.next(quando);
+          ctx.out.success(`agendado: ${sdk.cron.describe(quando)}${proxima ? `, próxima em ${proxima.toLocaleString("pt-BR")}` : ""}`);
         },
       },
     },

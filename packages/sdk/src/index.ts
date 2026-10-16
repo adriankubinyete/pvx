@@ -566,6 +566,12 @@ export interface CronKit {
   validate(expression: string): string | undefined;
   /** A short pt-BR text for a valid expression: `diário 03:30`, `semanal dom 02:00`, `mensal dia 5 03:30`, `a cada 15 min`, `de hora em hora`, `a cada 2 h`. Any other expression is returned normalized, as written. */
   describe(expression: string): string;
+  /**
+   * The next time `expression` runs, strictly after `from` (default now), in local time; `undefined` for an invalid expression or one that never runs (`0 0 31 2 *`).
+   * It follows cron: when both day-of-month and day-of-week are restricted, a day that matches either runs. A daylight-saving jump is safe: a local time the clock skips
+   * is not a run, and a time it repeats runs once.
+   */
+  next(expression: string, from?: Date): Date | undefined;
 }
 
 /** What `sdk.crontab` throws: the crontab could not be read or written, or its managed block is damaged. Nothing was changed. */

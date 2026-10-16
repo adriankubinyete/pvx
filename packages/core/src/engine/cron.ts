@@ -102,5 +102,95 @@ function describe(expression: string): string {
   return describeRepeating(fields) ?? describeAtTime(fields) ?? normalize(expression);
 }
 
+// ---- the next run ----
+
+const SUNDAY_AS_SEVEN = 7;
+/** Days searched ahead: enough for `0 0 29 2 *`, which skips up to eight years around a century that is not a leap year. */
+const LAST_SEARCHED_DAY = 366 * 8;
+
+/** One comma item of a field (a value, a range, a step on `*` or on a range) as the values it holds. The expression was validated first. */
+function itemValues(item: string, field: CronField): number[] {
+  const match = CRON_ITEM.exec(item)!;
+  const [, range = "*", stepText] = match;
+  const step = stepText === undefined ? 1 : Number(stepText);
+  const [first = field.min, last = first] = range === "*" ? [field.min, field.max] : range.split("-").map(Number);
+  const values: number[] = [];
+  for (let value = first; value <= last; value += step) values.push(value);
+  return values;
+}
+
+const valuesOf = (text: string, field: CronField): Set<number> => new Set(text.split(",").flatMap((item) => itemValues(item, field)));
+
+/** Day of week 7 is Sunday, the same as 0. */
+const sundayAsZero = (days: Set<number>): Set<number> => new Set([...days].map((day) => (day === SUNDAY_AS_SEVEN ? 0 : day)));
+
+const ascending = (values: Set<number>): number[] => [...values].sort((first, second) => first - second);
+
+interface Schedule {
+  minutes: number[];
+  hours: number[];
+  months: Set<number>;
+  daysOfMonth: Set<number>;
+  daysOfWeek: Set<number>;
+  /** Both day fields are restricted: cron runs on a day that matches EITHER (not both). */
+  eitherDay: boolean;
+}
+
+/** A day field that starts with `*` (`*` alone or with a step) does not restrict the day, as in vixie cron. */
+const isRestricted = (text: string): boolean => !text.startsWith("*");
+
+function scheduleOf(expression: string): Schedule {
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = normalize(expression).split(" ") as [string, string, string, string, string];
+  const [minuteField, hourField, dayOfMonthField, monthField, dayOfWeekField] = CRON_FIELDS as [CronField, CronField, CronField, CronField, CronField];
+  return {
+    minutes: ascending(valuesOf(minute, minuteField)),
+    hours: ascending(valuesOf(hour, hourField)),
+    months: valuesOf(month, monthField),
+    daysOfMonth: valuesOf(dayOfMonth, dayOfMonthField),
+    daysOfWeek: sundayAsZero(valuesOf(dayOfWeek, dayOfWeekField)),
+    eitherDay: isRestricted(dayOfMonth) && isRestricted(dayOfWeek),
+  };
+}
+
+function runsOnDay(schedule: Schedule, day: Date): boolean {
+  if (!schedule.months.has(day.getMonth() + 1)) return false;
+  const onDayOfMonth = schedule.daysOfMonth.has(day.getDate());
+  const onDayOfWeek = schedule.daysOfWeek.has(day.getDay());
+  return schedule.eitherDay ? onDayOfMonth || onDayOfWeek : onDayOfMonth && onDayOfWeek;
+}
+
+/** The local time `hour:minute` of `day`, or `undefined` when the clock never shows it (a spring-forward gap makes `Date` slide it to the next hour). */
+function localTime(day: Date, hour: number, minute: number): Date | undefined {
+  const time = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute);
+  return time.getHours() === hour && time.getMinutes() === minute ? time : undefined;
+}
+
+/** The first run of `day` after `after`; `undefined` when none is left that day. */
+function firstRunAfter(schedule: Schedule, day: Date, after: number): Date | undefined {
+  for (const hour of schedule.hours) {
+    for (const minute of schedule.minutes) {
+      const time = localTime(day, hour, minute);
+      if (time && time.getTime() > after) return time;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * The next run strictly after `from`, in local time. It walks day by day (a day is built from its calendar fields, so a daylight-saving change
+ * cannot shift it): a time the clock skips is not a run, and a time it repeats runs once, at its first pass.
+ */
+function next(expression: string, from: Date = new Date()): Date | undefined {
+  if (validate(expression) !== undefined) return undefined;
+  const schedule = scheduleOf(expression);
+  for (let offset = 0; offset <= LAST_SEARCHED_DAY; offset++) {
+    const day = new Date(from.getFullYear(), from.getMonth(), from.getDate() + offset);
+    if (!runsOnDay(schedule, day)) continue;
+    const found = firstRunAfter(schedule, day, from.getTime());
+    if (found) return found;
+  }
+  return undefined;
+}
+
 /** `sdk.cron`. */
-export const cronKit: CronKit = { normalize, validate, describe };
+export const cronKit: CronKit = { normalize, validate, describe, next };
