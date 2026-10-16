@@ -16,7 +16,7 @@ export interface ConfirmDialogProps {
   buttons: string[];
   /** The button that starts focused: the safe one. */
   initial: number;
-  /** The button drawn in the error style (a destructive action); undefined: none. */
+  /** The button drawn in the error style, with the dialog border in the warn token (a destructive action); undefined: none. */
   destructive?: number;
   /** A button was activated (enter or a click). */
   onPick: (index: number) => void;
@@ -60,7 +60,7 @@ interface DialogBoxProps extends Pick<ConfirmDialogProps, "title" | "description
   onPick: (index: number) => void;
 }
 
-/** The dialog itself: title, rules, description and buttons, in the one border (accent, or error for a destructive question). */
+/** The dialog itself: title, rules, description and buttons, in the one border (accent, or warn for a destructive question). */
 function DialogBox({ title, description = [], buttons, destructive, focus, onHover, onPick }: DialogBoxProps) {
   const { c, g, box } = useTheme();
   const { cols } = useLayout();
@@ -69,7 +69,7 @@ function DialogBox({ title, description = [], buttons, destructive, focus, onHov
   const rule = <text wrapMode="none" fg={c.dim} flexShrink={0}>{g.hline.repeat(width - DIALOG_CHROME)}</text>;
   const centered = (children: ReactNode, key?: number) => <box key={key} flexDirection="row" justifyContent="center" flexShrink={0}>{children}</box>;
   return (
-    <box width={width} flexShrink={0} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(destructive === undefined ? c.accent : c.error)}>
+    <box width={width} flexShrink={0} flexDirection="column" paddingX={1} backgroundColor={c.panel} {...box(destructive === undefined ? c.accent : c.warn)}>
       {centered(<text wrapMode="none" fg={c.text}><b>{clean(title)}</b></text>)}
       {rule}
       {description.length ? description.map((line, i) => centered(<text wrapMode="none" fg={c.dim}>{clean(line)}</text>, i)) : null}
@@ -117,10 +117,13 @@ export function ConfirmDialog({ title, description, buttons, initial, destructiv
 
 const CONFIRM_LABEL = "confirmar";
 const CANCEL_LABEL = "cancelar";
+/** Button positions of a confirm question: the safe one first (left), the one that acts second. */
+export const CANCEL_BUTTON = 0;
+export const CONFIRM_BUTTON = 1;
 
 /** `sdk.ui.ConfirmPreview`: the dialog of `useConfirm` drawn in place, the cancel (the safe one) looking focused unless the page says otherwise. */
 export function ConfirmPreview({ title, description, confirmLabel = CONFIRM_LABEL, cancelLabel = CANCEL_LABEL, destructive, focused = "cancel" }: Props<"ConfirmPreview">) {
   const lines = typeof description === "string" ? [description] : description;
-  const initial = focused === "confirm" ? 0 : 1;
-  return <ConfirmDialog preview title={title} description={lines} buttons={[confirmLabel, cancelLabel]} initial={initial} destructive={destructive ? 0 : undefined} onPick={ignore} onCancel={ignore} />;
+  const initial = focused === "confirm" ? CONFIRM_BUTTON : CANCEL_BUTTON;
+  return <ConfirmDialog preview title={title} description={lines} buttons={[cancelLabel, confirmLabel]} initial={initial} destructive={destructive ? CONFIRM_BUTTON : undefined} onPick={ignore} onCancel={ignore} />;
 }

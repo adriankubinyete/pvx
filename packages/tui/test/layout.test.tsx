@@ -338,8 +338,9 @@ for (const [cols, rows] of SIZES) {
       expect(Math.abs(before - after)).toBeLessThanOrEqual(1);
     }
     const buttons = rowsOf(h)[rowIndex(h, "[ manter ]")]!;
-    const buttonsBefore = buttons.indexOf("[ remover IP ]") - (left + 1);
-    const buttonsAfter = right - (buttons.indexOf("[ manter ]") + "[ manter ]".length);
+    expect(buttons.indexOf("[ manter ]")).toBeLessThan(buttons.indexOf("[ remover IP ]")); // the safe button is first
+    const buttonsBefore = buttons.indexOf("[ manter ]") - (left + 1);
+    const buttonsAfter = right - (buttons.indexOf("[ remover IP ]") + "[ remover IP ]".length);
     expect(Math.abs(buttonsBefore - buttonsAfter)).toBeLessThanOrEqual(1);
     // the page behind stays (dimmed): its text is still on screen
     expect(frame).toContain("sem resposta");
@@ -347,6 +348,8 @@ for (const [cols, rows] of SIZES) {
     expect(spanOf(h, "[ manter ]").bg.equals(color(tokens.accent))).toBe(true);
     expect(spanOf(h, "[ remover IP ]").fg.equals(color(tokens.error))).toBe(true);
     expect(spanOf(h, "[ remover IP ]").bg.equals(color(tokens.error))).toBe(false);
+    expect(frame).not.toContain("[ remover IP ]  [ manter ]");
+    expect(spanOf(h, "╭").fg.equals(color(tokens.warn))).toBe(true); // a destructive question has the warn border
   });
 }
 
@@ -360,11 +363,11 @@ test("confirm keys: esc cancels, enter on the focused safe button keeps, → the
   await h.press("RETURN"); // the safe button has the focus
   expect(h.frame()).toContain("manteve");
   await h.press("x");
-  await h.press("ARROW_LEFT");
+  await h.press("ARROW_RIGHT");
   expect(spanOf(h, "[ remover IP ]").bg.equals(color(tokens.error))).toBe(true); // focus moved: filled with the error style
   await h.press("TAB");
   expect(spanOf(h, "[ manter ]").bg.equals(color(tokens.accent))).toBe(true);
-  await h.press("ARROW_LEFT");
+  await h.press("ARROW_LEFT"); // wraps to the confirm button
   await h.press("RETURN");
   expect(h.frame()).toContain("confirmou");
 });
@@ -387,7 +390,7 @@ test("the delete button of a form asks in the dialog, with the labels the form g
   await h.press("RETURN"); // manter
   expect(h.frame()).not.toContain("removeu");
   await h.click(columnOf(h, "[ remover ]") + 2, rowIndex(h, "[ remover ]"));
-  await h.press("ARROW_LEFT");
+  await h.press("ARROW_RIGHT");
   await h.press("RETURN");
   expect(h.frame()).toContain("removeu");
 });

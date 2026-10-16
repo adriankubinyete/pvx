@@ -120,7 +120,7 @@ test("ctrl+k opens the palette from the log screen too", async () => {
   expect(t.frame()).toContain("ctrl+f favorito");
 });
 
-test("destructive asks in a centered dialog: focus starts on cancelar, esc cancels, ← then enter confirms", async () => {
+test("destructive asks in a centered dialog: focus starts on cancelar, esc cancels, → then enter confirms", async () => {
   const t = await mount();
   await run(t, "demo wipe");
   for (const text of ["rodar demo wipe?", "este comando é destrutivo", "[ confirmar ]", "[ cancelar ]"]) expect(t.frame()).toContain(text);
@@ -131,7 +131,7 @@ test("destructive asks in a centered dialog: focus starts on cancelar, esc cance
   await t.press("ESCAPE");
   expect(t.frame().match(/cancelado/g)).toHaveLength(2);
   await run(t, "demo wipe");
-  await t.press("ARROW_LEFT");
+  await t.press("ARROW_RIGHT");
   await t.press("RETURN");
   expect(t.frame()).toContain("[✓] apagado");
 });
@@ -212,7 +212,7 @@ test("a destructive command run from the palette asks through the palette's own 
   await t.type(">wipe");
   await t.press("RETURN");
   expect(t.frame()).toContain("rodar demo wipe?"); // would wait forever if only the palette were mounted
-  await t.press("ARROW_LEFT");
+  await t.press("ARROW_RIGHT");
   await t.press("RETURN");
   await t.flush();
   expect(t.frame()).toContain("[✓] apagado");

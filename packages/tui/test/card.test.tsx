@@ -106,7 +106,7 @@ test("ConfirmPreview draws the dialog in place: no backdrop, no key; the real mo
   ), { cols: 70, rows: 16 });
   const frame = h.frame();
   expect(frame).toContain("Lorem ipsum dolor?");
-  expect(frame).toContain("[ remover lorem ]  [ manter ]");
+  expect(frame).toContain("[ manter ]  [ remover lorem ]");
   const dialogRow = rowsOf(h).findIndex((row) => row.includes("Lorem ipsum dolor?"));
   const afterRow = rowsOf(h).findIndex((row) => row.includes("depois do preview"));
   expect(afterRow).toBeGreaterThan(dialogRow); // in the flow of the page, not floating over it
