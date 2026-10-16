@@ -102,7 +102,7 @@ function useQuery<T = unknown>(name: string, ...rest: unknown[]): QueryState<T> 
     let busy = false;
     let again = false;
     const read = async (first: boolean): Promise<void> => {
-      if (first) setState({ loading: true });
+      if (first) setState((current) => ({ data: current.data, loading: true })); // new arguments: the old data stay until the new ones arrive
       try {
         const data = (await deps.registry.query(name, ...args)) as T;
         if (live) setState((current) => (!first && !current.error && !current.loading && sameJson(current.data, data) ? current : { data, loading: false }));

@@ -4,6 +4,9 @@
 import type { CommandCtx, Sdk } from "@pvx/sdk";
 
 // Pages that exercise the newer SDK pieces: List window and row action, Panel shrink, Notice, useNudge tones, refetch, useRun.
+/** How long `kit-demo.echo` takes to answer. */
+const ECHO_MS = 300;
+
 export default (sdk: Sdk) => {
   const { h, Panel, Text, List, Notice, RunPanel, useState, useCommand, useKey, useNudge, useQuery, useRun } = sdk.ui;
   const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
@@ -75,6 +78,14 @@ export default (sdk: Sdk) => {
     return <Panel><Text>{`count=${count.data ?? "-"}`}</Text></Panel>;
   }
 
+  /** `n` changes the query argument; the slow read lets the test see the screen while it runs. */
+  function QueryArgs() {
+    const [word, setWord] = useState("um");
+    const echo = useQuery<string>("kit-demo.echo", word);
+    useKey("n", "troca", () => setWord("dois"));
+    return <Panel><Text>{`value=${echo.data ?? "-"} loading=${String(echo.loading)}`}</Text></Panel>;
+  }
+
   /** `trailing` is the phases that do not hold the run back (the last one, a countdown). */
   function Run({ trailing }: { trailing?: string[] }) {
     const run = useRun("setup", { trailing });
@@ -109,7 +120,13 @@ export default (sdk: Sdk) => {
       break: { help: "Breaks the database phase", run: (ctx: CommandCtx) => ctx.store.set("broken", true) },
       fix: { help: "Fixes it", run: (ctx: CommandCtx) => ctx.store.delete("broken") },
     },
-    queries: { "kit-demo.count": () => ++reads },
+    queries: {
+      "kit-demo.count": () => ++reads,
+      "kit-demo.echo": async (_name: string, word: unknown) => {
+        await Bun.sleep(ECHO_MS);
+        return word;
+      },
+    },
     pages: {
       rows: { title: "Linhas", render: () => <Rows /> },
       "rows-select": { title: "Linhas (clique seleciona)", render: () => <Rows clickOpens={false} /> },
@@ -117,6 +134,7 @@ export default (sdk: Sdk) => {
       "secret-run": { title: "Segredo", render: () => <SecretRun /> },
       live: { title: "Execução", render: () => <Live /> },
       refetch: { title: "Refetch", render: () => <Refetch /> },
+      "query-args": { title: "Argumentos", render: () => <QueryArgs /> },
       run: { title: "Run", render: () => <Run /> },
       "run-trailing": { title: "Run (database trailing)", render: () => <Run trailing={["database"]} /> },
     },

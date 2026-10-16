@@ -149,6 +149,15 @@ test("useQuery refetch reads again at once and keeps the data", async () => {
   await until("count=2");
 });
 
+test("useQuery keeps the previous data while a read with new arguments runs", async () => {
+  h = await renderPage(KIT, "query-args", { cols: 80, rows: 24 });
+  await until("value=um loading=false");
+  await h.press("n");
+  await h.flush();
+  expect(h.frame()).toContain("value=um loading=true"); // not "-": the old data stay
+  await until("value=dois loading=false");
+});
+
 test("Notice is a result line in the level's color", async () => {
   h = await renderTui(<ThemeProvider><Notice level="error">falhou</Notice></ThemeProvider>, { cols: 30, rows: 3 });
   expect(h.frame()).toContain("[✗] falhou");
