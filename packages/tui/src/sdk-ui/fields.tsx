@@ -13,11 +13,13 @@ import { END_OF_TEXT, withDerived } from "./derive.ts";
 import { buttonLook, LookText } from "./button.tsx";
 import { BACKGROUND_NUDGE, DEFAULT_BUSY_LABEL, useBusy } from "./busy.ts";
 import { FocusCtx, HostCtx } from "./host.tsx";
+import { isShown, refocus, useOnChange, valueWidth, withoutHidden } from "./reactive.ts";
 import { useSpin } from "./spin.ts";
 
 type Props = Parameters<SdkUi["Fields"]>[0];
 type Value = string | boolean;
-type Button = "save" | "cancel" | "remove";
+type Button = "save" | "cancel" | "remove" | `extra:${number}`;
+type ExtraAction = NonNullable<Props["extraActions"]>[number];
 
 const ALNUM = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 /** 24 letters and digits from the OS random source (rejection sampling: no modulo bias). */
@@ -35,9 +37,6 @@ const REQUIRED_MESSAGE = "preencha este campo";
 const REQUIRED_MARK = " *";
 /** Columns of the focus marker (`›`) before every row: the marker takes its own column, so labels and inputs never move when the focus does. */
 const MARK_W = 2;
-/** The width of every input cell: fixed, so the cells line up. */
-const INPUT_W = 30;
-const MIN_INPUT_W = 12;
 /** What the page and the form spend around the fields: the page padding. */
 const PAGE_PADDING = 2;
 /** Columns between an input cell and its hint. */
@@ -62,6 +61,18 @@ const FIELD_GAP = 1;
 type Field = Props["fields"][number];
 
 const fieldId = (field: Field): string => `field-${field.id}`;
+
+/** The prefix of the id of an extra action's button: `extra:0` is the first of `extraActions`. */
+const EXTRA_PREFIX = "extra:";
+const extraButton = (index: number): Button => `${EXTRA_PREFIX}${index}`;
+/** The position in `extraActions` a button stands for, or `undefined` for the primary, cancel and remove buttons. */
+const extraIndexOf = (button: Button): number | undefined => (button.startsWith(EXTRA_PREFIX) ? Number(button.slice(EXTRA_PREFIX.length)) : undefined);
+
+/** The `detail` of the chosen option of a `radio` or `buttons` choice: the dim line under the row; `undefined` when the style, the choice or the option has none. */
+function chosenDetail(field: Field, chosen: string | undefined): string | undefined {
+  if (field.kind !== "choice" || !isRowStyle(field)) return undefined;
+  return field.options?.find((option) => option.value === chosen)?.detail;
+}
 
 /** A `choice` or `multi` drawn as one row (`radio`, `buttons`, `row`): its label sits in the label column like a `line`'s. */
 const isRowStyle = (field: Field): boolean => field.style === "radio" || field.style === "buttons" || field.style === "row";
@@ -112,7 +123,7 @@ function Keys({ on }: { on: (k: KeyEvent) => void | typeof RELEASE }) {
 }
 
 export const Fields: Component<Props> = (props) => {
-  const { fields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, initialFocus, title, description, submitLabel = "salvar", busyLabel = DEFAULT_BUSY_LABEL, details } = props;
+  const { fields: allFields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, initialFocus, title, description, submitLabel = "salvar", busyLabel = DEFAULT_BUSY_LABEL, details, onChange, summary, extraActions = [] } = props;
   const { c, g } = useTheme();
   const { cols } = useLayout();
   const host = useContext(HostCtx); // a form outside a page (the Módulos tab) has no page footer: its screen sets the scope
@@ -125,20 +136,46 @@ export const Fields: Component<Props> = (props) => {
   const wasBusy = useRef(false);
   const engaged = active && keyboardOwner && inside;
   const live = engaged && !busy; // while busy nothing draws the focus
-  const [focus, setFocus] = useState(() => Math.max(0, fields.findIndex((f) => f.id === initialFocus)));
+  const [focus, setFocus] = useState(() => Math.max(0, allFields.findIndex((f) => f.id === initialFocus)));
   const [ready, setReady] = useState(false);
   const [confirm, setConfirm] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>(() => Object.fromEntries(fields.filter((f) => f.error).map((f) => [f.id, f.error!])));
-  const [lines, setLines] = useState<Record<string, Line>>(() => Object.fromEntries(fields.filter((f) => f.kind === "line" || f.kind === "secret").map((f) => [f.id, f.derive ? { text: String(initial[f.id] ?? ""), cursor: END_OF_TEXT } : lineOf(String(initial[f.id] ?? ""))])));
-  const [touched, setTouched] = useState<Record<string, boolean>>(() => Object.fromEntries(fields.filter((f) => f.derive && initial[f.id]).map((f) => [f.id, true]))); // a given initial value is the technician's
-  const [marks, setMarks] = useState<Record<string, boolean>>(() => Object.fromEntries(fields.filter((f) => f.kind === "toggle").map((f) => [f.id, initial[f.id] === true])));
-  const [picks, setPicks] = useState<Record<string, string>>(() => Object.fromEntries(fields.filter((f) => f.kind === "choice").map((f) => [f.id, String(initial[f.id] ?? f.options?.[0]?.value ?? "")])));
-  const [checks, setChecks] = useState<Record<string, string[]>>(() => Object.fromEntries(fields.filter((f) => f.kind === "multi").map((f) => [f.id, String(initial[f.id] ?? "").split(",").filter(Boolean)])));
-  const [cursors, setCursors] = useState<Record<string, number>>(() => Object.fromEntries(fields.filter((f) => f.kind === "choice" || f.kind === "multi").map((f) => [f.id, f.kind === "choice" ? Math.max(0, f.options?.findIndex((o) => o.value === picks0(f, initial)) ?? 0) : 0])));
+  const [submitter, setSubmitter] = useState<Button>("save"); // the button that started the busy state: it shows the spinner
+  const [errors, setErrors] = useState<Record<string, string>>(() => Object.fromEntries(allFields.filter((f) => f.error).map((f) => [f.id, f.error!])));
+  const [lines, setLines] = useState<Record<string, Line>>(() => Object.fromEntries(allFields.filter((f) => f.kind === "line" || f.kind === "secret").map((f) => [f.id, f.derive ? { text: String(initial[f.id] ?? ""), cursor: END_OF_TEXT } : lineOf(String(initial[f.id] ?? ""))])));
+  const [touched, setTouched] = useState<Record<string, boolean>>(() => Object.fromEntries(allFields.filter((f) => f.derive && initial[f.id]).map((f) => [f.id, true]))); // a given initial value is the technician's
+  const [marks, setMarks] = useState<Record<string, boolean>>(() => Object.fromEntries(allFields.filter((f) => f.kind === "toggle").map((f) => [f.id, initial[f.id] === true])));
+  const [picks, setPicks] = useState<Record<string, string>>(() => Object.fromEntries(allFields.filter((f) => f.kind === "choice").map((f) => [f.id, String(initial[f.id] ?? f.options?.[0]?.value ?? "")])));
+  const [checks, setChecks] = useState<Record<string, string[]>>(() => Object.fromEntries(allFields.filter((f) => f.kind === "multi").map((f) => [f.id, String(initial[f.id] ?? "").split(",").filter(Boolean)])));
+  const [cursors, setCursors] = useState<Record<string, number>>(() => Object.fromEntries(allFields.filter((f) => f.kind === "choice" || f.kind === "multi").map((f) => [f.id, f.kind === "choice" ? Math.max(0, f.options?.findIndex((o) => o.value === picks0(f, initial)) ?? 0) : 0])));
   const [shown, setShown] = useState<string | undefined>(undefined); // a revealed or generated secret stays readable while its field has the focus
   const [detailsOpen, setDetailsOpen] = useState(false);
   const areas = useRef<Record<string, TextareaRenderable | null>>({});
   const scroll = useRef<ScrollBoxRenderable>(null);
+
+  /** The values of EVERY field, hidden ones included, the lines as given (`from`; the derived fields are filled in by `shownLines`). */
+  const valuesOf = (from: Record<string, Line>, over: Record<string, Value> = {}): Record<string, Value> => ({
+    ...Object.fromEntries(allFields.filter((f) => f.kind === "area").map((f) => [f.id, areas.current[f.id]?.plainText ?? ""])),
+    ...Object.fromEntries(Object.entries(from).map(([id, l]) => [id, l.text])),
+    ...picks,
+    ...Object.fromEntries(allFields.filter((f) => f.kind === "multi").map((f) => [f.id, (f.options ?? []).filter((o) => checks[f.id]!.includes(o.value)).map((o) => o.value).join(",")])),
+    ...marks,
+    ...over,
+  });
+  const shownLines = withDerived(allFields, lines, touched, (from) => valuesOf(from));
+  const read = (over: Record<string, Value> = {}): Record<string, Value> => valuesOf(shownLines, over);
+  /** The fields that show for these values (`when`), and the values without the hidden ones: what the module is handed. */
+  const shownFor = (values: Record<string, Value>): Field[] => allFields.filter((f) => isShown(f, values));
+  const submittable = (over?: Record<string, Value>) => {
+    const everything = read(over);
+    const showing = shownFor(everything);
+    return { fields: showing, values: withoutHidden(allFields, showing, everything) };
+  };
+  const { fields, values: currentValues } = submittable();
+  const shownIds = fields.map((f) => f.id);
+  const shownKey = shownIds.join("\n");
+  const previousIds = useRef(shownIds);
+  useOnChange(currentValues, onChange);
+
   useEffect(() => setReady(true), []);
   useEffect(() => {
     if (active && keyboardOwner) setInside(true); // entering the form again (the page got the keyboard back, the parent turned it on) puts the focus in a field
@@ -151,11 +188,16 @@ export const Fields: Component<Props> = (props) => {
     setFocus(bad >= 0 ? bad : fields.length); // the first field with an error, else the primary button
   }, [busy]);
   useEffect(() => {
+    const before = previousIds.current;
+    previousIds.current = shownIds;
+    if (before.join("\n") !== shownKey) setFocus((current) => refocus(before, shownIds, current)); // a field came or went: the focus stays on the same field
+  }, [shownKey]);
+  useEffect(() => {
     const at = fields[focus];
     if (at) scroll.current?.scrollChildIntoView(fieldId(at));
-  }, [focus]);
+  }, [focus, shownKey]);
 
-  const buttons: Button[] = showButtons ? ["save", "cancel", ...(onDelete ? (["remove"] as const) : [])] : [];
+  const buttons: Button[] = showButtons ? ["save", ...extraActions.map((_, index) => extraButton(index)), "cancel", ...(onDelete ? (["remove"] as const) : [])] : [];
   const total = fields.length + buttons.length;
   const here = fields[focus]; // undefined: a button has the focus
   const button = focus >= fields.length ? buttons[focus - fields.length] : undefined;
@@ -165,6 +207,7 @@ export const Fields: Component<Props> = (props) => {
   const rowy = here !== undefined && isRowStyle(here);
   const enterHint = button ? "ativa" : here?.kind === "toggle" ? "marca" : here?.kind === "choice" ? "escolhe" : here?.kind === "area" ? "" : focus === fields.length - 1 ? "salva" : "avança";
   const marks_ = fields.some((f) => f.kind === "toggle" || f.kind === "multi" || f.kind === "choice");
+  const extraKeyHints = extraActions.filter((action) => action.keys).map((action) => `${action.keys}|${clean(action.label)}`);
   const hints = busy ? "esc|sai" : !inside ? "enter|edita" : [
     here?.kind === "area" ? "tab|campo" : listy ? "↑↓|opção\ntab|campo" : rowy ? "←→|opção\n↑↓ tab|campo" : "↑↓ tab|campo",
     marks_ ? `space|${here?.kind === "choice" ? "escolhe" : "marca"}` : "",
@@ -172,6 +215,7 @@ export const Fields: Component<Props> = (props) => {
     here?.kind === "secret" ? "ctrl+r|mostra ou oculta|help" : "",
     enterHint && `enter|${enterHint}`,
     "ctrl+s|salva",
+    ...extraKeyHints,
     details ? "ctrl+d|ver o comando" : "",
   ].filter(Boolean).join("\n");
   useEffect(() => {
@@ -183,17 +227,6 @@ export const Fields: Component<Props> = (props) => {
     return () => offs.forEach((off) => off());
   }, [host, hints, active, keyboardOwner]);
 
-  /** The values of the form, the lines as given (`from`; the derived fields are filled in by `shownLines`). */
-  const valuesOf = (from: Record<string, Line>, over: Record<string, Value> = {}): Record<string, Value> => ({
-    ...Object.fromEntries(fields.filter((f) => f.kind === "area").map((f) => [f.id, areas.current[f.id]?.plainText ?? ""])),
-    ...Object.fromEntries(Object.entries(from).map(([id, l]) => [id, l.text])),
-    ...picks,
-    ...Object.fromEntries(fields.filter((f) => f.kind === "multi").map((f) => [f.id, (f.options ?? []).filter((o) => checks[f.id]!.includes(o.value)).map((o) => o.value).join(",")])),
-    ...marks,
-    ...over,
-  });
-  const shownLines = withDerived(fields, lines, touched, (from) => valuesOf(from));
-  const read = (over: Record<string, Value> = {}): Record<string, Value> => valuesOf(shownLines, over);
   const go = (n: number) => {
     if (busy) return;
     setFocus(n);
@@ -201,15 +234,23 @@ export const Fields: Component<Props> = (props) => {
     setShown(undefined);
     setInside(true);
   };
-  /** `over`: values the state has not caught up with yet (a choice picked by the same enter). */
-  const submit = (over?: Record<string, Value>) => {
+  /**
+   * Checks the shown fields and hands the values to `action` (the primary `onSubmit`, or an extra action) as the button `by`.
+   * `over`: values the state has not caught up with yet (a choice picked by the same enter).
+   */
+  const submit = (over?: Record<string, Value>, by: Button = "save", action: (values: Record<string, Value>) => unknown = onSubmit) => {
     if (busy) return;
-    const values = read(over);
-    const found = { ...requiredProblems(fields, values), ...(validate?.(values) ?? {}) };
+    const { fields: showing, values } = submittable(over);
+    const found = { ...requiredProblems(showing, values), ...(validate?.(values) ?? {}) };
     setErrors(found);
     const bad = fields.findIndex((f) => found[f.id]);
     if (bad >= 0) return go(bad);
-    track(onSubmit(read(over)));
+    setSubmitter(by);
+    track(action(values));
+  };
+  const submitExtra = (index: number) => {
+    const extra: ExtraAction | undefined = extraActions[index];
+    if (extra) submit(undefined, extraButton(index), extra.onPress);
   };
   const flip = (id: string) => {
     if (busy) return;
@@ -236,6 +277,8 @@ export const Fields: Component<Props> = (props) => {
   };
   const press = (b: Button) => {
     if (busy) return;
+    const extra = extraIndexOf(b);
+    if (extra !== undefined) return submitExtra(extra);
     if (b === "save") return submit();
     if (b === "cancel") return onCancel();
     askDelete();
@@ -274,6 +317,8 @@ export const Fields: Component<Props> = (props) => {
     nudge(BACKGROUND_NUDGE);
     leave();
   };
+  /** The extra action whose `keys` this key is, or `-1`. */
+  const extraForKey = (k: KeyEvent): number => extraActions.findIndex((action) => action.keys !== undefined && matchKey(k, action.keys));
   const onKey = (k: KeyEvent): void | typeof RELEASE => {
     if (busy) return onBusyKey(k);
     if (confirm) {
@@ -284,6 +329,8 @@ export const Fields: Component<Props> = (props) => {
     if (!inside) return matchKey(k, "enter") ? setInside(true) : RELEASE;
     if (k.name === "escape") return leave();
     if (matchKey(k, "ctrl+s")) return submit();
+    const extra = extraForKey(k);
+    if (extra >= 0) return submitExtra(extra);
     const typing = here !== undefined && TEXT_KINDS.includes(here.kind); // `?` is a character there
     if (details && (matchKey(k, "ctrl+d") || (k.sequence === "?" && !typing))) return setDetailsOpen(!detailsOpen);
     if (here?.kind === "secret" && matchKey(k, "ctrl+r")) return setShown(shown === here.id ? undefined : here.id);
@@ -334,18 +381,24 @@ export const Fields: Component<Props> = (props) => {
     }
   };
 
-  const labelW = Math.max(0, ...fields.filter(hasLabelColumn).map((f) => [...labelCell(f)].length));
+  // The label column fits every field, the hidden ones too: a field that comes or goes never moves the others sideways.
+  const labelW = Math.max(0, ...allFields.filter(hasLabelColumn).map((f) => [...labelCell(f)].length));
   const stacked = labelW > LABEL_MAX;
   const labelCol = stacked ? 0 : labelW + 2;
   const col = MARK_W + labelCol; // where the input and the text under it start
-  const inputW = Math.max(MIN_INPUT_W, Math.min(INPUT_W, cols - PAGE_PADDING - col));
+  const formW = cols - PAGE_PADDING;
+  const cellOf = (f: Field): number => valueWidth(f.width, formW, formW - col);
   /** Columns left for a hint after `used` columns of value. */
-  const hintRoom = (used: number) => cols - PAGE_PADDING - col - used - HINT_GAP;
-  const hintW = hintRoom(inputW);
+  const hintRoom = (used: number) => formW - col - used - HINT_GAP;
   const err = (f: { id: string }) =>
     errors[f.id] ? (
       <text wrapMode="none" flexShrink={0} fg={c.error}>{`${" ".repeat(col)}${g.error} ${clean(errors[f.id]!)}`}</text>
     ) : null;
+  /** The dim line under a row that tells what the chosen option means (its `detail`). */
+  const detailLine = (f: Field) => {
+    const detail = chosenDetail(f, picks[f.id]);
+    return detail ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{`${" ".repeat(col)}${fitHint(clean(detail), formW - col)}`}</text> : null;
+  };
   /** The label of a field, with its required mark; it sits in a column beside the input, or above it when the labels are long. */
   const labelOf = (f: Field, on: boolean) => (
     <text wrapMode="none" flexShrink={0}>
@@ -355,28 +408,31 @@ export const Fields: Component<Props> = (props) => {
   );
   const focusMark = (on: boolean) => <box width={MARK_W} flexShrink={0}><text wrapMode="none" fg={c.accent}>{on ? g.query : " "}</text></box>;
   const labelColumn = (f: Field, on: boolean) => (stacked ? null : <box width={labelCol} flexShrink={0}>{labelOf(f, on)}</box>);
-  /** The buttons look like every `Button` (UI.md, section 12): all `[ label ]`, only the focused one filled. */
-  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(b === "save" && busy ? `${spinner} ${clean(busyLabel)}` : label, { primary: b === "save", danger: b === "remove", lit: button === b && live, disabled: busy && b !== "save" ? "" : undefined }, c)} />);
+  /** The buttons look like every `Button` (UI.md, section 12): all `[ label ]`, only the focused one filled. The one that started the work shows the spinner. */
+  const btn = (b: Button, label: string) => btnBox(b, <LookText look={buttonLook(busy && b === submitter ? `${spinner} ${clean(busyLabel)}` : label, { primary: b === "save", danger: b === "remove", lit: button === b && live, disabled: busy && b !== submitter ? "" : undefined }, c)} />);
   const btnBox = (b: Button, content: React.ReactNode) => (
     <box key={b} flexShrink={0} onMouseDown={() => (go(fields.length + buttons.indexOf(b)), press(b))}>{content}</box>
   );
 
-  const textField = (f: Field, i: number, on: boolean) => (
-    <box key={f.id} flexDirection="column" flexShrink={0} onMouseDown={() => go(i)}>
-      {stacked ? <box flexDirection="row" flexShrink={0}>{focusMark(on)}{labelOf(f, on)}</box> : null}
-      <box flexDirection="row" flexShrink={0}>
-        {stacked ? <box width={MARK_W} flexShrink={0} /> : focusMark(on)}
-        {labelColumn(f, on)}
-        <box width={inputW} flexShrink={0} backgroundColor={on ? c.selected : c.panel}>
-          <text wrapMode="none" flexShrink={0}>
-            <LineText line={shownLines[f.id]!} focused={on} width={inputW} mask={f.kind === "secret" && shown !== f.id} pad />
-          </text>
+  const textField = (f: Field, i: number, on: boolean) => {
+    const width = cellOf(f);
+    return (
+      <box key={f.id} flexDirection="column" flexShrink={0} onMouseDown={() => go(i)}>
+        {stacked ? <box flexDirection="row" flexShrink={0}>{focusMark(on)}{labelOf(f, on)}</box> : null}
+        <box flexDirection="row" flexShrink={0}>
+          {stacked ? <box width={MARK_W} flexShrink={0} /> : focusMark(on)}
+          {labelColumn(f, on)}
+          <box width={width} flexShrink={0} backgroundColor={on ? c.selected : c.panel}>
+            <text wrapMode="none" flexShrink={0}>
+              <LineText line={shownLines[f.id]!} focused={on} width={width} mask={f.kind === "secret" && shown !== f.id} pad ellipsis />
+            </text>
+          </box>
+          {f.help ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{`${" ".repeat(HINT_GAP)}${fitHint(clean(f.help), hintRoom(width))}`}</text> : null}
         </box>
-        {f.help ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{`${" ".repeat(HINT_GAP)}${fitHint(clean(f.help), hintW)}`}</text> : null}
+        {err(f)}
       </box>
-      {err(f)}
-    </box>
-  );
+    );
+  };
   const toggleField = (f: Field, i: number, on: boolean) => (
     <box key={f.id} flexDirection="column" flexShrink={0} onMouseDown={() => (go(i), flip(f.id))}>
       {stacked ? <box flexDirection="row" flexShrink={0}>{focusMark(on)}{labelOf(f, on)}</box> : null}
@@ -444,6 +500,7 @@ export const Fields: Component<Props> = (props) => {
         </box>
         {f.help ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{`${" ".repeat(HINT_GAP)}${fitHint(clean(f.help), hintRoom(rowOptionsWidth(f)))}`}</text> : null}
       </box>
+      {detailLine(f)}
       {err(f)}
     </box>
   );
@@ -463,7 +520,7 @@ export const Fields: Component<Props> = (props) => {
   /** Rows a field takes now: its input (a label line above it when stacked), the hint or error under it, the options, the area. */
   const rowsOf = (f: Field): number => {
     if (f.kind === "area") return (f.rows ?? 5) + 2;
-    const under = errors[f.id] ? 1 : 0;
+    const under = (errors[f.id] ? 1 : 0) + (chosenDetail(f, picks[f.id]) ? 1 : 0);
     if (isOptionList(f)) return (f.label ? 1 : 0) + (f.options?.length ?? 0) + under;
     return 1 + (stacked ? 1 : 0) + under;
   };
@@ -476,6 +533,9 @@ export const Fields: Component<Props> = (props) => {
     </box>
   );
 
+  /** The summary line: dim, above the buttons, cut to the width of the form. */
+  const summaryText = summary ? fitHint(clean(summary(currentValues)), formW - MARK_W) : "";
+
   return (
     <box flexDirection="column" flexShrink={1} minHeight={0}>
       {ready && active && keyboardOwner ? <Keys on={onKey} /> : null}
@@ -485,12 +545,15 @@ export const Fields: Component<Props> = (props) => {
       <scrollbox ref={scroll} flexShrink={1} minHeight={0} maxHeight={areaRows} focused={false} opacity={busy ? BUSY_OPACITY : 1}>
         {fields.map(spaced)}
       </scrollbox>
-      {details && detailsOpen ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(details(read()))}</text> : null}
+      {summaryText ? <text flexShrink={0}> </text> : null}
+      {summaryText ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{summaryText}</text> : null}
+      {details && detailsOpen ? <text wrapMode="none" flexShrink={0} fg={c.dim}>{clean(details(currentValues))}</text> : null}
       {showButtons ? <text flexShrink={0}> </text> : null}
       {showButtons ? <box flexDirection="row" justifyContent="space-between" flexShrink={0}>
         <box flexDirection="row" flexShrink={0} gap={2}>
           {focusMark(button !== undefined && live)}
           {btn("save", clean(submitLabel))}
+          {extraActions.map((action, index) => btn(extraButton(index), clean(action.label)))}
           {btn("cancel", "cancelar")}
         </box>
         {onDelete ? btn("remove", clean(deleteLabel)) : null}

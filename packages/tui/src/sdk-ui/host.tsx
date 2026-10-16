@@ -6,7 +6,7 @@ import type { SessionApi } from "../session/store.ts";
 import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useNudge as useHostNudge } from "../nudge.tsx";
 import { usePanelNav } from "../panelnav.ts";
-import { useTabs } from "../tabs/context.ts";
+import { requestTab, useTabs } from "../tabs/context.ts";
 import { useLayout } from "../layout.ts";
 import { useTheme } from "../theme-context.tsx";
 import { DEFAULT_STALE_MS, isCurrentRun, jobViewOf, progressOf, runViewOf, stepsOf } from "./run.ts";
@@ -231,6 +231,18 @@ function useRun(name: string, opts?: { tail?: number; staleMs?: number; trailing
   return { ...job, jobView, view, state, current, steps: stepsOf(shown, now), progress: progressOf(shown) };
 }
 
+/** The tab that shows the output of a command line: the host's full log of a job lands there. */
+const LOG_TAB = "comando";
+
+/** `useJobLog()`: opens the host's whole log of a job of this module (`jobs log <module> <name>`, as the Tarefas tab does) in the Comando tab. */
+function useJobLog(): (name: string) => void {
+  const { moduleId, deps } = useHost();
+  return useCallback((name: string) => {
+    void deps.session.run(`jobs log ${quoteArg(moduleId)} ${quoteArg(name)}`);
+    requestTab(LOG_TAB);
+  }, [deps, moduleId]);
+}
+
 function useStore() {
   const { moduleId } = useHost();
   return useMemo(() => createStore(moduleId), [moduleId]);
@@ -297,6 +309,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused" | "useConfirm"> = {
-  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useConfirm, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused" | "useConfirm" | "useJobLog"> = {
+  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useConfirm, useJobLog, useTheme: useModuleTheme,
 };

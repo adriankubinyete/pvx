@@ -53,8 +53,6 @@ function SectionHeader({ title, color, active, aside, inline }: { title: string;
 
 /** What the host's own pages add to a `Panel`; a module never sets it. */
 export interface SectionExtras {
-  /** A dim note at the right end of the header line (`perfil: Issabel produção`). */
-  aside?: string;
   /** Content on the header line, after the label (a collapsed section: `3 Atividade   17:20 alfa confirm`). */
   inline?: ReactNode;
   /** No blank row above: sections of one line sit one under the other. */

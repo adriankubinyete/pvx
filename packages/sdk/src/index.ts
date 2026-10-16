@@ -681,7 +681,7 @@ export interface FieldSpec {
   /**
    * How the options of a `choice` or `multi` are drawn. `list` (default): one option per line, with its `detail`. `radio` (`choice`): one row `( ) 16   (•) 18`;
    * `←` `→` move the choice and a click picks. `buttons` (`choice`): one row of buttons, the chosen one filled. `row` (`multi`): one row `[x] a   [ ] b`;
-   * `←` `→` move, `espaço` marks. The row styles put the label in the label column like a `line`, and ignore `detail`.
+   * `←` `→` move, `espaço` marks. The row styles put the label in the label column like a `line`. The `detail` of the chosen option of a `radio` or `buttons` `choice` shows as a dim line under the row and follows the choice; `list` shows every `detail` beside its option; `row` ignores it.
    */
   style?: "list" | "radio" | "buttons" | "row";
   /** `choice` and `multi`. The value of a `choice` is the chosen option's `value` (the first option when `initial` has none); of a `multi`, the checked values joined by a comma (`initial` the same). */
@@ -699,6 +699,24 @@ export interface FieldSpec {
   derive?: (values: Record<string, string | boolean>) => string;
   /** `secret` only: the key that fills the field with 24 random letters and digits (e.g. `ctrl+g`). It shows in the footer and in `?`. */
   generate?: string;
+  /**
+   * The field shows only while this returns true; it is called with the current values of EVERY field (a hidden one holds its last value), live as the technician edits.
+   * A hidden field is skipped by the focus, never required or validated, and not in the values `onSubmit`, `validate`, `onChange`, `summary` and `details` receive.
+   * The labels keep their column, so the form does not shift sideways when a field comes and goes. A hidden `area` starts from `initial` again when it shows.
+   */
+  when?: (values: Record<string, string | boolean>) => boolean;
+  /**
+   * `line` and `secret`: how wide the value cell is. The cell grows with the form: `normal` (default) takes 40% of the form width (at least 30 columns), `long` 60% (a path),
+   * `short` 20 (a code, a time). Never wider than the room the label leaves. While the field is not being edited a text longer than its cell shows its start and ends with `…`;
+   * it scrolls only while the field has the focus.
+   */
+  width?: "short" | "normal" | "long";
+}
+/** An extra submit button of `Fields`. */
+export interface FieldsAction {
+  label: string;
+  onPress: (values: Record<string, string | boolean>) => void | Promise<unknown>;
+  keys?: string;
 }
 export interface FieldOption {
   value: string;
@@ -930,6 +948,18 @@ export interface CardSpec {
   action?: { key: string; sub?: string };
 }
 
+/** One button of a `ButtonRow`: the props of a `Button`. */
+export interface ButtonRowItem {
+  label: string;
+  onPress: () => void;
+  primary?: boolean;
+  danger?: boolean;
+  /** The reason the button is off (shown under it); it ignores the mouse and `enter`. */
+  disabled?: string;
+  /** A key for the page, as in `Button`. */
+  keys?: string;
+}
+
 export interface SdkUi {
   /** JSX factory. A module file needs the classic-runtime pragmas (jsxRuntime classic, jsx h, jsxFrag Fragment), else Bun imports React. */
   h(type: unknown, props?: Record<string, unknown> | null, ...children: unknown[]): unknown;
@@ -944,7 +974,7 @@ export interface SdkUi {
    * With `tone` the section is the active one (or needs attention): the header takes the tone and a `▌` gutter runs down its side. A Panel without
    * `title` and `tone` is only a container (use it as the page root).
    */
-  Panel: Component<Kids & { title?: string; tone?: Tone; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
+  Panel: Component<Kids & { title?: string; tone?: Tone; /** A dim note at the right end of the header line (`2 rotinas · próxima hoje 03:30`). Only with a `title`; one line, short: the title keeps its room. */ aside?: string; grow?: boolean; /** The panel gives up height when the page is short, clipping its content, so the host's tab bar and footer never disappear. Pair it with `List maxRows`. */ shrink?: boolean; /** `usePanels().ref(id)`: lets the arrows find this panel by where it is drawn. */ panelRef?: unknown; /** Mouse down anywhere in the panel (children included): lets a page that keeps its own `{ panel, inside }` focus the clicked panel. */ onPress?: () => void }>;
   /**
    * Children side by side, equal widths (give each Panel `grow` so they match in height). With `fit` each child keeps its own width, `gap` cells (default 0) separate them, and the ones that do not fit go to the next line:
    * a row of buttons, or a line made of styled pieces (`<Row fit><Text tone="accent" bold>lor</Text><Text>em</Text></Row>`).
@@ -1073,6 +1103,12 @@ export interface SdkUi {
     submitLabel?: string;
     /** A dim one-liner hidden behind `ctrl+d` ("detalhes"), built from the current values. Off by default. */
     details?: (values: Record<string, string | boolean>) => string;
+    /** Called with the values (the shown fields) after they changed, as the technician edits: not on the first draw, and once per change. A change in an `area` is reported with the next change elsewhere. */
+    onChange?: (values: Record<string, string | boolean>) => void;
+    /** A dim line above the buttons, always on screen, built from the current values (`2 rotinas · próxima hoje 03:30`). Empty draws nothing. Not the `details` of `ctrl+d`: that one hides. */
+    summary?: (values: Record<string, string | boolean>) => string;
+    /** More submit buttons after the primary one (`[ salvar ]  [ salvar e rodar agora ]  [ cancelar ]`). Each validates like the primary (`required`, `validate`), then calls its `onPress` with the values; a promise makes the form busy, and the pressed button shows the spinner and `busyLabel`. `keys` (use a `ctrl+` chord: a plain key is typed) works from any field and shows in the footer. Same look and reach as the primary: only the focused button is filled, `tab` and the arrows walk them. */
+    extraActions?: FieldsAction[];
   }>;
 
   /**
@@ -1109,6 +1145,13 @@ export interface SdkUi {
    * for the page, so the footer and `?` show it. `focused` draws it selected (for a button the page navigates to by keyboard).
    */
   Button: Component<{ label: string; onPress: () => void; primary?: boolean; danger?: boolean; disabled?: string; keys?: string; /** With `keys`: the key shows in the `?` help and not in the footer (a page with many buttons keeps its footer to ~5 rows). */ help?: boolean; focused?: boolean }>;
+  /**
+   * A row of buttons the keyboard walks as ONE stop of a section: give it `focused` while the page's selection is on the row (as a `List` row id), and the row owns
+   * `←` `→` (move, wrapping), `enter` (press) and draws the current button filled (only that one, the rule of `Button`); the footer shows those keys only while it has the focus.
+   * `↑` `↓` stay the page's: they leave the row. A click presses a button. The buttons are the `Button` props (`keys` also registers a key for the page).
+   * It replaces a hand-written `←` `→` between `Button`s. Like a `Button`, a row with no `focused` and no `keys` on its buttons is unreachable by the keyboard (`expectButtonsReachable`).
+   */
+  ButtonRow: Component<{ buttons: ButtonRowItem[]; focused?: boolean }>;
   /**
    * One card (a box with a name, a state, a dim line, chips and a footnote). `state` is how the page draws it: `selected` has the accent border,
    * `inactive` a muted border and a `›` (the selection while the keyboard is elsewhere), `normal` a faint border. An `action` card is dashed.
@@ -1221,6 +1264,12 @@ export interface SdkUi {
    * It resolves true only on the confirm button. The CLI keeps its own text prompt; this is for the TUI pages.
    */
   useConfirm(): (options: ConfirmOptions) => Promise<boolean>;
+  /**
+   * Returns `openJobLog(name)`, which opens the host's whole log of the job `name` of this module: the same `jobs log <module> <name>` the Tarefas tab runs with `l`,
+   * its lines in the scrollback of the Comando tab, which comes to the front. Use it for a `[ ver o log completo ]` button or a key, next to the `LogTail` tail that `useJob` feeds.
+   * A job that does not exist prints `job inexistente` there. Outside the tabs (a test double) the line still runs and nothing switches.
+   */
+  useJobLog(): (name: string) => void;
   /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
   useConformity(): Conformity;
   /**

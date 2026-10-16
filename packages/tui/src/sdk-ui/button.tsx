@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { Component, SdkUi } from "@pvx/sdk";
 import { clean } from "../palette/search.ts";
+import { wrap } from "../panelnav.ts";
 import { useTheme } from "../theme-context.tsx";
 import type { Tokens } from "../theme.ts";
-import { useHost } from "./host.tsx";
+import { useHost, useKey } from "./host.tsx";
 
 type Props<K extends keyof SdkUi> = SdkUi[K] extends Component<infer P> ? P : never;
 
@@ -94,6 +95,41 @@ export function Button({ label, onPress, primary, danger, disabled, keys, help, 
       {keys && !off ? <ButtonKey keys={keys} label={label} help={help} onPress={onPress} /> : null}
       <LookText look={look} />
       {off && disabled ? <text wrapMode="none" fg={c.dim}>{clean(disabled)}</text> : null}
+    </box>
+  );
+}
+
+/** Cells between two buttons of a `ButtonRow`. */
+const ROW_GAP = 2;
+
+/** The keys of a focused `ButtonRow`: its own component, so the footer shows them only while the row has the focus. */
+function RowKeys({ onMove, onPress }: { onMove: (step: number) => void; onPress: () => void }) {
+  useKey("←", "botão", () => onMove(-1), { help: true });
+  useKey("→", "botão", () => onMove(1), { help: true });
+  useKey("enter", "ativa", onPress);
+  return null;
+}
+
+/**
+ * A row of buttons the keyboard walks as one stop: the page gives it `focused` while its selection is on the row, and it then owns `←` `→` (move,
+ * wrapping), `enter` (press) and draws the current button filled. A click presses a button and makes it the current one. Each button may also have its own `keys`.
+ */
+export function ButtonRow({ buttons, focused }: Props<"ButtonRow">) {
+  const [current, setCurrent] = useState(0);
+  const at = Math.min(current, Math.max(0, buttons.length - 1));
+  const move = (step: number) => setCurrent(wrap(at, step, buttons.length));
+  const pressCurrent = () => {
+    const button = buttons[at];
+    if (button && button.disabled === undefined) button.onPress();
+  };
+  return (
+    <box flexDirection="row" flexShrink={0} columnGap={ROW_GAP}>
+      {focused ? <RowKeys onMove={move} onPress={pressCurrent} /> : null}
+      {buttons.map((button, index) => (
+        <box key={button.label} flexShrink={0} onMouseDown={() => setCurrent(index)}>
+          <Button {...button} focused={focused === undefined ? undefined : focused && index === at} />
+        </box>
+      ))}
     </box>
   );
 }

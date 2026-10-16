@@ -3,7 +3,7 @@ import type { SdkUi } from "@pvx/sdk";
 import { hooks } from "./host.tsx";
 import { Chip, KeyHint, List, LogTail, Notice, Panel, Row, Scroll, Spacer, Steps, Table, Text } from "./kit.tsx";
 import { Badge, BarMeter, Details, Meter, Spark } from "./display.tsx";
-import { Button } from "./button.tsx";
+import { Button, ButtonRow } from "./button.tsx";
 import { Fields } from "./fields.tsx";
 import { Form } from "./pages.tsx";
 import { CellGrid, Conversation, Loading, ProgressBar, useAsync } from "./flow.tsx";
@@ -20,7 +20,7 @@ export const ui: SdkUi = {
   Fragment,
   useState, useEffect, useMemo, useRef,
   Panel, Row, Crumb, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
-  Conversation, Button, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel, CommandResult, Card, CardGrid: SdkCardGrid, ConfirmPreview,
+  Conversation, Button, ButtonRow, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel, CommandResult, Card, CardGrid: SdkCardGrid, ConfirmPreview,
   ...hooks,
 };
 export { PageHost, PagePane, pageScope, pageScreen } from "./pages.tsx";
