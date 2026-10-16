@@ -4,7 +4,8 @@ import { createRegistry, loadModules, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { KeyRouter, ThemeProvider } from "../src/index.ts";
 import { NudgeProvider, NudgeText } from "../src/nudge.tsx";
-import { Palette, type SessionLike } from "../src/palette/Palette.tsx";
+import type { ArgSpec } from "@pvx/sdk";
+import { dialogSize, Palette, type SessionLike } from "../src/palette/Palette.tsx";
 import { loadFavorites } from "../src/palette/favorites.ts";
 import { buildLine } from "../src/palette/form.ts";
 import { search } from "../src/palette/search.ts";
@@ -125,7 +126,7 @@ test("form shows required *, masks the secret and keeps it out of the line and t
   await h!.press("TAB");
   await h!.type("s3cr3t");
   const f = h!.frame();
-  expect(f).toContain("token*");
+  expect(f).toContain("Token*");
   expect(f).toContain("••••••");
   expect(f).not.toContain("s3cr3t");
   expect(f).toContain("$ pvx demo login");
@@ -141,19 +142,19 @@ test("→ enters the args; the cursor edits in place and ← at the start return
   await open(fake().session);
   await h!.type(">login");
   await h!.press("ARROW_RIGHT");
-  expect(h!.frame()).toMatch(/» token\*/); // first field has focus
+  expect(h!.frame()).toMatch(/» Token\*/); // first field has focus
   await h!.type("abc");
   await h!.press("ARROW_LEFT");
   await h!.press("ARROW_LEFT");
   await h!.type("X");
-  expect(h!.frame()).toMatch(/» token\* ••••/); // secret: masked, cursor moved, 4 chars
-  expect(h!.frame()).toMatch(/» token\*/);
+  expect(h!.frame()).toMatch(/» Token\*\s+••••/); // secret: masked, cursor moved, 4 chars
+  expect(h!.frame()).toMatch(/» Token\*/);
   await h!.press("HOME");
   await h!.press("ARROW_LEFT"); // crossing the start: back to the list
-  expect(h!.frame()).not.toMatch(/» token\*/);
+  expect(h!.frame()).not.toMatch(/» Token\*/);
   expect(h!.frame()).toContain("$ pvx demo login"); // same command still selected
   await h!.press("ARROW_RIGHT");
-  expect(h!.frame()).toMatch(/» token\*/);
+  expect(h!.frame()).toMatch(/» Token\*/);
 });
 
 test("palette form: a plain field shows aXbc after abc, ←, ←, X", async () => {
@@ -169,7 +170,7 @@ test("palette form: a plain field shows aXbc after abc, ←, ←, X", async () =
   await h!.press("HOME");
   await h!.press("ARROW_LEFT");
   expect(h!.frame()).toContain("$ pvx demo greet aXbc"); // same command selected
-  expect(h!.frame()).not.toMatch(/» who/);
+  expect(h!.frame()).not.toMatch(/» Who/);
 });
 
 test("palette query: ← and → move the cursor and do not leave the query", async () => {
@@ -277,4 +278,68 @@ test("the selected row has the fill, the others none; the dialog keeps ↓ walki
   expect(rows().filter((l) => l.includes("»"))).toHaveLength(1);
   await h!.press("ARROW_DOWN");
   expect(rows().findIndex((l) => l.includes("»"))).toBeGreaterThan(selected);
+});
+
+// ---- the dialog has a fixed size ----
+
+const argsOf = (count: number): ArgSpec[] =>
+  Array.from({ length: count }, (_, i) => ({ name: `arg-${i + 1}`, label: `Argumento ${i + 1}`, help: `Dica curta ${i + 1}, bem longa para precisar de corte na linha do campo`, kind: "option" as const, required: i === 0 }));
+
+function sizeRegistry(): Registry {
+  const sized = createRegistry();
+  const noop = () => {};
+  sized.register({ id: "box", version: "1", entry: "x" }, { commands: {
+    "none": { help: "Sem argumentos", run: noop },
+    "three": { help: "Com três argumentos", args: argsOf(3), run: noop },
+    "eight": { help: "Com oito argumentos", args: argsOf(8), run: noop },
+  } });
+  return sized;
+}
+
+/** Where the dialog is: the rows of its top and bottom border and the columns of its left and right border, plus the two rules and the footer. */
+function dialogBounds(frame: string[]) {
+  const top = frame.findIndex((line) => line.includes("╭"));
+  const bottom = frame.findIndex((line) => line.includes("╰"));
+  const rules = frame.flatMap((line, index) => (/│ ─{20,} │/.test(line) ? [index] : []));
+  const footer = frame.findIndex((line) => line.includes("enter roda ·"));
+  return { top, bottom, left: frame[top]!.indexOf("╭"), right: frame[top]!.indexOf("╮"), rules, footer };
+}
+
+test.each([[80, 24], [120, 40]] as const)("the dialog keeps the same bounds while the selection moves across commands with 0, 3 and 8 args, at %ix%i", async (cols, height) => {
+  h = await renderTui(
+    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={fake().session} registry={sizeRegistry()} onClose={() => {}} /></KeyRouter></NudgeProvider></ThemeProvider>,
+    { cols, rows: height },
+  );
+  await h.type("@box");
+  const seen = [dialogBounds(rows())];
+  for (let step = 0; step < 2; step++) {
+    await h.press("ARROW_DOWN");
+    seen.push(dialogBounds(rows()));
+  }
+  while (!h.frame().includes("$ pvx box eight")) await h.press("ARROW_UP"); // the command with 8 args, wherever the search put it
+  await h.press("ARROW_RIGHT"); // into the args of the last command: the window follows the focus
+  for (let step = 0; step < 8; step++) {
+    await h.press("ARROW_DOWN");
+    seen.push(dialogBounds(rows()));
+  }
+  expect(rows().some((line) => line.includes("Argumento 8"))).toBe(true);
+  expect(rows().some((line) => line.includes("Dica"))).toBe(true);
+  expect(seen.length).toBeGreaterThan(8);
+  for (const bounds of seen) expect(bounds).toEqual(seen[0]!);
+  expect(seen[0]!.bottom - seen[0]!.top + 1).toBe(dialogSize(cols, height).height);
+});
+
+test("the arguments show their labels with the red *, the hints and a `+N` for the ones out of view", async () => {
+  await open(fake().session);
+  await h!.type(">logs");
+  expect(h!.frame()).toMatch(/Module\*?\s/);
+  expect(h!.frame()).not.toContain("module*");
+  h?.destroy();
+  h = await renderTui(
+    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={fake().session} registry={sizeRegistry()} onClose={() => {}} /></KeyRouter></NudgeProvider></ThemeProvider>,
+  );
+  await h.type(">eight");
+  expect(h.frame()).toContain("Argumento 1*");
+  expect(h.frame()).toContain("+5 args");
+  expect(h.frame()).not.toContain("arg-1");
 });

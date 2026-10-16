@@ -361,6 +361,7 @@ Uma borda por cima de outra é proibida. Seção de página é cabeçalho e espa
 - Formulário dentro de uma seção: sem caixa em volta (seção 7).
 - Uma grade de cartões é permitida: cada cartão é um item da grade (a aba Módulos), com uma borda só, e nada o envolve. Caixa dentro de caixa não é.
 - Diálogos e menus que flutuam (confirmação, menu de ações, palette) têm uma borda só, porque flutuam sobre a tela.
+- **A palette tem tamanho fixo.** Largura e altura vêm do terminal (`dialogSize`: cerca de 70%, entre 60 e 100 colunas e 18 e 30 linhas), nunca do conteúdo. A lista de resultados tem altura fixa e rola. Embaixo dela há uma região de detalhe de `DETAIL_ROWS` linhas: até 3 argumentos (uma janela que segue o foco; o rótulo `label`, o `*` vermelho nos obrigatórios, a dica curta), a linha `$ pvx …` e uma linha de estado (`+N args`, segredo, `última: …`), tudo cortado com `…`; com menos conteúdo sobram linhas em branco. Nada dentro do diálogo se mexe quando a seleção muda (`palette.test.tsx`).
 - Um campo `area` (texto de várias linhas) tem a própria borda: é o campo, não uma moldura.
 
 ```text

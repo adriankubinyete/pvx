@@ -14,7 +14,7 @@ import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { favoritesPath, loadFavorites, saveFavorites } from "./favorites.ts";
 import { Form } from "./Form.tsx";
-import { buildLine, type FormValues } from "./form.ts";
+import { buildLine, cutText, DETAIL_ROWS, type FormValues } from "./form.ts";
 import { useRegistryRev } from "../modules/deps.ts";
 import { requestTab } from "../tabs/context.ts";
 import { clean, search, type Hit } from "./search.ts";
@@ -31,11 +31,17 @@ export interface PaletteProps {
 }
 
 type Line = { kind: "head"; id: string; text: string } | { kind: "item"; id: string; hit: Hit };
-/** Rows of the list the dialog shows at once. */
-const VISIBLE = 10;
-/** Rows of the dialog besides the list and the form: the border (2), the query, a rule, a rule and the footer. */
-const DIALOG_CHROME_ROWS = 6;
-const DIALOG_MAX_W = 90;
+/** Rows of the dialog besides the list and the detail: the border (2), the query, a rule, the queue line, a rule and the footer. */
+const DIALOG_CHROME_ROWS = 7;
+/** The dialog takes this share of the terminal and stays between the limits; it never depends on what it shows. */
+const DIALOG_SHARE = 0.7;
+const DIALOG_MIN_W = 60;
+const DIALOG_MAX_W = 100;
+const DIALOG_MIN_H = 18;
+const DIALOG_MAX_H = 30;
+/** Cells and rows the dialog leaves free around it. */
+const SCREEN_MARGIN_W = 4;
+const SCREEN_MARGIN_H = 2;
 /** Cells of the dialog taken by its border and padding. */
 const DIALOG_CHROME_W = 4;
 const KEY_COLUMN_MAX_W = 34;
@@ -48,6 +54,15 @@ const FOOTER_HINT = "enter roda · tab completa · ctrl+f favorito · esc fecha"
 const SELECTED_HINT = "enter";
 /** What the empty field offers: the prefixes that narrow the search. */
 const QUERY_SCOPES = " @módulo  >comando  #página  !destrutivo";
+
+const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
+
+/** The size of the dialog for a terminal: a share of it, clamped, never from the content. `listRows` is the fixed height of the result list. */
+export function dialogSize(cols: number, rows: number): { width: number; height: number; listRows: number } {
+  const width = Math.min(cols - SCREEN_MARGIN_W, clamp(Math.round(cols * DIALOG_SHARE), DIALOG_MIN_W, DIALOG_MAX_W));
+  const height = Math.min(rows - SCREEN_MARGIN_H, clamp(Math.round(rows * DIALOG_SHARE), DIALOG_MIN_H, DIALOG_MAX_H));
+  return { width, height, listRows: Math.max(1, height - DIALOG_CHROME_ROWS - DETAIL_ROWS) };
+}
 
 interface RowProps { id: string; hit: Hit; selected: boolean; fav: boolean; width: number; onHover: (id: string) => void; onPick: (id: string) => void }
 
@@ -230,15 +245,12 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
     if (k.sequence === " " && !f && !query) return enqueue(); // once there is a query, space is part of it (ctrl+n enqueues)
   }, { modal: true, paste: true });
 
+  const { width: w, height, listRows } = dialogSize(cols, rows);
   const at = Math.max(0, lines.findIndex((l) => l.id === cur?.id));
-  const start = Math.max(0, Math.min(at - Math.floor(VISIBLE / 2), lines.length - VISIBLE));
-  const w = Math.min(cols - 4, DIALOG_MAX_W);
+  const start = Math.max(0, Math.min(at - Math.floor(listRows / 2), lines.length - listRows));
   const innerW = w - DIALOG_CHROME_W;
-  const shown = lines.slice(start, start + VISIBLE);
+  const shown = lines.slice(start, start + listRows);
   const hasForm = Boolean(hit && !hit.page && built);
-  const formRows = hasForm ? specs.length + 1 + (Object.keys(built!.secrets).length ? 1 : 0) + (last ? 1 : 0) : 0;
-  const listRows = Math.max(1, shown.length);
-  const height = Math.min(rows - 2, DIALOG_CHROME_ROWS + listRows + formRows + (queue.length ? 1 : 0));
   const rule = <text wrapMode="none" flexShrink={0} fg={c.border}>{g.hline.repeat(innerW)}</text>;
   return (
     <box position="absolute" top={0} left={0} width="100%" height="100%" zIndex={20}>
@@ -253,14 +265,14 @@ export function Palette({ session, registry, onClose, favoritesFile }: PalettePr
           {query ? null : <span fg={c.dim}>{QUERY_SCOPES}</span>}
         </text>
         {rule}
-        <box flexDirection="column" flexShrink={0}>
+        <box flexDirection="column" flexShrink={0} height={listRows} overflow="hidden">
           {lines.length === 0 ? <text fg={c.dim}>{"  nada encontrado"}</text> : null}
           {shown.map((l) => l.kind === "head"
             ? <text key={l.id} fg={c.dim} wrapMode="none">{l.text}</text>
             : <Row key={l.id} id={l.id} hit={l.hit} selected={l.id === cur?.id} fav={favs.includes(l.hit.key)} width={innerW} onHover={hover} onPick={pick} />)}
         </box>
-        {hasForm ? <Form specs={specs} values={values} focus={focus} cursor={fcur} line={built!} last={last} /> : null}
-        {queue.length ? <text wrapMode="none" fg={c.accent}>{`fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}`}</text> : null}
+        {hasForm ? <Form specs={specs} values={values} focus={focus} cursor={fcur} line={built!} last={last} width={innerW} /> : <box height={DETAIL_ROWS} flexShrink={0} />}
+        <text wrapMode="none" flexShrink={0} fg={c.accent}>{queue.length ? cutText(`fila (${queue.length}): ${queue.map((q) => clean(q.display)).join(` ${g.prompt} `)}`, innerW) : " "}</text>
         {rule}
         {busy ? <Loading label="rodando…" /> : <text wrapMode="none" flexShrink={0} fg={msg ? c.warn : c.dim}>{msg || FOOTER_HINT}</text>}
       </box>

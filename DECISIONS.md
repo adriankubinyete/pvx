@@ -1622,3 +1622,15 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o que atualiza ao vivo tem largura e altura fixas; seções vizinhas precisam respirar.
 
 **Limite:** não há ação de ver processos no Início além de `[ ver processos ]`. Testes: `home.test.tsx`, `side-by-side.test.tsx`.
+
+## 2026-10-16 — Palette de tamanho fixo
+
+**Status:** vigente.
+
+**Contexto:** o diálogo crescia e encolhia conforme o comando selecionado, porque a prévia dos argumentos, a linha `$ pvx` e a `última:` mudam de tamanho.
+
+**Decisão:** `dialogSize(cols, rows)` dá largura e altura (cerca de 70% do terminal, com mínimo e máximo); a lista tem altura fixa e rola; o detalhe tem `DETAIL_ROWS` linhas fixas, com uma janela de `ARG_ROWS` argumentos que segue o foco, `+N args` para o resto e a fila numa linha reservada. Os argumentos usam o `label` e a dica curta do `ArgSpec`, com o `*` vermelho nos obrigatórios, como o formulário padrão.
+
+**Motivo:** nada que o usuário olha deve se mexer quando ele só move a seleção.
+
+**Limite:** só 3 argumentos aparecem ao mesmo tempo; em 80x24 a lista mostra 6 linhas. Teste: `palette.test.tsx` (bordas idênticas em 80x24 e 120x40).

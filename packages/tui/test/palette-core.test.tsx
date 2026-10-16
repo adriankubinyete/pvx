@@ -68,7 +68,7 @@ test("a core command with args shows its form", async () => {
   await t.press("k", { ctrl: true });
   await t.type(">logs");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toContain("tail");
+  expect(t.frame()).toContain("Tail");
   expect(t.frame()).toContain("$ pvx logs");
 });
 
