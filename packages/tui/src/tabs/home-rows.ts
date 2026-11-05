@@ -2,10 +2,8 @@
 import type { HomeNote, Tone } from "@pvx/sdk";
 import { clean } from "../palette/search.ts";
 import type { Glyphs } from "../theme.ts";
-import { activity, relTime, type Att, type Chip, type Conformity, type Level } from "./home.ts";
+import { activity, relTime, type Att, type Chip, type Level } from "./home.ts";
 
-/** The row that holds the section's own buttons (plan, verify): one stop for the arrows, the buttons side by side inside it. */
-export const ACTIONS_ROW_ID = "acoes";
 /** The row that starts a note. */
 export const NEW_NOTE_ROW_ID = "nova";
 /** Label of the button that takes an attention item's fix to the Comando. */
@@ -35,8 +33,6 @@ export interface HomeRow {
   remove?: string;
 }
 
-/** The row that checks the conformity when it was never checked. */
-export const VERIFY_ROW_ID = "verificar-conformidade";
 /** The row that says the memory is nearly full. */
 export const MEMORY_ROW_ID = "memoria-alta";
 /** Above this share of memory in use the Atenção says so. */
@@ -64,17 +60,11 @@ export function memoryRows(mem: { used: number; total: number } | undefined): Ho
   return [{ id: MEMORY_ROW_ID, level: "warn", text: `memória em ${Math.round((mem.used / mem.total) * 100)}%`, use: PROCESS_COMMAND, button: "ver processos" }];
 }
 
-/** `[ ] conformidade não verificada`, dim, with the button that checks. */
-export const unverifiedRow = (): HomeRow => ({ id: VERIFY_ROW_ID, glyph: ["[ ]", "dim"], text: "conformidade não verificada", dim: true, button: "verificar" });
-
 /** `6 capacidades em dia`, `1 capacidade em dia`; nothing at zero. */
 export function upToDateText(count: number): string | undefined {
   if (count === 0) return undefined;
   return `${count} ${count === 1 ? "capacidade" : "capacidades"} em dia`;
 }
-
-/** The pending items someone ignored for 24 hours, as dim lines (their text already says until when). */
-export const ignoredTexts = (done: Conformity | undefined): string[] => done?.ignored ?? [];
 
 /** `16/10`, local time. */
 export function dayMonth(at: string): string {
@@ -117,17 +107,6 @@ const GLYPH_BY_STATUS = (g: Pick<Glyphs, "error" | "warn" | "ok">): Record<strin
 function activityGlyph(favorite: boolean, status: string | undefined, g: Pick<Glyphs, "favorite" | "error" | "warn" | "ok">): [string, Tone] {
   if (favorite) return [g.favorite, "warn"];
   return GLYPH_BY_STATUS(g)[status ?? ""] ?? [" ", "dim"];
-}
-
-/** `rodar o plano (3 passos)`. */
-export const planButtonLabel = (steps: number): string => `rodar o plano (${steps} ${steps === 1 ? "passo" : "passos"})`;
-
-/** The buttons of the actions row, in order: the plan when there is one to run, then the verification. */
-export type HomeAction = "plan" | "verify";
-export function actionButtons(planSteps: number, canRunPlan: boolean, checked: boolean): { action: HomeAction; label: string }[] {
-  const verify = { action: "verify" as const, label: checked ? "verificar de novo" : "verificar" };
-  if (!canRunPlan || planSteps === 0) return [verify];
-  return [{ action: "plan", label: planButtonLabel(planSteps) }, verify];
 }
 
 /** `text` cut to `width` cells, ending in `…` when it did not fit. */

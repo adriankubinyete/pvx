@@ -9,13 +9,11 @@ import { useTabs } from "./context.ts";
 import { SETTING_LABEL_W } from "./SistemaRows.tsx";
 import { fit, pvxInfoRows, updateBlocker, updateStatus, type InfoRow, type PvxFacts, type ReleaseCheck } from "./sistema.ts";
 
-/** Cells the update row gives to what it says before its buttons: a fixed width, so the buttons stay where they are as the text changes. */
-const STATUS_W = 27;
-/** Cells of the cursor column and of the gap after the status. */
+/** Cells of the cursor column and of the gap between the buttons. */
 const CURSOR_W = 2;
 const STATUS_GAP_W = 2;
-/** The two buttons of the update row. */
-export const UPDATE_BUTTONS = ["update", "verify"] as const;
+/** The buttons of the actions row. */
+export const UPDATE_BUTTONS = ["update", "verify", "uninstall"] as const;
 export type UpdateButton = (typeof UPDATE_BUTTONS)[number];
 
 /** What the section reads from the host. Running from source has no binary, and `selfPath` says so. */
@@ -29,6 +27,8 @@ export interface UpdateCheck {
   blocker: string | undefined;
   verify(): Promise<void>;
   update(): void;
+  /** Asks first (it removes pvx from the system), then runs `uninstall` through the session. */
+  uninstall(): Promise<void>;
 }
 
 /** The state of the update: the release check and the two actions. `update` goes through the session (scrollback, log, audit and the root rule). */
@@ -56,47 +56,61 @@ export function useUpdateCheck(store: SessionApi, registry: Registry, version: s
     void store.run(SELF_UPDATE_COMMAND);
     tabs?.goto("comando");
   }
-  return { facts, check, blocker, verify, update };
+  async function uninstall() {
+    if (binary === null) {
+      nudge("rodando pelo código-fonte: não há binário para desinstalar");
+      return;
+    }
+    const sure = await store.confirm({ title: "desinstalar o pvx?", description: "remove o binário e o banner de login; os dados em PVX_HOME ficam", confirmLabel: "desinstalar", cancelLabel: "manter", destructive: true });
+    if (!sure) return;
+    void store.run(UNINSTALL_COMMAND);
+    tabs?.goto("comando");
+  }
+  return { facts, check, blocker, verify, update, uninstall };
 }
 
-function Info({ row, width, dim }: { row: InfoRow; width: number; dim?: boolean }) {
+/** A line that only says something: no cursor, no hover, not selectable. `color` overrides the value color (the update status takes its tone). */
+function Info({ row, width, dim, color }: { row: InfoRow; width: number; dim?: boolean; color?: string }) {
   const { c } = useTheme();
   return (
-    <text wrapMode="none" flexShrink={0}>
+    <text wrapMode="none" flexShrink={0} selectable={false}>
       <span>{" ".repeat(CURSOR_W)}</span>
       <span fg={c.dim}>{row.label.padEnd(SETTING_LABEL_W)}</span>
-      <span fg={dim ? c.dim : c.text}>{fit(row.value, width - CURSOR_W - SETTING_LABEL_W)}</span>
+      <span fg={color ?? (dim ? c.dim : c.text)}>{fit(row.value, width - CURSOR_W - SETTING_LABEL_W)}</span>
     </text>
   );
 }
 
-/** The rows of the pvx section that only say something; `update` is the row between them that has buttons. */
-export function PvxInfo({ facts, width, update }: { facts: PvxFacts; width: number; update: React.ReactNode }) {
-  const rows = pvxInfoRows(facts);
+/** What the update check says: `sem binário`, `atualizado`, `consultando…` and so on, in its tone. */
+function UpdateInfo({ state, width }: { state: UpdateCheck; width: number }) {
+  const { c } = useTheme();
+  const status = updateStatus(state.check, state.blocker);
+  const text = state.check.status === "loading" ? "consultando…" : status.text;
+  return <Info row={{ label: "atualização", value: text }} width={width} color={toneColor(c, status.tone)} />;
+}
+
+/** The pvx section: the lines that only say something, then `actions` (the one row with the cursor, the buttons). */
+export function PvxInfo({ state, width, actions }: { state: UpdateCheck; width: number; actions: React.ReactNode }) {
+  const rows = pvxInfoRows(state.facts);
   return (
     <>
       <Info row={rows.version} width={width} />
-      {update}
+      <UpdateInfo state={state} width={width} />
       <Info row={rows.platform} width={width} />
       <Info row={rows.data} width={width} />
       {rows.embedded ? <Info row={rows.embedded} width={width} /> : null}
-      <Info row={{ label: "desinstalar", value: `sudo pvx ${UNINSTALL_COMMAND}` }} width={width} dim />
+      {actions}
     </>
   );
 }
 
-/** The status of the check, then `[ atualizar ]` and `[ verificar ]`; `current` is the button the keyboard is on. */
-export function UpdateStatus({ state, current, onPress }: { state: UpdateCheck; current?: UpdateButton; onPress: (button: UpdateButton) => void }) {
-  const { c } = useTheme();
-  const status = updateStatus(state.check, state.blocker);
-  const loading = state.check.status === "loading";
+/** `[ atualizar ]` and `[ verificar ]`; `current` is the button the keyboard is on. */
+export function UpdateButtons({ state, current, onPress }: { state: UpdateCheck; current?: UpdateButton; onPress: (button: UpdateButton) => void }) {
   return (
-    <box flexDirection="row" flexShrink={0}>
-      <text wrapMode="none" flexShrink={0} fg={toneColor(c, status.tone)}>{fit(loading ? "consultando…" : status.text, STATUS_W).padEnd(STATUS_W + STATUS_GAP_W)}</text>
-      <box flexDirection="row" columnGap={STATUS_GAP_W} flexShrink={0}>
-        <Button label="atualizar" primary disabled={state.blocker === undefined ? undefined : ""} focused={current === "update"} onPress={() => onPress("update")} />
-        <Button label="verificar" focused={current === "verify"} onPress={() => onPress("verify")} />
-      </box>
+    <box flexDirection="row" columnGap={STATUS_GAP_W} flexShrink={0}>
+      <Button label="atualizar" primary disabled={state.blocker === undefined ? undefined : ""} focused={current === "update"} onPress={() => onPress("update")} />
+      <Button label="verificar" focused={current === "verify"} onPress={() => onPress("verify")} />
+      <Button label="desinstalar" focused={current === "uninstall"} disabled={state.facts.binary === null ? "" : undefined} onPress={() => onPress("uninstall")} />
     </box>
   );
 }

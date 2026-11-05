@@ -1,6 +1,6 @@
 # pvx
 
-Ferramenta de linha de comando e TUI para operar centrais telefônicas Phonevox: lista e roda comandos de módulos, avalia a conformidade da central contra um perfil, aplica o plano de correção e mantém notas e histórico de cada central.
+Ferramenta de linha de comando e TUI para operar centrais telefônicas Phonevox: lista e roda comandos de módulos e mantém notas e histórico de cada central.
 
 ## Instalação
 

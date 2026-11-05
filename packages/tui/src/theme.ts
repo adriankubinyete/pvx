@@ -128,13 +128,13 @@ export const glyphs = {
     ok: "✓", warn: "▲", warnTag: "!", error: "✗", info: "i", active: "●", inactive: "○",
     meterFull: "▰", meterEmpty: "▱", prompt: "❯", shell: "!", query: "›", cursor: "»", spinner: "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏",
     core: "■", page: "§", official: "◆", thirdParty: "◇", dev: "↯", favorite: "★", corners: "╭╮╰╯", rule: "═", moreLeft: "‹", moreRight: "›",
-    hline: "─", sep: "·", down: "↓", up: "↑", blocks: "▁▂▃▄▅▆▇█", braille: "1", barFull: "━", barEmpty: "─", progressFull: "█", progressEmpty: "░", cellOn: "■", cellOff: "■", gutter: "▌", mask: "•", radioOn: "•", sepBar: "│", auto: "◌",
+    hline: "─", sep: "·", down: "↓", up: "↑", blocks: "▁▂▃▄▅▆▇█", braille: "1", barFull: "━", barEmpty: "─", progressFull: "█", progressEmpty: "░", cellOn: "■", cellOff: "■", gutter: "▌", mask: "•", radioOn: "•", sepBar: "│", teeUp: "┴", auto: "◌",
   },
   ascii: {
     ok: "+", warn: "^", warnTag: "!", error: "x", info: "i", active: "*", inactive: "o",
     meterFull: "#", meterEmpty: "-", prompt: ">", shell: "!", query: ">", cursor: ">", spinner: "|/-\\",
     core: "=", page: "#", official: "O", thirdParty: "o", dev: "~", favorite: "*", corners: "++++", rule: "=", moreLeft: "<", moreRight: ">",
-    hline: "-", sep: "-", down: "v", up: "^", blocks: "_.-:=+*#", braille: "", barFull: "=", barEmpty: "-", progressFull: "#", progressEmpty: ".", cellOn: "#", cellOff: ".", gutter: "|", mask: "*", radioOn: "*", sepBar: "|", auto: "~",
+    hline: "-", sep: "-", down: "v", up: "^", blocks: "_.-:=+*#", braille: "", barFull: "=", barEmpty: "-", progressFull: "#", progressEmpty: ".", cellOn: "#", cellOff: ".", gutter: "|", mask: "*", radioOn: "*", sepBar: "|", teeUp: "+", auto: "~",
   },
 } as const;
 export type Symbols = keyof typeof glyphs;
@@ -142,7 +142,18 @@ export type Symbols = keyof typeof glyphs;
 export type Glyphs = { [K in keyof (typeof glyphs)["unicode"]]: string };
 
 /** Axis 3: border style of panels. */
-export type BorderName = "rounded" | "single" | "none";
+export type BorderName = "rounded" | "single" | "ascii" | "none";
+
+/** The glyphs that draw lines and frames: they follow the border axis (`ascii` draws them in ASCII), not the symbols axis. */
+const LINE_GLYPHS = ["corners", "rule", "hline", "sepBar", "teeUp", "gutter"] as const;
+
+/** The glyphs of the two axes: the symbols from `symbols`, the line glyphs from `border`. */
+export function glyphsFor(symbols: Symbols, border: BorderName): Glyphs {
+  const lines = glyphs[border === "ascii" ? "ascii" : "unicode"];
+  const out: { -readonly [K in keyof Glyphs]: string } = { ...glyphs[symbols] };
+  for (const key of LINE_GLYPHS) out[key] = lines[key];
+  return out;
+}
 
 /** Axis 4: result line format. `bracket` is the default. */
 export type ResultFormat = "bracket" | "glyph" | "text";

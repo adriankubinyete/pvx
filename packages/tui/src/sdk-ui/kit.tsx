@@ -58,6 +58,8 @@ export interface SectionExtras {
   inline?: ReactNode;
   /** No blank row above: sections of one line sit one under the other. */
   tight?: boolean;
+  /** Fills the whole terminal width, without the readable cap (Início and Sistema). */
+  wide?: boolean;
 }
 
 /** Cells between the label of a section and its inline content. */
@@ -68,13 +70,13 @@ const INLINE_GAP_W = 3;
  * With `tone` the section is the active one (or needs attention): the header takes the tone and a `▌` gutter runs down its side;
  * without it the gutter is blank, so the content does not move. A Panel with neither `title` nor `tone` is a plain container.
  */
-export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, inline, tight, children }: Props<"Panel"> & SectionExtras) {
+export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, inline, tight, wide, children }: Props<"Panel"> & SectionExtras) {
   const { c, g } = useTheme();
   const section = title !== undefined || t !== undefined;
   const active = t !== undefined;
   const gutter = section ? { border: ["left" as const], borderColor: active ? tone(c, t) : c.bg, customBorderChars: { ...GUTTER_CHARS, vertical: active ? g.gutter : " " }, paddingLeft: 1 } : {};
   return (
-    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...sectionSizing({ shrink, grow, capped: section })} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...sectionSizing({ shrink, grow, capped: section, wide })} {...(title !== undefined && !tight ? { marginTop: 1 } : {})} {...gutter}>
       {title !== undefined ? <SectionHeader title={title} color={active ? tone(c, t) : c.dim} active={active} aside={aside} inline={inline} /> : null}
       {children as ReactNode}
     </box>
@@ -82,13 +84,16 @@ export function Panel({ title, tone: t, grow, shrink, panelRef, onPress, aside, 
 }
 
 /** The sizing Panel and Frame share: gives up height when `shrink`, grows when `grow`, readable width cap on sections. */
-function sectionSizing({ shrink, grow, capped }: { shrink?: boolean; grow?: boolean; capped: boolean }) {
+function sectionSizing({ shrink, grow, capped, wide }: { shrink?: boolean; grow?: boolean; capped: boolean; wide?: boolean }) {
   return {
     ...(shrink || !capped ? SHRINKABLE : { flexShrink: 0 }),
-    ...(capped ? { maxWidth: CONTENT_MAX_W } : {}),
+    ...(capped && !wide ? { maxWidth: CONTENT_MAX_W } : {}),
     ...(grow ? { flexGrow: 1, overflow: "hidden" as const } : {}),
   };
 }
+
+/** Cells of rule a Frame draws in its top border: more than any terminal, the box clips it. */
+const RULE_W = 500;
 
 /** True inside a Frame: a Frame in a Frame is a dev error. */
 const InsideFrame = createContext(false);
@@ -103,7 +108,7 @@ function FrameTop({ title, aside, active }: { title: string; aside?: string; act
       <text wrapMode="none" flexShrink={0} fg={color}>{`${g.corners[0]}${g.hline} `}</text>
       <text wrapMode="none" flexShrink={0} fg={active ? c.accent : c.dim}>{active ? <b>{label}</b> : label}</text>
       <text wrapMode="none" flexShrink={0} fg={color} bg={c.bg}>{" "}</text>
-      <box flexGrow={1} flexBasis={0} minWidth={0} overflow="hidden"><text wrapMode="none" fg={color}>{g.hline.repeat(CONTENT_MAX_W)}</text></box>
+      <box flexGrow={1} flexBasis={0} minWidth={0} overflow="hidden"><text wrapMode="none" fg={color}>{g.hline.repeat(RULE_W)}</text></box>
       {aside ? <text wrapMode="none" flexShrink={0} fg={c.dim} bg={c.bg}>{` ${clean(aside)} `}</text> : null}
       <text wrapMode="none" flexShrink={0} fg={color}>{`${g.hline}${g.corners[1]}`}</text>
     </box>
@@ -114,13 +119,13 @@ function FrameTop({ title, aside, active }: { title: string; aside?: string; act
  * A section drawn as a frame: one border with the title in the top border (`╭ 1 Status ──── aside ─╮`). Active: accent border and bold title; inactive: faint border, dim title.
  * Content starts on the row under the border with one cell of padding. Never inside another Frame.
  */
-export function Frame({ title, active, aside, grow, shrink, panelRef, onPress, children }: Props<"Frame">) {
+export function Frame({ title, active, aside, grow, shrink, panelRef, onPress, wide, children }: Props<"Frame"> & SectionExtras) {
   const { c, g } = useTheme();
   if (useContext(InsideFrame)) throw new Error("Frame inside a Frame: a Frame is the only border of a page, never nested");
   const color = active ? c.accent : c.border;
   const chars = { topLeft: g.corners[0]!, topRight: g.corners[1]!, bottomLeft: g.corners[2]!, bottomRight: g.corners[3]!, horizontal: g.hline, vertical: g.sepBar, topT: g.hline, bottomT: g.hline, leftT: g.sepBar, rightT: g.sepBar, cross: g.hline };
   return (
-    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...sectionSizing({ shrink, grow, capped: true })}>
+    <box ref={panelRef as never} onMouseDown={onPress ? () => onPress() : undefined} flexDirection="column" {...sectionSizing({ shrink, grow, capped: true, wide })}>
       <FrameTop title={title} aside={aside} active={Boolean(active)} />
       <box flexDirection="column" flexGrow={1} flexShrink={shrink ? 1 : 0} minHeight={0} overflow="hidden" border={["left", "right", "bottom"]} customBorderChars={chars} borderColor={color} paddingX={1}>
         <InsideFrame.Provider value={true}>{children as ReactNode}</InsideFrame.Provider>

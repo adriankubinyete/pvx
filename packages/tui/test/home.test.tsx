@@ -21,16 +21,16 @@ beforeEach(async () => {
   await loadModules(registry, { hostVersion: "0.1.0", makeLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }) });
 });
 
-interface MountOpts { cols?: number; rows?: number; profile?: string; cores?: number; machine?: Partial<MachineSnap>; sessionIp?: string }
+interface MountOpts { cols?: number; rows?: number; cores?: number; machine?: Partial<MachineSnap>; sessionIp?: string }
 
 async function mount(opts: MountOpts = {}) {
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: { PVX_PROFILE: "main" }, isRoot: true, registry, makeLogger, profilesDir: join(fixtures, "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const sampler = { sample: () => snap(opts.cores ?? 8, opts.machine) };
-  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} profile={opts.profile} sampler={sampler} session={{ sshClient: opts.sessionIp }} /> };
+  const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} sampler={sampler} session={{ sshClient: opts.sessionIp }} /> };
   h = await renderTui(
     <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     { cols: opts.cols, rows: opts.rows },
@@ -43,16 +43,16 @@ const activeSections = activeFrames;
 const BAR = "tab próxima aba";
 
 test("Início at 120x40 has the bars, the facts, the sections and the footer, and 80x24 keeps the same content with the facts under the bars when it must", async () => {
-  const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
+  const { t } = await mount({ cols: 120, rows: 40 });
   const f = t.frame();
-  for (const s of ["central-sp-01", "Rocky Linux 8.10", "ligado", "41d 0h 0m", "carga", "2,14 1,80 1,32", "processos", "212 ·   3 rodando", "rede", "↓   1,2 MB/s", "mem[", "3,1/6G", "swp[", "0,0/2G", "dsk[", "38/54G", "1 Atenção", "perfil: Principal", "2 Atividade", "pvx 0.1.0"]) expect(f, s).toContain(s);
+  for (const s of ["central-sp-01", "Rocky Linux 8.10", "ligado", "41d 0h 0m", "carga", "2,14 1,80 1,32", "processos", "212 ·   3 rodando", "rede", "↓   1,2 MB/s", "mem[", "3,1/6G", "swp[", "0,0/2G", "dsk[", "38/54G", "1 Atenção", "2 Atividade", "pvx 0.1.0"]) expect(f, s).toContain(s);
   const row = lines(t).find((l) => l.includes("central-sp-01"))!;
   expect(row.indexOf("central-sp-01")).toBeGreaterThan(40); // the facts are beside the bars
   t.destroy();
 
   const small = await mount({ cols: 80, rows: 24 });
   for (const l of lines(small.t)) expect(l.length).toBeLessThanOrEqual(80);
-  for (const s of ["central-sp-01", "ligado", "carga", "rede", "mem[", "swp[", "dsk[", "1 Atenção", "sem perfil", "conformidade não verificada", "[ verificar ]"]) expect(small.t.frame(), s).toContain(s);
+  for (const s of ["central-sp-01", "ligado", "carga", "rede", "mem[", "swp[", "dsk[", "1 Atenção"]) expect(small.t.frame(), s).toContain(s);
 });
 
 test("the facts sit on the right half beside mem, swp and dsk, which take the left half with their size inside the bar, at 80 and 120 columns", async () => {
@@ -138,79 +138,6 @@ test("live values keep their width when they change: the bars and the facts end 
   for (let i = 0; i < 3; i++) expect(new Set(ends.map((e) => e[i])).size, `value ${i}`).toBe(1);
 });
 
-test("conformidade is not run on the first visit; r runs it and shows the pending items, each with its button", async () => {
-  const { t, store } = await mount({ cols: 120, rows: 40 });
-  expect(t.frame()).toContain("conformidade não verificada");
-  expect(t.frame()).toContain("[ verificar ]");
-  expect(t.frame()).not.toContain("cap-fixture.a");
-  await t.press("r");
-  await t.flush();
-  expect(t.frame()).toMatch(/\[✗\] cap-fixture\.a: pendente\s+\[ corrigir \]/);
-  expect(t.frame()).toMatch(/\[!\] manual: sem fix\s*│/m); // no fix, no button
-  expect(t.frame()).toMatch(/\[✓\] 1 capacidade em dia/);
-  expect(t.frame()).toContain("[ verificar de novo ]");
-  expect(store.blocks).toEqual([]);
-  expect(store.history).toEqual([]);
-  // the buttons of the items are one column
-  const columns = lines(t).filter((l) => l.includes("[ corrigir ]")).map((l) => l.indexOf("[ corrigir ]"));
-  expect(new Set(columns).size).toBe(1);
-});
-
-test("at 250x40 the button of an Atenção row sits right after its text, and the profile aside ends at the content width", async () => {
-  const { t } = await mount({ cols: 250, rows: 40, profile: "Principal" });
-  await t.press("r");
-  await t.flush();
-  const row = lines(t).find((l) => l.includes("[ corrigir ]"))!;
-  expect(row.indexOf("[ corrigir ]") - row.indexOf("pendente")).toBeLessThan(20);
-  expect(row.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2); // the frame plus the page margin
-  expect(lines(t).find((l) => l.includes("perfil: Principal"))!.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
-});
-
-test("the ok line is dim, a blank row separates the content from the buttons, and the profile is on the right of the header", async () => {
-  const { t } = await mount({ cols: 120, rows: 40, profile: "Principal" });
-  await t.press("r");
-  await t.flush();
-  const all = lines(t);
-  const ok = all.findIndex((l) => l.includes("capacidade em dia"));
-  expect(all[ok + 1]).toMatch(/^\s+│\s+│\s*$/);
-  expect(all[ok + 2]).toContain("[ verificar de novo ]");
-  const text = t.spans().lines[ok]!.spans.find((span) => span.text.includes("capacidade em dia"))!;
-  expect(text.fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
-  expect(all.find((l) => l.includes("1 Atenção"))).toMatch(/1 Atenção ─+ perfil: Principal ─╮/);
-});
-
-test("enter on a pending item puts its fix in the Comando input and runs nothing", async () => {
-  const { t, store } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
-  await t.flush();
-  expect(t.frame()).not.toMatch(/» /);
-  await t.press("RETURN"); // enter the section
-  expect(t.frame()).toMatch(/» \[✗\] cap-fixture\.a/);
-  await t.press("RETURN"); // enter on the item
-  expect(t.frame()).toContain("tab completa"); // Comando
-  expect(t.frame()).toContain("❯ cap-fixture fix-a");
-  expect(store.blocks).toEqual([]);
-  await t.press("RETURN"); // the technician confirms
-  await t.flush();
-  expect(store.blocks.map((b) => b.line)).toEqual(["cap-fixture fix-a"]);
-});
-
-test("the actions row is one stop: ← and → choose the button, enter presses it, and `verificar` runs the check again", async () => {
-  const { t, store } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
-  await t.flush();
-  await t.press("RETURN");
-  for (let i = 0; i < 14 && lines(t).some((l) => /│ »/.test(l)); i++) await t.press("ARROW_DOWN"); // the items, then the actions row
-  expect(t.frame().match(/│ » /g) ?? []).toHaveLength(0); // the buttons carry the cursor, not a row marker
-  const before = store.blocks.length;
-  await t.press("ARROW_LEFT"); // wraps inside the row: never leaves it
-  await t.press("ARROW_RIGHT");
-  await t.press("RETURN");
-  await t.flush();
-  expect(store.blocks.length).toBe(before); // `verificar` goes through `capture`: no block
-  expect(t.frame()).toContain("[ verificar de novo ]");
-});
-
 test("focus: the active section has the gutter, ↑↓ move between sections, enter goes inside, esc comes out, ↑ at the top goes to the bar", async () => {
   saveFavorites(["demo greet"]);
   const { t, store } = await mount({ cols: 120, rows: 40 });
@@ -256,13 +183,12 @@ test("inside a list ↓ on the last row wraps to the first and ↑ on the first 
 
 // Each fixed row (bar, section titles, footer) must sit alone on its own line, whole.
 test.each([[230, 24], [120, 40], [100, 30], [80, 24]] as const)("rows never overlap at %ix%i", async (cols, rows) => {
-  const { t } = await mount({ cols, rows, profile: "Principal" });
+  const { t } = await mount({ cols, rows });
   const all = lines(t);
   const at = (s: string) => all.map((l, i) => (l.includes(s) ? i : -1)).filter((i) => i >= 0);
   expect(at("Início")).toEqual([0]);
   expect(all[0]).toContain("pvx 0.1.0");
   expect(at("1 Atenção")).toHaveLength(1);
-  expect(at("perfil: Principal")).toEqual(at("1 Atenção"));
   expect(at("enter abre")).toEqual([rows - 1]);
   expect(all.filter((l) => l.includes("pvx 0.1.0"))).toHaveLength(1); // the version only in the bar
   expect(all.filter((l) => l.includes("central-sp-01"))).toHaveLength(1);
@@ -302,7 +228,7 @@ test("the arrows are spatial: sections are stacked, so ← and → have nothing 
 
 test("Início keeps the keyboard free: esc reaches the bar and every button has a key or a focus", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
+  await Bun.sleep(200);
   await t.flush();
   expectButtonsReachable();
   await expectNoKeyboardTrap(t);
@@ -330,64 +256,71 @@ const rowX = (t: TuiHarness, text: string) => lines(t)[rowY(t, text)]!.indexOf(t
 
 test("mouse, bar focused: hovering a row tints it (dim ›) and changes nothing else", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
+  await Bun.sleep(200);
   await t.flush();
   await t.press("ARROW_UP"); // section level: nothing above, the bar
   expect(t.frame()).toContain(BAR);
-  const y = rowY(t, "cap-fixture.b: pendente");
-  const x = rowX(t, "cap-fixture.b: pendente");
+  const y = rowY(t, "demo: tudo certo"); // not the first row: that one is the default selection
+  const x = rowX(t, "demo: tudo certo");
   expect(tinted(t, x, y)).toBe(false);
   await t.hover(x + 2, y);
   expect(tinted(t, x, y)).toBe(true);
-  expect(lines(t)[y]).toMatch(/› \[✗\] cap-fixture.b/);
+  expect(lines(t)[y]).toMatch(/› \[i\] demo: tudo certo/);
   expect(t.frame()).not.toMatch(/» /); // never looks selected
   expect(t.frame()).toContain(BAR); // the focus did not move
-  await t.hover(x + 2, rowY(t, "cap-fixture.c: pendente")); // the next row takes the tint
+  const other = rowY(t, "widget quebrou: widget-demo.boom"); // the next row takes the tint
+  await t.hover(x + 2, other);
   expect(tinted(t, x, y)).toBe(false);
-  expect(tinted(t, x, rowY(t, "cap-fixture.c: pendente"))).toBe(true);
+  expect(tinted(t, x, other)).toBe(true);
   await t.hover(2, 38); // off the rows
-  expect(tinted(t, x, rowY(t, "cap-fixture.c: pendente"))).toBe(false);
+  expect(tinted(t, x, other)).toBe(false);
 });
 
 test("mouse, inside the active list: hover moves the selection (one » marker)", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
+  await Bun.sleep(200);
   await t.flush();
   await t.press("RETURN"); // inside atenção
-  expect(lines(t)[rowY(t, "cap-fixture.a: pendente")]).toMatch(/» \[✗\] cap-fixture.a/);
-  await t.hover(rowX(t, "cap-fixture.c: pendente") + 2, rowY(t, "cap-fixture.c: pendente"));
-  expect(lines(t)[rowY(t, "cap-fixture.c: pendente")]).toMatch(/» \[✗\] cap-fixture.c/);
   expect(t.frame().match(/» /g)).toHaveLength(1);
-  await t.press("ARROW_DOWN"); // continues from the hovered row
-  expect(lines(t)[rowY(t, "demo: revisar o painel")]).toMatch(/» \[!\] demo/);
+  const other = rowY(t, "demo: tudo certo");
+  await t.hover(rowX(t, "demo: tudo certo") + 2, other);
+  expect(lines(t)[other]).toMatch(/» /);
+  expect(t.frame().match(/» /g)).toHaveLength(1);
 });
 
 test("mouse, bar focused: a click on a row without a fix focuses the section, goes inside and selects that row", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
+  await Bun.sleep(200);
   await t.flush();
   await t.press("ARROW_UP");
   expect(t.frame()).toContain(BAR);
-  await t.click(rowX(t, "manual: sem fix") + 2, rowY(t, "manual: sem fix")); // nothing leaves the tab
+  await t.click(rowX(t, "demo: tudo certo") + 2, rowY(t, "demo: tudo certo")); // nothing leaves the tab
   expect(t.frame()).not.toContain(BAR);
   expect(activeSections(t)).toEqual(["1"]);
-  expect(lines(t)[rowY(t, "manual: sem fix")]).toMatch(/» \[!\] manual/);
+  expect(lines(t)[rowY(t, "demo: tudo certo")]).toMatch(/» \[i\] demo/);
   expect(t.frame()).toContain("esc sai"); // inside
 });
 
-test("mouse: the button of an item puts its fix in the Comando; `verificar` runs the check and is a button, not a key hint", async () => {
+test("an Atenção row of a module has a button only when it has a fix, and enter on it puts the fix in the Comando input and runs nothing", async () => {
+  const { t, store } = await mount({ cols: 120, rows: 40 });
+  await Bun.sleep(200); // the module widgets arrive
+  await t.flush();
+  expect(t.frame()).toMatch(/\[!\] demo: revisar o painel\s+\[ corrigir \]/);
+  expect(t.frame()).not.toMatch(/» /);
+  await t.press("RETURN"); // enter the section
+  expect(t.frame()).toMatch(/» \[!\] demo: revisar o painel/);
+  await t.press("RETURN"); // enter on the item
+  expect(t.frame()).toContain("tab completa"); // Comando
+  expect(t.frame()).toContain("❯ widget-demo read home.chips");
+  expect(store.blocks).toEqual([]);
+});
+
+test("the button of an item puts its fix in the Comando when clicked", async () => {
   const { t } = await mount({ cols: 120, rows: 40 });
-  await Bun.sleep(200); // the module widgets arrive and move the rows: measure after them
+  await Bun.sleep(200);
   await t.flush();
-  const y = rowY(t, "[ verificar ]");
-  const x = rowX(t, "[ verificar ]");
-  await t.hover(x + 2, y);
-  expect(spanAt(t, x + 2, y).bg.equals(RGBA.fromHex(tokens.accent))).toBe(true); // filled under the mouse
-  await t.click(x + 2, y);
-  await t.flush();
-  expect(t.frame()).toContain("[ verificar de novo ]");
-  await t.click(rowX(t, "[ corrigir ]") + 2, rowY(t, "cap-fixture.a: pendente"));
-  expect(t.frame()).toContain("❯ cap-fixture fix-a");
+  await t.click(rowX(t, "[ corrigir ]") + 2, rowY(t, "demo: revisar o painel"));
+  expect(t.frame()).toContain("❯ widget-demo read home.chips");
 });
 
 test("an empty section is still selectable: the arrows and the number land on it, it shows the gutter and its empty line, enter does no harm", async () => {
@@ -462,17 +395,26 @@ for (const cols of [80, 120]) {
   });
 }
 
-// The three sections are Frames: the title and aside sit in the top border, every frame has a closed box, and none is wider than the readable width.
+// The three sections are Frames: the title and aside sit in the top border, every frame has a closed box, and the frames fill the terminal width.
 test.each([[80, 24], [120, 40], [250, 40]] as const)("Início sections are Frames at %ix%i", async (cols, rows) => {
-  const { t } = await mount({ cols, rows, profile: "Principal" });
+  const { t } = await mount({ cols, rows });
   const all = lines(t);
   const tops = all.filter((l) => l.includes("╭─ "));
   expect(tops.length).toBeGreaterThanOrEqual(2);
-  expect(tops[0]).toMatch(/╭─ 1 Atenção ─+ perfil: Principal ─╮/);
+  expect(tops[0]).toMatch(/╭─ 1 Atenção ─+╮/);
   const bottoms = all.filter((l) => l.includes("╰"));
   expect(bottoms).toHaveLength(tops.length);
-  for (const top of tops) expect(top.trimEnd().length).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
+  for (const top of tops) expect(top.trimEnd().length).toBeLessThanOrEqual(cols);
+  if (cols > CONTENT_MAX_W + 2) expect(tops[0]!.trimEnd().length).toBeGreaterThan(CONTENT_MAX_W + 2); // wide terminals are used, not capped
   expect(activeFrames(t)).toEqual(["1"]);
   await t.press("ARROW_DOWN");
   expect(activeFrames(t)).toEqual(["2"]);
+});
+
+test("the machine block (cores, memory, facts) stretches with the terminal width, not past the old 120-cell cap", async () => {
+  const wide = await mount({ cols: 250, rows: 40 });
+  const memRow = lines(wide.t).find((l) => l.startsWith("mem") || l.includes(" mem["))!;
+  expect(memRow).toBeDefined();
+  const factRows = lines(wide.t).slice(0, 12).filter((l) => l.includes("ligado"));
+  expect(factRows[0]!.indexOf("ligado")).toBeGreaterThan(100); // the facts moved to the right half of the wide page
 });

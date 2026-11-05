@@ -17,7 +17,7 @@ const grep = (files: string[], re: RegExp) =>
   files.flatMap((f) => readFileSync(f, "utf8").split("\n").flatMap((l, i) => (re.test(l) ? [`${f.slice(root.length + 1)}:${i + 1}: ${l.trim()}`] : [])));
 
 // `packages/builtin` is module code (it ships official modules), so the host rule does not apply to it. The host's own
-// words are a different matter: `conformidade` is also a core command, so it is not in the id list.
+// words are a different matter.
 test("the host knows no module: no fixture id and no real module name in packages/ sources", () => {
   const ids = ["demo", "bad-range", "broken-entry", "no-default", "no-entry", "not-applicable", "throws-on-load", "throws-on-run", "cap-fixture", "echoer", "ui-demo"];
   const real = ["firewall", "ssl", "autobackup", "zabbix", "autobloqueador", "ssh-hardening"];
@@ -41,9 +41,8 @@ test("built-in modules are written like usermodules: only `import type` from the
   }
 });
 
-// Host code reaches a built-in by ROLE (`PageDef.role`, `ModuleDef.roles`), never by its id. The ids come from the
-// manifests, so a new built-in is covered without editing this test. A bare id is not searched: `conformidade` is also a
-// core command and `nota` is the diary's own kind and an ordinary word. What gives a reference away is its shape:
+// Host code reaches a built-in by ROLE (`ModuleDef.roles`), never by its id. The ids come from the
+// manifests, so a new built-in is covered without editing this test. A bare id is not searched: `nota` is an ordinary word. What gives a reference away is its shape:
 // `<id>.<name>` (page key, query, tab id), a command line of the module, or `motd` as a whole word (only ever a module).
 function builtinRefs(): RegExp {
   const dirs = readdirSync(join(root, "packages", "builtin")).filter((n) => statSync(join(root, "packages", "builtin", n)).isDirectory());
@@ -52,11 +51,11 @@ function builtinRefs(): RegExp {
   const ids = [...new Set([...manifests.map((m) => m.id), ...dirs])]; // `notas` (directory and query namespace) too
   const sep = "[\\s\"'`,]+";
   const patterns = [
-    ...ids.map((id) => `(?:page:|["'\`])${esc(id)}\\.[a-z]`), // "nota.notas", "page:conformidade.plano", "notas.compose"
+    ...ids.map((id) => `(?:page:|["'\`])${esc(id)}\\.[a-z]`), // "nota.notas", "page:notas.lista", "notas.compose"
     ...manifests.flatMap((m) => m.contributes?.commands ?? []).map((c) => `(?<![\\w-])${c.split(" ").map(esc).join(sep)}(?![\\w-])`), // `nota add`, ["nota", "add"]
     "(?<![\\w-])motd(?![\\w-])",
   ];
-  expect(ids).toEqual(expect.arrayContaining(["conformidade", "nota", "notas", "motd"]));
+  expect(ids).toEqual(expect.arrayContaining(["nota", "notas", "motd"]));
   return new RegExp(patterns.join("|"));
 }
 
@@ -66,6 +65,6 @@ test("the host names no built-in module: only roles (core command names are not 
 
 test("the built-in check catches the references it exists for, and lets core command names through", () => {
   const re = builtinRefs();
-  for (const bad of ['registry.pages.has("nota.notas")', 'goto("page:conformidade.plano")', 'query("notas.compose")', 'const argv = ["nota", "add"]', "run `nota add --ref x`", "motd install-hook"]) expect(re.test(bad), bad).toBe(true);
-  for (const ok of ['key: "conformidade ignorar"', "conformidade.lines", 'kinds: ["nota"]', "a nota foi criada", "pvx plano apply"]) expect(re.test(ok), ok).toBe(false);
+  for (const bad of ['registry.pages.has("nota.notas")', 'goto("page:notas.lista")', 'query("notas.compose")', 'const argv = ["nota", "add"]', "run `nota add --ref x`", "motd install-hook"]) expect(re.test(bad), bad).toBe(true);
+  for (const ok of ['kinds: ["nota"]', "a nota foi criada", "pvx modules list"]) expect(re.test(ok), ok).toBe(false);
 });

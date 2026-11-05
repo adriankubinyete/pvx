@@ -17,15 +17,8 @@ async function registryWith(...extra: Parameters<Registry["register"]>[]): Promi
   return r;
 }
 
-/** Last conformity result on disk (what `conformidade` leaves) and one pinned note by another user. */
-function seed(o: { agoMs?: number; notes?: boolean; results?: object[] } = {}) {
-  const results = o.results ?? [
-    { id: "t.ok", level: "ok", text: "Firewall: ativo" },
-    { id: "t.ssl", level: "error", text: "SSL: certificado expirado", fix: "pvx ssl renew" },
-    { id: "t.bkp", level: "warn", text: "Backup: sem rotina", fix: "pvx autobackup setup" },
-  ];
-  writeFileSync(join(pvxHome(), "conformity-snapshot.json"), JSON.stringify({ at: Date.now() - (o.agoMs ?? 2 * 3600_000), profile: "Central Phonevox", results }));
-  if (o.notes === false) return;
+/** Two open notes by another user. */
+function seed() {
   const ev = [
     { v: 2, id: "a1", at: "2026-10-09T10:00:00Z", ev: "add", author: "ana", text: "não reiniciar o asterisk antes das 18h", signature: "Ana" },
     { v: 2, id: "b2", at: "2026-10-09T11:00:00Z", ev: "add", author: "ana", text: "nota sem assinatura" },
@@ -36,63 +29,46 @@ function seed(o: { agoMs?: number; notes?: boolean; results?: object[] } = {}) {
 async function banner(registry: Registry, env: Record<string, string> = {}, o: { isTTY?: boolean; isRoot?: boolean } = {}) {
   const out: string[] = [];
   const exit = await runCli({
-    argv: ["banner"], env: { LOGNAME: "rafael", ...env }, isTTY: o.isTTY ?? false, isRoot: o.isRoot ?? false, registry, makeLogger,
-    profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme, out: (l) => void out.push(l),
+    argv: ["banner"], env: { LOGNAME: "rafael", ...env }, isTTY: o.isTTY ?? false, isRoot: o.isRoot ?? false, registry, makeLogger, version: "0.1.0", theme, out: (l) => void out.push(l),
   });
   return { exit, out, text: out.join("\n") };
 }
 
-test("sections, in under 1 s with the network unavailable and no evaluation", async () => {
+test("sections, in under 1 s with the network unavailable", async () => {
   const realFetch = globalThis.fetch;
   let fetched = 0;
   globalThis.fetch = (() => (fetched++, Promise.reject(new Error("sem rede")))) as unknown as typeof fetch;
   try {
-    let proved = 0;
-    const r = await registryWith([{ id: "t", version: "1", entry: "x" }, { capabilities: [{ id: "t.ssl", title: "SSL", goal: "g", prove: () => (proved++, { level: "ok", text: "ok" }) }] }]);
-    mkdirSync(join(pvxHome(), "profiles"));
-    writeFileSync(join(pvxHome(), "profiles", "10.json"), JSON.stringify({ id: "p", title: "P", requires: ["t.ssl"] }));
+    const r = await registryWith();
     seed();
     const t0 = performance.now();
     const b = await banner(r, { COLUMNS: "100" });
     const ms = performance.now() - t0;
     expect(b.exit).toBe(0);
     expect(ms).toBeLessThan(MAX_BANNER_MS);
-    expect(b.text).toContain("perfil Central Phonevox");
     expect(b.text).toContain("pvx 0.1.0");
-    expect(b.text).toContain("checklist 1/3 · verificado há 2 h");
-    expect(b.text).toContain("[✗] SSL: certificado expirado\n    → pvx ssl renew");
-    expect(b.text).toContain("[!] Backup: sem rotina");
     expect(b.text).toContain("notas");
     expect(b.text).toContain("▸ não reiniciar o asterisk antes das 18h — Ana");
     expect(b.text).toContain("▸ nota sem assinatura");
     expect(b.text.indexOf("nota sem assinatura")).toBeLessThan(b.text.indexOf("não reiniciar")); // newest first
     expect(b.out[0]).toMatch(/^═+$/);
     expect(b.out.at(-1)).toBe("digite pvx para abrir · PVX_QUIET=1 silencia");
-    expect(proved).toBe(0); // it never evaluates
     expect(fetched).toBe(0);
   } finally {
     globalThis.fetch = realFetch;
   }
 });
 
-test("at most 5 pending items and 3 notes; an ignored item is not pending", async () => {
-  const results = Array.from({ length: 8 }, (_, i) => ({ id: `t.c${i}`, level: "error", text: `Item ${i}: falhou`, fix: `pvx fix ${i}` }));
-  seed({ results, notes: false });
-  writeFileSync(join(pvxHome(), "ignores.json"), JSON.stringify([{ id: "t.c0", until: new Date(Date.now() + 3600_000).toISOString(), reason: "r", author: "ana" }]));
+test("at most 3 notes", async () => {
   const ev = Array.from({ length: 5 }, (_, i) => ({ v: 2, id: `n${i}`, at: `2026-10-09T10:0${i}:00Z`, ev: "add", author: "ana", text: `nota ${i}` }));
   writeFileSync(join(pvxHome(), "notes.jsonl"), ev.map((e) => JSON.stringify(e)).join("\n") + "\n");
   const b = await banner(await registryWith());
-  expect(b.text).toContain("checklist 0/7");
-  expect(b.out.filter((l) => l.startsWith("[✗]"))).toHaveLength(5);
-  expect(b.text).not.toContain("Item 0");
-  expect(b.text).toContain("+2 pendência(s)");
   expect(b.out.filter((l) => l.includes("▸"))).toHaveLength(3);
 });
 
-test("a missing source is skipped silently: no snapshot, no notes module", async () => {
+test("a missing source is skipped silently: no notes module", async () => {
   const b = await banner(await registryWith());
   expect(b.exit).toBe(0);
-  expect(b.text).not.toContain("checklist");
   expect(b.text).not.toContain("notas");
   const bare = createRegistry(); // no module at all: the roles are absent
   seed();
@@ -111,7 +87,8 @@ test("NO_COLOR gives no escapes; a TTY without it colors; no TTY is plain", asyn
 });
 
 test("COLUMNS=60 truncates every line", async () => {
-  seed({ results: [{ id: "t.x", level: "error", text: `SSL: ${"muito longo ".repeat(12)}`, fix: `pvx ${"comprido ".repeat(12)}` }] });
+  const ev = [{ v: 2, id: "a1", at: "2026-10-09T10:00:00Z", ev: "add", author: "ana", text: "muito longo ".repeat(12) }];
+  writeFileSync(join(pvxHome(), "notes.jsonl"), ev.map((e) => JSON.stringify(e)).join("\n") + "\n");
   const b = await banner(await registryWith(), { COLUMNS: "60" });
   expect(Math.max(...b.out.map((l) => [...l].length))).toBeLessThanOrEqual(60);
   expect(b.text).toContain("…");
@@ -144,7 +121,6 @@ test("the real entrypoint prints it without waiting on the network (built-ins on
   console.log(`banner via bun run: ${ms.toFixed(0)} ms`);
   expect(exit).toBe(0);
   expect(ms).toBeLessThan(1000);
-  expect(text).toContain("checklist 1/3");
   expect(text).toContain("▸ não reiniciar o asterisk antes das 18h — Ana");
 });
 

@@ -15,12 +15,11 @@ export const sampleWidth = (width: number): number => Math.max(MIN_SAMPLE_W, Mat
 
 function noop() {}
 
-/** The real primitives in the theme being previewed (the section headers are drawn as lines: a `Panel` inside a `Panel` would nest gutters): a section header active and inactive, a selected row, a notice of each tone, two buttons, a field, a badge, a meter and a done step. */
+/** The real primitives in the theme being previewed (the section headers are drawn as lines: a `Panel` inside a `Panel` would nest gutters): a section header active and inactive, a selected row, a notice of each tone, two buttons, a field, a badge, a meter and a done step and a frame (the `moldura` axis). */
 function Sample() {
-  const { c, g } = useTheme();
+  const { c, g, box } = useTheme();
   return (
     <box flexDirection="column" flexShrink={0} backgroundColor={c.bg} paddingX={1}>
-      <text wrapMode="none" fg={c.dim} flexShrink={0}>prévia</text>
       <text wrapMode="none" flexShrink={0}><span fg={c.accent}>{`${g.gutter} `}</span><span fg={c.accent}><b>1 Seção ativa</b></span></text>
       <text wrapMode="none" flexShrink={0} fg={c.dim}>{"  2 Seção inativa"}</text>
       <List items={[{ id: "a", label: "linha selecionada", detail: "ok" }, { id: "b", label: "outra linha", detail: "ok" }]} selected="a" />
@@ -40,15 +39,21 @@ function Sample() {
         <Meter value={0.6} width={10} />
       </box>
       <Steps items={[{ id: "done", label: "etapa", state: "done" }]} />
+      <box flexShrink={0} {...box()} paddingX={1}>
+        <text wrapMode="none" fg={c.dim} selectable={false}>quadro</text>
+      </box>
     </box>
   );
 }
 
-/** The sample under `patch`: what the theme would look like if the hovered or cursor option were chosen. */
+/** The sample under `patch`: what the theme would look like if the hovered or cursor option were chosen. It sits in its own dim frame titled `prévia`, drawn in the real theme, so it never reads as part of the page (even with the `none` frame: the sample always has its border). */
 export function ThemeSample({ patch }: { patch: Partial<TuiState> }) {
+  const { c, box } = useTheme();
   return (
-    <ThemePreview patch={patch}>
-      <Sample />
-    </ThemePreview>
+    <box flexDirection="column" flexShrink={0} {...box(c.dim)} border title="prévia">
+      <ThemePreview patch={patch}>
+        <Sample />
+      </ThemePreview>
+    </box>
   );
 }

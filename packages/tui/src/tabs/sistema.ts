@@ -45,7 +45,7 @@ export interface ChoiceAxis {
 export const CHOICE_AXES: readonly ChoiceAxis[] = [
   { id: "theme", label: "tema", options: [["dark", "Escuro"], ["light", "Claro"], ["contrast", "Alto contraste"], ["terminal", "Terminal"], ["custom", "Personalizado"]] },
   { id: "symbols", label: "símbolos", options: [["unicode", "unicode"], ["ascii", "ascii"]] },
-  { id: "border", label: "moldura", options: [["rounded", "arredondada"], ["single", "simples"], ["none", "nenhuma"]] },
+  { id: "border", label: "moldura", options: [["rounded", "arredondada"], ["single", "simples"], ["ascii", "ascii"], ["none", "nenhuma"]] },
   { id: "result", label: "resultado", options: [["bracket", "colchetes"], ["glyph", "símbolo"], ["text", "texto"]] },
 ];
 export const choiceAxisOf = (row: string): ChoiceAxis | undefined => CHOICE_AXES.find((axis) => axis.id === row);

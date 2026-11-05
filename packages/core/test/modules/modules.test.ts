@@ -79,7 +79,6 @@ async function cli(line: string, over: Partial<CliIO> = {}) {
     isRoot: true,
     registry: over.registry ?? createRegistry(),
     makeLogger,
-    profilesDir: join(tmp, "profiles"),
     version: "1.0.0",
     theme,
     allowFile: true,

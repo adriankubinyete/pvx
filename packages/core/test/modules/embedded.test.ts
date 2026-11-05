@@ -93,7 +93,7 @@ test("a reconcile of the embedded id leaves it alone (trusting the installed cop
 test("state goes to the normal module state dir, so it survives switching binaries", async () => {
   const registry = createRegistry();
   await loadModules(registry, options({ embedded: [embeddedDemo()] }));
-  const exit = await runCli({ argv: ["demo", "remember"], env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry, makeLogger, profilesDir: "", version: "0.1.0", theme, out: noop });
+  const exit = await runCli({ argv: ["demo", "remember"], env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry, makeLogger, version: "0.1.0", theme, out: noop });
   expect(exit).toBe(0);
   expect(JSON.parse(readFileSync(join(moduleStateDir("demo"), "state.json"), "utf8"))).toEqual({ seen: "yes" });
 });
@@ -103,7 +103,7 @@ test("version --json and the modules list carry the embedded modules; text mode 
   await loadModules(registry, options({ embedded: [embeddedDemo(true)] }));
   const run = async (argv: string[]) => {
     const out: string[] = [];
-    const io = { argv, env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry, makeLogger, profilesDir: "", version: "0.1.0 (dev, +demo)", build: "dev-build:20261015.1432-4d8baf8", theme, out: (line: string) => void out.push(line) };
+    const io = { argv, env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry, makeLogger, version: "0.1.0 (dev, +demo)", build: "dev-build:20261015.1432-4d8baf8", theme, out: (line: string) => void out.push(line) };
     await runCli(io);
     return out;
   };
@@ -126,7 +126,7 @@ test("version --json and the modules list carry the embedded modules; text mode 
 test("a release build has no embedded modules: the version has one line and no build field", async () => {
   const registry = createRegistry();
   const out: string[] = [];
-  await runCli({ argv: ["version", "--json"], env: {}, isTTY: false, isRoot: true, registry, makeLogger, profilesDir: "", version: "0.1.0", theme, out: (line) => void out.push(line) });
+  await runCli({ argv: ["version", "--json"], env: {}, isTTY: false, isRoot: true, registry, makeLogger, version: "0.1.0", theme, out: (line) => void out.push(line) });
   const [line] = (JSON.parse(out.join("")) as { lines: { build: object }[] }).lines;
   expect(line!.build).toEqual({ version: "0.1.0", label: "0.1.0", embedded: [] });
 });

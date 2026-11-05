@@ -53,7 +53,7 @@ for (const cols of [80, 100, 120]) {
   test(`a thin rule runs under the bar across the page width (${cols} columns)`, async () => {
     const t = await mount(cols, () => D);
     const rule = t.frame().split("\n")[1]!;
-    expect(rule.trim()).toBe("─".repeat(cols - 2));
+    expect(rule.trim().replace("┴", "─")).toBe("─".repeat(cols - 2));
   });
 }
 
@@ -69,4 +69,15 @@ test("a clock tick re-renders only the clock: the tab content does not render ag
   await t.flush();
   expect(text(t.frame())).not.toBe(s0); // it ticked
   expect(renders).toBe(before); // and nothing else rendered
+});
+
+test("the rule under the bar meets the `│` of the clock with a `┴`, at every width", async () => {
+  for (const cols of [80, 100, 120, 160]) {
+    const t = await mount(cols, () => D);
+    const [bar, rule] = t.frame().split("\n");
+    const at = bar!.indexOf("│");
+    expect(at, `${cols} cols`).toBeGreaterThan(0);
+    expect(rule![at], `${cols} cols`).toBe("┴");
+    t.destroy();
+  }
 });

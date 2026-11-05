@@ -5,7 +5,7 @@ const makeLogger = (n: string) => createLogger(logsDir(), n);
 const registry = createRegistry();
 await loadModules(registry, { hostVersion: "0.1.0", makeLogger });
 const exit = await runCli({
-  argv: process.argv.slice(2), env: process.env, isTTY: false, isRoot: true, registry, makeLogger, profilesDir: "", version: "test",
+  argv: process.argv.slice(2), env: process.env, isTTY: false, isRoot: true, registry, makeLogger, version: "test",
   theme: { text: "", accent: "", ok: "", warn: "", error: "", info: "" }, out: () => {},
 });
 process.exitCode = exit as number;

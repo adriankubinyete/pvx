@@ -19,6 +19,9 @@ const cut = (text: string, width: number): string => (len(text) > width ? `${[..
 const CARD_CHROME = 4;
 const DEFAULT_DOT = "●";
 
+/** The dot a card asks for in unicode (`●` or `○`), drawn with the glyph of the symbols axis; any other dot is drawn as it is. */
+const themed = (dot: string, g: { active: string; inactive: string }): string => (dot === "●" ? g.active : dot === "○" ? g.inactive : dot);
+
 /**
  * What a card draws: the `CardSpec` of the SDK plus what only the host needs (the Módulos grid): a badge before the name,
  * a quiet name (a suggestion, not an installed thing) and the dim text at the bottom left of a card without chips.
@@ -76,13 +79,13 @@ const stateCells = (state: CardData["state"]): string => (state ? `${state.dot ?
 
 /** An action card: key, label and sub line, centered by hand on fixed rows so it stays visible when the card is only partly on screen. */
 function ActionBody({ card, width, marked, lit }: { card: CardData; width: number; marked: boolean; lit: boolean }) {
-  const { c } = useTheme();
+  const { c, g } = useTheme();
   const action = card.action!;
   const title = `${action.key}  ${card.name}`;
   const sub = cut(action.sub ?? "", width);
   const centering = (cells: number) => " ".repeat(Math.max(0, Math.floor((width - cells) / 2)));
   const lead = centering(len(title));
-  const start = marked && lead ? `${lead.slice(1)}›` : lead; // the marker takes the last padding column: nothing moves
+  const start = marked && lead ? `${lead.slice(1)}${g.query}` : lead; // the marker takes the last padding column: nothing moves
   return (
     <>
       <text wrapMode="none"> </text>
@@ -94,13 +97,13 @@ function ActionBody({ card, width, marked, lit }: { card: CardData; width: numbe
 
 /** The right of the name line: the state (dot and word) in its tone. The dot is the state's own color; the text is dim unless the tone asks for attention. */
 function StateText({ state }: { state: NonNullable<CardData["state"]> }) {
-  const { c } = useTheme();
+  const { c, g } = useTheme();
   const attention = state.tone !== "ok" && state.tone !== "dim";
   const textColor = attention ? toneColor(c, state.tone) : c.dim;
   if (!state.dot) return <span fg={c.dim}>{state.text}</span>;
   return (
     <>
-      <span fg={state.tone === "dim" ? c.dim : toneColor(c, state.tone)}>{state.dot}</span>
+      <span fg={state.tone === "dim" ? c.dim : toneColor(c, state.tone)}>{themed(state.dot, g)}</span>
       <span fg={textColor}>{` ${state.text}`}</span>
     </>
   );
@@ -108,7 +111,7 @@ function StateText({ state }: { state: NonNullable<CardData["state"]> }) {
 
 /** The name line: badge, name, and the state on the right. */
 function NameLine({ card, width, marked, lit }: { card: CardData; width: number; marked: boolean; lit: boolean }) {
-  const { c } = useTheme();
+  const { c, g } = useTheme();
   const badgeCells = card.badge ? len(card.badge.text) : 0;
   const right = stateCells(card.state);
   const nameRoom = Math.max(1, width - badgeCells - 1 - len(right) - (right ? 1 : 0));
@@ -118,7 +121,7 @@ function NameLine({ card, width, marked, lit }: { card: CardData; width: number;
   return (
     <text wrapMode="none">
       {card.badge ? <span fg={card.badge.color}>{card.badge.text}</span> : null}
-      <span fg={card.quiet ? c.dim : c.text}>{marked ? "›" : " "}{card.quiet ? shownName : <b>{shownName}</b>}</span>
+      <span fg={card.quiet ? c.dim : c.text}>{marked ? g.query : " "}{card.quiet ? shownName : <b>{shownName}</b>}</span>
       <span>{padding}</span>
       {card.state ? <StateText state={card.state} /> : null}
     </text>

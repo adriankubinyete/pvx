@@ -90,7 +90,7 @@ async function mount(o: MountOpts = {}) {
   const isRoot = o.isRoot ?? true;
   const store = createSessionStore({
     registry, makeLogger, isRoot, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "none"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const modules = {
     load, allowFile: true,
@@ -161,7 +161,7 @@ test("catalog: lists what is not installed with the source; empty shows a friend
   await t.press("c");
   expect(t.frame()).toContain("catálogo vazio · fonte: embutido");
   await t.press("c");
-  expect(t.frame()).toContain("instalados");
+  expect(t.frame()).toContain("adicionar por URL");
   expect(t.frame()).not.toContain("catálogo vazio");
   h!.destroy();
   const o = origin("gm");
@@ -323,7 +323,8 @@ test("removing a row keeps the cursor on the row that takes its place", async ()
   await t.press("ARROW_LEFT"); // confirmar (the focus starts on cancelar)
   await t.press("RETURN");
   await see(t, (x) => x.includes("✓ rc removido"));
-  await see(t, (x) => x.includes("instalados 1"));
+  await see(t, (x) => !/[◆◇] rc\b/.test(x));
+  await t.flush();
   expect(selectedName(t)).toBe("ra"); // last module gone: the previous one, not a dashed card
 }, 30_000); // several git clones: slow on Windows
 

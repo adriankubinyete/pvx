@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
 import { execute } from "../../src/engine/execute.ts";
 import { loadModules } from "../../src/engine/loader.ts";
-import { createRegistry, pageWithRole } from "../../src/engine/registry.ts";
+import { createRegistry } from "../../src/engine/registry.ts";
 import { tokenize } from "../../src/engine/tokenize.ts";
 
 process.env.PVX_USERMODULES = join(import.meta.dir, "../fixtures/usermodules");
@@ -113,13 +113,11 @@ describe("roles", () => {
   const m = (id: string) => ({ id, version: "1", entry: "x" });
   const page = { title: "t", render: () => null };
 
-  test("a page role and a module role resolve without the module name; unregister drops them", () => {
+  test("a module role resolves without the module name; unregister drops it", () => {
     const r = createRegistry();
-    r.register(m("a"), { pages: { one: { ...page, role: "plan" }, two: page }, roles: { removeNote: "a remove" } });
-    expect(pageWithRole(r, "plan")?.key).toBe("a.one");
+    r.register(m("a"), { pages: { one: page, two: page }, roles: { removeNote: "a remove" } });
     expect(r.roles.get("removeNote")).toEqual({ moduleId: "a", name: "a remove" });
     r.unregister("a");
-    expect(pageWithRole(r, "plan")).toBeUndefined();
     expect(r.roles.size).toBe(0);
   });
 

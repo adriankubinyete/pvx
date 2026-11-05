@@ -65,7 +65,7 @@ const sessionOf = (registry: Registry, isRoot: boolean, sshClient: string | unde
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const session = createSessionStore({
     registry, makeLogger, isRoot, session: { sshClient }, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: HOST_VERSION, theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, version: HOST_VERSION, theme }, argv),
   });
   return { makeLogger, session };
 };

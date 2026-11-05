@@ -5,7 +5,6 @@ import { execute } from "../engine/execute.ts";
 import { pvxHome } from "../engine/paths.ts";
 import { resolveCommand, type Registry } from "../engine/registry.ts";
 import type { ModuleRow, VersionInfo } from "../modules/index.ts";
-import type { PlanStep } from "../plan/index.ts";
 import { CORE, RESERVED } from "./core.ts";
 import { catalogOf, pathHelp, rootHelp } from "./help.ts";
 
@@ -28,7 +27,6 @@ export interface CliIO {
   isRoot: boolean;
   registry: Registry;
   makeLogger: (name: string) => Logger;
-  profilesDir: string;
   version: string;
   /** The id of a dev build (what `pvx version --json` reports as `build`); unset in a release and from source. */
   build?: string;
@@ -48,15 +46,10 @@ export interface CliIO {
   signal?: AbortSignal;
 }
 
-/** An output line that may carry the command that fixes it (conformidade; JSON mode only shows it). */
+/** An output line with the extra facts JSON mode shows. */
 export interface CoreLine extends OutLine {
-  fix?: string;
-  /** `plano` only: the step this line lists (JSON mode only shows it). */
-  step?: PlanStep;
   /** `modules` listing only: the row, with its `state` (JSON mode only shows it). */
   module?: ModuleRow;
-  /** `conformidade` only: ISO instant until which this pending item is ignored. */
-  ignored?: string;
   /** `version` only: the build facts (JSON mode only shows it). */
   build?: VersionInfo;
 }
@@ -97,7 +90,7 @@ export async function runCapture(io: Omit<CliIO, "argv" | "out" | "isTTY">, argv
 function createOutput(io: CliIO, json: boolean): Output {
   const lines: CoreLine[] = [];
   return {
-    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.fix ? { fix: l.fix } : {}), ...(l.step ? { step: l.step } : {}), ...(l.module ? { module: l.module } : {}), ...(l.ignored ? { ignored: l.ignored } : {}), ...(l.build ? { build: l.build } : {}) }) : io.out(formatLine(l, io.theme))),
+    line: (l) => (json ? void lines.push({ kind: l.kind, text: l.text, ...(l.module ? { module: l.module } : {}), ...(l.build ? { build: l.build } : {}) }) : io.out(formatLine(l, io.theme))),
     finish(exit) {
       if (json) io.out(JSON.stringify({ ok: exit === EXIT.OK, exit, lines }));
       return exit;

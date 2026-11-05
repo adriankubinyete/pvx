@@ -21,7 +21,7 @@ async function mount(opts: { cols?: number; rows?: number } = {}) {
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: { PVX_PROFILE: "main" }, isRoot: true, registry, makeLogger, profilesDir: join(fixtures, "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(
@@ -45,19 +45,16 @@ test("widgets fill their slots by priority; the throwing and the hanging ones ar
   expect(activeFrames(t)).toEqual(["2"]);
 });
 
-test("home.attention combines the profile's pending items with a module item; enter puts the fix in the draft", async () => {
+test("home.attention lists the module items first, then the broken widgets; enter puts the fix in the draft", async () => {
   const { t, store } = await mount({ cols: 120, rows: 40 });
-  await t.press("r");
+  await Bun.sleep(200); // the module widgets arrive
   await t.flush();
   const lines = t.frame().split("\n");
   const at = (s: string) => lines.findIndex((l) => l.includes(s));
-  expect(at("cap-fixture.a: pendente")).toBeGreaterThan(0);
-  expect(at("demo: revisar o painel")).toBeGreaterThan(at("cap-fixture.a: pendente")); // host first, then module
+  expect(at("demo: revisar o painel")).toBeGreaterThan(0);
   expect(at("widget quebrou: widget-demo.hang")).toBeGreaterThan(at("demo: revisar o painel"));
-  expect(t.frame()).toMatch(/1 capacidade em dia/);
   await t.press("RETURN"); // enter the section
-  for (let i = 0; i < 4; i++) await t.press("ARROW_DOWN"); // 4 pending items from the profile, then the module's
-  await t.press("RETURN");
+  await t.press("RETURN"); // the first row is the module item
   expect(t.frame()).toContain("❯ widget-demo read home.chips");
   expect(store.blocks).toEqual([]);
 });

@@ -60,3 +60,9 @@ test("paste inserts at the cursor and a one-line field drops escapes, line break
   expect(pastedText("\x1b[31mred\x1b[0m\x1b]0;title\x07\ttab\x00")).toBe("redtab");
   expect(editLine(lineOf("x"), { name: "paste", sequence: "", paste: "\n" })).toEqual({ text: "x", cursor: 1 });
 });
+
+test("a modified backspace still erases: Option+Backspace a word, Ctrl+Backspace and Ctrl+H a character", () => {
+  expect(editLine({ text: "ab cd", cursor: 5 }, key("backspace", { meta: true }))).toEqual({ text: "ab ", cursor: 3 });
+  expect(editLine({ text: "abc", cursor: 3 }, key("backspace", { ctrl: true }))).toEqual({ text: "ab", cursor: 2 });
+  expect(editLine({ text: "abc", cursor: 3 }, key("h", { ctrl: true }))).toEqual({ text: "ab", cursor: 2 });
+});

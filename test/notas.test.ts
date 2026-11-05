@@ -21,8 +21,7 @@ async function nota(argv: string[], o: { user?: string; root?: boolean; stdin?: 
   const env = { NO_COLOR: "1", SUDO_USER: o.user ?? "ana" };
   Object.assign(process.env, env); // the module reads SUDO_USER like the real binary does
   const exit = await runCli({
-    argv: ["nota", ...argv, ...(o.yes ? ["--yes"] : [])], env, isTTY: false, isRoot: o.root ?? true, registry, makeLogger: (n) => createLogger(logsDir(), n),
-    profilesDir: "", version: "0.1.0", theme, out: (l) => void out.push(l), readStdin: async () => o.stdin ?? "",
+    argv: ["nota", ...argv, ...(o.yes ? ["--yes"] : [])], env, isTTY: false, isRoot: o.root ?? true, registry, makeLogger: (n) => createLogger(logsDir(), n), version: "0.1.0", theme, out: (l) => void out.push(l), readStdin: async () => o.stdin ?? "",
   });
   return { exit, out: out.join("\n") };
 }

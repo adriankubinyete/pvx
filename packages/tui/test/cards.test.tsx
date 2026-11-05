@@ -119,8 +119,8 @@ test("dashed cards show their key, label and sub line, and enter activates the s
   await t.press("RETURN");
   await t.press("ARROW_RIGHT");
   await t.press("RETURN");
-  expect(activated).toEqual(["act:add", "act:catalog"]);
-  expect(actionCards(undefined)[1]!.sub).toBe("catálogo indisponível");
+  expect(activated).toEqual(["act:catalog", "act:add"]);
+  expect(actionCards(undefined)[0]!.sub).toBe("catálogo indisponível");
 });
 
 test("without focus the selected card keeps a muted border (dim, no accent); with focus it is the accent one", async () => {

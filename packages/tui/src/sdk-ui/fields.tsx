@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import type { ScrollBoxRenderable, TextareaRenderable } from "@opentui/core";
 import type { Component, SdkUi } from "@pvx/sdk";
 import { useKeys } from "../keys.tsx";
+import { TextArea } from "./textarea.tsx";
 import { useNudge } from "../nudge.tsx";
 import { capContent, useLayout } from "../layout.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
@@ -124,7 +125,7 @@ function Keys({ on }: { on: (k: KeyEvent) => void | typeof RELEASE }) {
 
 export const Fields: Component<Props> = (props) => {
   const { fields: allFields, initial = {}, onSubmit, onCancel, onDelete, deleteLabel = "remover", deleteConfirm, validate, active = true, buttons: showButtons = true, onEdge, initialFocus, title, description, submitLabel = "salvar", busyLabel = DEFAULT_BUSY_LABEL, details, onChange, summary, extraActions = [] } = props;
-  const { c, g } = useTheme();
+  const { c, g, box } = useTheme();
   const { cols } = useLayout();
   const host = useContext(HostCtx); // a form outside a page (the Módulos tab) has no page footer: its screen sets the scope
   // A form in a page owns the keyboard only while the page has it: with the tab bar focused, or in a tab kept mounted behind another, every key goes to the host.
@@ -505,9 +506,7 @@ export const Fields: Component<Props> = (props) => {
     </box>
   );
   const areaField = (f: Field, i: number, on: boolean) => (
-    <box key={f.id} flexShrink={0} height={(f.rows ?? 5) + 2} border borderStyle="rounded" borderColor={on ? c.accent : c.border} title={clean(f.label)} onMouseDown={() => go(i)}>
-      <textarea ref={(r: TextareaRenderable | null) => void (areas.current[f.id] = r)} focused={i === focus && live} initialValue={String(initial[f.id] ?? "")} flexGrow={1} />
-    </box>
+    <TextArea key={f.id} title={f.label} rows={f.rows} focused={on && i === focus && live} initial={String(initial[f.id] ?? "")} onPress={() => go(i)} areaRef={(r) => void (areas.current[f.id] = r)} />
   );
   const fieldView = (f: Field, i: number) => {
     const on = i === focus && !confirm && live;

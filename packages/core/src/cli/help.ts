@@ -59,7 +59,7 @@ export function rootHelp(version: string, core: Entry[], registry: Registry): st
     "",
     "Opções globais:",
     "  --json      saída em JSON: {ok, exit, lines}",
-    "  --yes       confirma comandos destrutivos e `plano apply`",
+    "  --yes       confirma comandos destrutivos",
     "  -h, --help  esta ajuda",
     "",
     "Núcleo:",

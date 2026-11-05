@@ -47,7 +47,7 @@ function seed() {
 async function mount(opts: { cols?: number; rows?: number; copied?: string[] } = {}) {
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} logsMs={60} /> };
   const clipboard = async (text: string) => (opts.copied?.push(text), { ok: true as const });

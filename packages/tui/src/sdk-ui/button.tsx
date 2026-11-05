@@ -44,7 +44,7 @@ export function buttonLook(label: string, kind: ButtonKind, c: Tokens): ButtonLo
 export function LookText({ look }: { look: ButtonLook }) {
   const text = look.underline ? <u>{look.text}</u> : look.text;
   return (
-    <text wrapMode="none" fg={look.fg} bg={look.bg}>
+    <text wrapMode="none" fg={look.fg} bg={look.bg} selectable={false}>
       {look.bold ? <b>{text}</b> : text}
     </text>
   );

@@ -4,7 +4,6 @@
 # PVX_DEV_BUILD=1 (`bun run build:dev`) makes a dev build that may embed local module checkouts with --with: the
 # artifact is dist/pvx-<version>-dev.<date>.<time>-<host sha>[-dirty]-<target>.tar.gz, with BUILD.txt beside the binary.
 # Test hooks: PVX_ENTRY (entry file), PVX_DIST (output dir), PVX_SKIP_DEPS=1,
-# PVX_PROFILES_SRC (dir whose *.json are embedded instead of the git-tracked profiles/*.json).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -60,27 +59,12 @@ fi
 
 [ "${PVX_SKIP_DEPS:-}" = 1 ] || [ "$target" = host ] || bun install --os='*' --cpu='*'
 
-# Only git-tracked profiles are embedded: an untracked local file must never reach a release.
-if [ -n "${PVX_PROFILES_SRC:-}" ]; then
-  plist="$(ls "$PVX_PROFILES_SRC"/*.json 2>/dev/null || true)"
-elif git rev-parse --git-dir >/dev/null 2>&1; then
-  plist="$(git ls-files 'profiles/*.json')"
-else
-  echo "build: fora de um checkout git; embutindo profiles/*.json do diretório" >&2
-  plist="$(ls profiles/*.json 2>/dev/null || true)"
-fi
-export PVX_PROFILE_FILES="$plist"
-
 mkdir -p "$dist/.gen"
-# Wrapper entry: embeds the selected profiles (sorted, like the dev dir) before the app starts. A dev build's modules
-# (embedded.ts, written by the plan) are imported first, so the app finds them in the global when it starts.
+# Wrapper entry: a dev build's modules (embedded.ts, written by the plan) are imported first, so the app finds them in the global when it starts.
 bun -e '
-const { existsSync, readFileSync } = require("node:fs");
-const files = (process.env.PVX_PROFILE_FILES || "").split("\n").filter(Boolean).sort();
-const profiles = files.map((f) => JSON.parse(readFileSync(f, "utf8")));
-console.error("build: perfis embutidos: " + (files.join(", ") || "nenhum"));
-require("node:fs").writeFileSync(process.argv[1] + "/.gen/entry.ts",
-  `${existsSync(process.argv[1] + "/.gen/embedded.ts") ? `import "./embedded.ts";\n` : ""}(globalThis as any).__PVX_PROFILES__ = ${JSON.stringify(profiles)};\nawait import(${JSON.stringify(require("node:path").resolve(process.argv[2]))});\n`);
+const { existsSync, writeFileSync } = require("node:fs");
+writeFileSync(process.argv[1] + "/.gen/entry.ts",
+  `${existsSync(process.argv[1] + "/.gen/embedded.ts") ? `import "./embedded.ts";\n` : ""}await import(${JSON.stringify(require("node:path").resolve(process.argv[2]))});\n`);
 ' "$dist" "$entry"
 out="$dist/pvx"
 [ "$target" = windows-amd64 ] && out="$dist/pvx-windows-amd64.exe"

@@ -5,6 +5,7 @@ import { Chip, Frame, KeyHint, List, LogTail, Notice, Panel, Row, Scroll, Spacer
 import { Badge, BarMeter, Details, Meter, Spark } from "./display.tsx";
 import { Button, ButtonRow } from "./button.tsx";
 import { Fields } from "./fields.tsx";
+import { TextArea } from "./textarea.tsx";
 import { Form } from "./pages.tsx";
 import { CellGrid, Conversation, Loading, ProgressBar, useAsync } from "./flow.tsx";
 import { CopyBlock, useCopy } from "./copy.tsx";
@@ -19,7 +20,7 @@ export const ui: SdkUi = {
   h: createElement as unknown as SdkUi["h"],
   Fragment,
   useState, useEffect, useMemo, useRef,
-  Panel, Frame, Row, Crumb, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields,
+  Panel, Frame, Row, Crumb, Text, Chip, Meter, BarMeter, Spark, Badge, Details, CopyBlock, Scroll, KeyHint, Table, List, Form, Spacer, Steps, LogTail, Notice, Fields, TextArea,
   Conversation, Button, ButtonRow, ProgressBar, CellGrid, Loading, useAsync, useCopy, RunPanel, CommandResult, Card, CardGrid: SdkCardGrid, ConfirmPreview,
   ...hooks,
 };

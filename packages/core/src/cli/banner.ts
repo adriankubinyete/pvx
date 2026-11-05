@@ -1,11 +1,10 @@
 import { hostname } from "node:os";
 import { EXIT } from "@pvx/sdk";
 import { fg } from "../ansi.ts";
-import { activeIgnores, auditLogin, currentUser, readSnapshot } from "../journal/index.ts";
+import { auditLogin, currentUser } from "../journal/index.ts";
 import type { CoreCommand } from "./core.ts";
 import type { CliIO } from "./run.ts";
 
-const MAX_PENDING = 5;
 const MAX_NOTES = 3;
 const DEFAULT_COLS = 80;
 
@@ -41,30 +40,14 @@ async function readNotes(io: CliIO): Promise<NoteState[] | undefined> {
 const noteText = (note: NoteState): string => (note.signature ? `${one(note.text)} — ${one(note.signature)}` : one(note.text));
 
 /**
- * The login banner: plain text from what is already on disk (the last conformity snapshot) and one registry query for
- * the notes. It evaluates nothing and fetches nothing, so it stays far below the 1 s the hook allows.
+ * The login banner: plain text from one registry query for the notes. It evaluates nothing and fetches nothing, so it stays far below the 1 s the hook allows.
  */
 export async function bannerLines(io: CliIO, now = Date.now()): Promise<string[]> {
   const cols = Math.max(20, Number(io.env.COLUMNS) || DEFAULT_COLS);
   const accent = (s: string) => fg(io.theme.accent, s);
   const dim = (s: string) => fg(io.theme.info, s);
-  const level = { ok: ["✓", io.theme.ok], warn: ["!", io.theme.warn], error: ["✗", io.theme.error] } as const;
   const rule = accent("═".repeat(Math.min(cols, 78)));
   const body: string[] = [];
-
-  const snap = readSnapshot();
-  if (snap) {
-    const skip = new Set(activeIgnores(now).map((i) => i.id));
-    const live = snap.results.filter((r) => !skip.has(r.id) || r.level === "ok");
-    const pending = live.filter((r) => r.level !== "ok");
-    body.push(cut(`checklist ${live.length - pending.length}/${live.length} · verificado ${ago(now - snap.at)}`, cols));
-    for (const r of pending.slice(0, MAX_PENDING)) {
-      const [glyph, color] = level[r.level];
-      body.push(`${fg(color, `[${glyph}]`)} ${cut(one(r.text), cols - 5)}`);
-      if (r.fix) body.push(`    ${dim("→")} ${cut(one(r.fix), cols - 7)}`);
-    }
-    if (pending.length > MAX_PENDING) body.push(dim(cut(`+${pending.length - MAX_PENDING} pendência(s): pvx conformidade`, cols)));
-  }
 
   const notes = await readNotes(io);
   if (notes?.length) {
@@ -72,8 +55,7 @@ export async function bannerLines(io: CliIO, now = Date.now()): Promise<string[]
     for (const n of notes) body.push(`  ${accent("▸")} ${cut(noteText(n), cols - 4)}`);
   }
 
-  const profile = snap ? ` · perfil ${snap.profile}` : "";
-  const head = `${hostname()}${profile}`;
+  const head = hostname();
   const version = `pvx ${io.version}`;
   const title = head.length + version.length + 3 <= cols ? `${head}${" ".repeat(cols - head.length - version.length - 1)}${version}` : cut(head, cols);
   return [rule, title, rule, ...body, ...(body.length ? [rule] : []), dim(cut("digite pvx para abrir · PVX_QUIET=1 silencia", cols))];
@@ -81,7 +63,7 @@ export async function bannerLines(io: CliIO, now = Date.now()): Promise<string[]
 
 export const BANNER_COMMAND: CoreCommand = {
   key: "banner",
-  help: "Banner de login: texto puro, do último resultado de conformidade e das notas (nunca avalia)",
+  help: "Banner de login: texto puro, das notas (nunca avalia)",
   async run({ io, o }) {
     for (const text of await bannerLines(io)) o.line({ kind: "plain", text });
     auditLogin(currentUser(io.env), io.env.SSH_CLIENT?.split(" ")[0]); // best effort: a non-root login just records nothing

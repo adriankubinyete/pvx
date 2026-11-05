@@ -1,9 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createJobs, createStore, resolveCommand, rootMessage, tokenize, type Registry } from "@pvx/core";
 import { phasesKey } from "@pvx/core";
-import type { CommandRun, Conformity, JobState, JobStatus, JobView, KeySpec, Logger, PhasesState, QueryState, RunState, RunView, SdkUi } from "@pvx/sdk";
+import type { CommandRun, JobState, JobStatus, JobView, KeySpec, Logger, PhasesState, QueryState, RunState, RunView, SdkUi } from "@pvx/sdk";
 import type { SessionApi } from "../session/store.ts";
-import { conformityOf, conformityView } from "../tabs/conformity.ts";
 import { useNudge as useHostNudge } from "../nudge.tsx";
 import { usePanelNav } from "../panelnav.ts";
 import { requestTab, useTabs } from "../tabs/context.ts";
@@ -263,13 +262,6 @@ export function useKey(keys: string, label: string, handler: () => void, opts?: 
   useEffect(() => addKey({ keys, label, help, run: () => latest.current() }), [addKey, keys, label, help]);
 }
 
-function useConformity(): Conformity {
-  const { deps } = useHost();
-  const store = conformityOf(deps.session);
-  const snap = useSyncExternalStore(store.subscribe, store.getSnapshot);
-  return useMemo(() => ({ ...conformityView(snap), refresh: store.refresh, apply: store.apply }), [snap, store]);
-}
-
 /** While mounted with a function, esc calls it (and stays on the page) instead of leaving. */
 function useBack(fn?: () => void) {
   const { addBack } = useHost();
@@ -309,6 +301,6 @@ function useModuleTheme() {
   return { c, g };
 }
 
-export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useConformity" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused" | "useConfirm" | "useJobLog"> = {
-  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useConformity, useViewport, usePanels: usePanelsHost, usePageFocused, useConfirm, useJobLog, useTheme: useModuleTheme,
+export const hooks: Pick<SdkUi, "useCommand" | "useQuery" | "useJob" | "useRun" | "useStore" | "useRouter" | "useKey" | "useNudge" | "useBack" | "useTheme" | "useViewport" | "usePanels" | "usePageFocused" | "useConfirm" | "useJobLog"> = {
+  useCommand, useQuery: useQuery as SdkUi["useQuery"], useJob, useRun, useStore, useRouter, useKey, useBack, useNudge: useHostNudge, useViewport, usePanels: usePanelsHost, usePageFocused, useConfirm, useJobLog, useTheme: useModuleTheme,
 };

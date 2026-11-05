@@ -142,7 +142,3 @@ export function resolvePage(registry: Registry, ref: string): RegisteredPage | u
   const named = [...registry.pages.values()].filter((p) => p.name === ref);
   return named.length === 1 ? named[0] : undefined;
 }
-
-/** The page a module declared with this role (`PageDef.role`): how the host reaches a page without naming its module. */
-export const pageWithRole = (registry: Pick<Registry, "pages">, role: NonNullable<PageDef["role"]>): RegisteredPage | undefined =>
-  [...registry.pages.values()].find((p) => p.role === role);

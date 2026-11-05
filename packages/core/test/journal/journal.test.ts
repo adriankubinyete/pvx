@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Logger } from "@pvx/sdk";
-import { activeIgnores, addIgnore, auditLogin, createRegistry, driftOf, execute, pvxHome, runCli, type CliIO, type Registry } from "../../src/index.ts";
+import { auditLogin, createRegistry, execute, pvxHome, runCli, type CliIO, type Registry } from "../../src/index.ts";
 import { appendJsonl, readJsonl } from "../../src/journal/jsonl.ts";
 
 const noop = () => {};
@@ -73,7 +73,7 @@ describe("audit log", () => {
   });
 
   test("core mutations are recorded by default, core reads only with PVX_AUDIT=all", async () => {
-    const io = (argv: string[]): CliIO => ({ argv, env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry: build(), makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "1", theme, out: noop });
+    const io = (argv: string[]): CliIO => ({ argv, env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry: build(), makeLogger, version: "1", theme, out: noop });
     await runCli(io(["modules", "enable", "ghost"]));
     await runCli(io(["version"]));
     expect(lines("audit.jsonl").map((l) => l.line)).toEqual(["modules enable ghost"]);
@@ -89,78 +89,5 @@ describe("audit log", () => {
     const all = readJsonl<{ at: string; i: number }>(f).map((e) => e.i);
     expect(all).toEqual([...all].sort((a, b) => b - a)); // newest first across the backups
     expect(all[0]).toBe(5);
-  });
-});
-
-describe("drift", () => {
-  const profilesDir = () => join(pvxHome(), "profiles");
-  const evaluate = async (registry: Registry) => {
-    mkdirSync(profilesDir(), { recursive: true });
-    writeFileSync(join(profilesDir(), "10.json"), JSON.stringify({ id: "p", title: "P", requires: ["t.cap"] }));
-    await runCli({ argv: ["conformidade"], env: { NO_COLOR: "1" }, isTTY: false, isRoot: false, registry, makeLogger, profilesDir: profilesDir(), version: "1", theme, out: noop });
-  };
-
-  test("only changes are appended; the first sight sets the baseline", async () => {
-    const r = build();
-    level = "ok";
-    await evaluate(r);
-    await evaluate(r);
-    expect(lines("conformity.jsonl")).toHaveLength(0);
-    level = "error";
-    await evaluate(r);
-    await evaluate(r);
-    expect(lines("conformity.jsonl")).toEqual([expect.objectContaining({ v: 1, id: "t.cap", from: "ok", to: "error", text: "nível error" })]);
-    level = "ok";
-    await evaluate(r);
-    expect(lines("conformity.jsonl")).toHaveLength(2);
-    expect(driftOf("t.cap")).toMatchObject({ from: "error", to: "ok", worse: false });
-    expect(driftOf("t.cap")!.label).toMatch(/^melhorou hoje \d\d:\d\d$/);
-    expect(driftOf("nada")).toBeUndefined();
-  });
-});
-
-describe("ignore", () => {
-  const T0 = Date.parse("2026-10-09T10:00:00Z");
-  test("lasts 24 h on an injected clock; a second ignore replaces the first", () => {
-    addIgnore("t.cap", "janela de manutenção", T0, "ana");
-    expect(activeIgnores(T0 + 23 * 3600e3)).toEqual([{ id: "t.cap", until: new Date(T0 + 24 * 3600e3).toISOString(), reason: "janela de manutenção", author: "ana" }]);
-    expect(activeIgnores(T0 + 24 * 3600e3)).toEqual([]);
-    addIgnore("t.cap", "outro", T0 + 3600e3, "rafael");
-    expect(activeIgnores(T0 + 3600e3)).toHaveLength(1);
-  });
-
-  const io = (argv: string[], registry: Registry, out: string[]): CliIO => ({ argv, env: { NO_COLOR: "1" }, isTTY: false, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "1", theme, out: (l) => void out.push(l) });
-  const setup = () => {
-    mkdirSync(join(pvxHome(), "profiles"), { recursive: true });
-    writeFileSync(join(pvxHome(), "profiles", "10.json"), JSON.stringify({ id: "p", title: "P", requires: ["t.cap"] }));
-    level = "error";
-  };
-
-  test("`conformidade ignorar` creates the note through `nota add` and takes the item out of the plan", async () => {
-    setup();
-    notes.length = 0;
-    const r = build(true);
-    const out: string[] = [];
-    expect(await runCli(io(["conformidade", "ignorar", "t.cap", "--motivo", "cliente pediu"], r, out))).toBe(0);
-    expect(notes).toEqual(["ignorado t.cap: cliente pediu"]);
-    expect(activeIgnores()[0]).toMatchObject({ id: "t.cap", reason: "cliente pediu" });
-    const plan: string[] = [];
-    await runCli(io(["plano"], r, plan));
-    expect(plan.join("\n")).toContain("ignorado até");
-    expect(plan.join("\n")).not.toContain("1. t read");
-    const conf: string[] = [];
-    await runCli(io(["conformidade", "--strict"], r, conf));
-    expect(conf.join("\n")).toMatch(/ignorado até \d\d:\d\d/);
-    expect(await runCli(io(["conformidade", "--strict"], r, []))).toBe(0);
-  });
-
-  test("without the notas module it warns and keeps the reason; unknown capability and missing reason are usage errors", async () => {
-    setup();
-    const out: string[] = [];
-    expect(await runCli(io(["conformidade", "ignorar", "t.cap", "--motivo", "x"], build(), out))).toBe(0);
-    expect(out.join("\n")).toContain("módulo de notas não carregado");
-    expect(activeIgnores()[0]!.reason).toBe("x");
-    expect(await runCli(io(["conformidade", "ignorar", "nope", "--motivo", "x"], build(), []))).toBe(2);
-    expect(await runCli(io(["conformidade", "ignorar", "t.cap"], build(), []))).toBe(2);
   });
 });

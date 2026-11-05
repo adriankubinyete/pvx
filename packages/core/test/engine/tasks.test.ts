@@ -97,8 +97,7 @@ describe("who started and who stopped a job, and `jobs resume`", () => {
   const resume = (name: string) => {
     const out: string[] = [];
     return runCli({
-      argv: ["jobs", "resume", "jobber", name], env: process.env, isTTY: false, isRoot: true, registry, makeLogger: (n) => createLogger(logsDir(), n),
-      profilesDir: "", version: "test", theme: { text: "", accent: "", ok: "", warn: "", error: "", info: "" }, out: (line) => void out.push(line),
+      argv: ["jobs", "resume", "jobber", name], env: process.env, isTTY: false, isRoot: true, registry, makeLogger: (n) => createLogger(logsDir(), n), version: "test", theme: { text: "", accent: "", ok: "", warn: "", error: "", info: "" }, out: (line) => void out.push(line),
     }).then((exit) => ({ exit, text: out.join("\n") }));
   };
 

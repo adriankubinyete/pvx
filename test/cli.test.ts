@@ -64,7 +64,6 @@ async function run(argv: string[], env: Record<string, string> = {}) {
     isRoot: true,
     registry,
     makeLogger: (n) => createLogger(logsDir(), n),
-    profilesDir: join(root, "profiles"),
     version: "1.0.0",
     theme,
     out: (l) => out.push(l),

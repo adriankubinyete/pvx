@@ -8,7 +8,7 @@ export interface TuiState {
   theme: "dark" | "light" | "contrast" | "terminal" | "custom";
   accent: string;
   symbols: "unicode" | "ascii";
-  border: "rounded" | "single" | "none";
+  border: "rounded" | "single" | "ascii" | "none";
   result: "bracket" | "glyph" | "text";
   /** Token hex values of the custom theme. Validated by the TUI. */
   custom: Record<string, string>;
@@ -43,7 +43,7 @@ export function loadTuiState(path = tuiStatePath()): TuiState {
       theme: pick("theme", ["dark", "light", "contrast", "terminal", "custom"]),
       accent: typeof raw?.accent === "string" ? raw.accent : d.accent,
       symbols: pick("symbols", ["unicode", "ascii"]),
-      border: pick("border", ["rounded", "single", "none"]),
+      border: pick("border", ["rounded", "single", "ascii", "none"]),
       result: pick("result", ["bracket", "glyph", "text"]),
       custom: Object.fromEntries(Object.entries(raw?.custom && typeof raw.custom === "object" ? raw.custom : {}).filter(([, v]) => typeof v === "string")) as Record<string, string>,
     };

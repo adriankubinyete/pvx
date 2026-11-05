@@ -210,20 +210,16 @@ test("`#` pages: rows show the title (not the key), tab pages carry an `aba` tag
 
 test("`#` page whose title equals the module id is not printed twice as a key", async () => {
   const reg = createRegistry();
-  const noop = { debug() {}, info() {}, warn() {}, error() {} };
-  const { builtin } = await import("../../builtin/index.ts");
-  const { ui } = await import("../src/index.ts");
-  await loadModules(reg, { hostVersion: "1.0.0", makeLogger: () => noop, ui, builtin });
-  expect(search(reg, "#conformidade")[0]).toMatchObject({ key: "conformidade.conformidade", label: "conformidade", range: [0, 12] });
-  expect(search(reg, "#conformidade.conformidade")).toHaveLength(1); // by key too
-  let closed = 0;
+  reg.register({ id: "solo", version: "1", entry: "x" }, { pages: { solo: { title: "solo", render: () => null } } });
+  expect(search(reg, "#solo")[0]).toMatchObject({ key: "solo.solo", label: "solo", range: [0, 4] });
+  expect(search(reg, "#solo.solo")).toHaveLength(1); // by key too
   h = await renderTui(
-    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={fake().session} registry={reg} onClose={() => closed++} /></KeyRouter></NudgeProvider></ThemeProvider>,
+    <ThemeProvider><NudgeProvider><KeyRouter onQuit={() => {}}><Palette session={fake().session} registry={reg} onClose={() => {}} /></KeyRouter></NudgeProvider></ThemeProvider>,
   );
-  await h.type("#conf");
+  await h.type("#sol");
   const f = h.frame();
-  expect(f).not.toContain("conformidade.conformidade");
-  expect(f).toMatch(/páginas[^\n]*\n[^\n]*conformidade\s+conformidade/); // the title, then the module
+  expect(f).not.toContain("solo.solo");
+  expect(f).toMatch(/páginas[^\n]*\n[^\n]*solo\s+solo/); // the title, then the module
 });
 
 // ---- the redesigned dialog ----

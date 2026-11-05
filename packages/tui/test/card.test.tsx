@@ -4,6 +4,7 @@ import { RGBA } from "@opentui/core";
 import type { CardSpec } from "@pvx/sdk";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { KeyRouter, ThemeProvider, tokens } from "../src/index.ts";
+import { ThemePreview } from "../src/theme-context.tsx";
 import { Card, SdkCardGrid } from "../src/sdk-ui/card.tsx";
 import { ConfirmPreview } from "../src/session/ConfirmDialog.tsx";
 import { SessionModals } from "../src/session/Modals.tsx";
@@ -117,4 +118,30 @@ test("ConfirmPreview draws the dialog in place: no backdrop, no key; the real mo
   h = await renderTui(shell(<SessionModals store={{ answer: (_id: number, value: unknown) => void (answered = value as boolean) } as never} pending={pending as never} />), { cols: 70, rows: 16 });
   await h.press("ESCAPE");
   expect(answered).toBe(false);
+});
+
+test("Card with the ascii symbols draws no unicode dot, marker or arrow, and keeps its unicode frame", async () => {
+  const symbols = /[●○›‹◆◇]/;
+  const ascii = (element: ReactNode) => shell(<ThemePreview patch={{ symbols: "ascii" }}>{element}</ThemePreview>);
+  h = await renderTui(ascii(<OneCard card={{ ...INFO, state: { text: "desativado", tone: "dim", dot: "○" } }} width={40} state="inactive" />), { cols: 60, rows: 8 });
+  expect(h.frame()).toContain("o desativado");
+  expect(h.frame()).not.toMatch(symbols);
+  expect(h.frame()).toContain("╭");
+  h.destroy();
+  h = await renderTui(ascii(<OneCard card={ACTION} width={40} state="inactive" />), { cols: 60, rows: 8 });
+  expect(h.frame()).not.toMatch(symbols);
+  expect(h.frame()).toContain("╌");
+});
+
+test("Card with the ascii border draws + - | and keeps the unicode symbols", async () => {
+  const frames = /[╭╮╰╯─│┌┐└┘╌╎]/;
+  const border = (border: "ascii" | "single", element: ReactNode) => shell(<ThemePreview patch={{ border }}>{element}</ThemePreview>);
+  h = await renderTui(border("ascii", <OneCard card={INFO} width={40} />), { cols: 60, rows: 8 });
+  expect(h.frame()).not.toMatch(frames);
+  expect(h.frame()).toContain("+");
+  expect(h.frame()).toContain("●");
+  h.destroy();
+  h = await renderTui(border("ascii", <OneCard card={ACTION} width={40} />), { cols: 60, rows: 8 });
+  expect(h.frame()).not.toMatch(frames);
+  expect(h.frame()).toContain(":");
 });

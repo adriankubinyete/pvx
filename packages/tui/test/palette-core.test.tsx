@@ -25,7 +25,7 @@ async function fresh(): Promise<Registry> {
 async function mount(registry: Registry) {
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "none"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(
@@ -35,19 +35,15 @@ async function mount(registry: Registry) {
   return { t: h, store };
 }
 
-test("fresh server: core commands and the built-in pages are listed; `conf` finds the command and the page", async () => {
+test("fresh server: core commands are listed and each prefix narrows the list", async () => {
   const registry = await fresh();
   const keys = (q: string) => search(registry, q).map((x) => x.key);
-  expect(keys("")).toEqual(expect.arrayContaining(["modules", "modules search", "modules add", "logs", "conformidade", "plano", "plano apply", "version"]));
+  expect(keys("")).toEqual(expect.arrayContaining(["modules", "modules search", "modules add", "logs", "version"]));
   expect(search(registry, "")[0]).toMatchObject({ core: true });
-  expect(search(registry, "").some((x) => x.page)).toBe(true);
-  const conf = search(registry, "conf");
-  expect(conf.some((x) => x.core && x.key === "conformidade")).toBe(true);
-  expect(conf.some((x) => x.page && x.key.startsWith("conformidade."))).toBe(true);
+  expect(search(registry, "").some((x) => x.page)).toBe(false); // no built-in has a page
   expect(keys(">").some((k) => k.includes("."))).toBe(false); // `>`: commands only
   expect(search(registry, ">").some((x) => x.page)).toBe(false);
   expect(search(registry, "#").every((x) => x.page)).toBe(true);
-  expect(search(registry, "#").length).toBeGreaterThan(0);
   expect(search(registry, "@nucleo").every((x) => x.core)).toBe(true);
   expect(keys("!")).toEqual(["nota remove"]); // the only destructive command of a fresh server
 });
@@ -70,19 +66,6 @@ test("a core command with args shows its form", async () => {
   await t.press("ARROW_RIGHT");
   expect(t.frame()).toContain("Tail");
   expect(t.frame()).toContain("$ pvx logs");
-});
-
-test("opening a page entry pushes it as a screen (the page is not a tab)", async () => {
-  const { t } = await mount(await fresh());
-  await t.press("k", { ctrl: true });
-  await t.type("#conformidade.conformidade");
-  await t.press("RETURN");
-  await t.flush();
-  expect(t.frame()).not.toContain("nada encontrado");
-  expect(t.frame()).not.toContain("favoritos"); // palette closed
-  expect(t.frame().split("\n")[0]).toContain("conformidade"); // the breadcrumb of the pushed page, no frame
-  expect(t.frame()).not.toMatch(/[╭╮╰╯]/);
-  expect(t.frame()).not.toContain("Início"); // a pushed screen hides the tab bar
 });
 
 test("typing `h` in the Comando input shows a block with the command listing", async () => {

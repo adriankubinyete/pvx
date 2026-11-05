@@ -5,7 +5,6 @@ import type { Logger } from "@pvx/sdk";
 import { createRegistry, loadModules, runCli, type CliIO } from "../../src/index.ts";
 
 process.env.PVX_USERMODULES = join(import.meta.dir, "../fixtures/usermodules");
-const profilesDir = join(import.meta.dir, "../fixtures/profiles");
 const theme = { text: "#ffffff", accent: "#00ff00", ok: "#00ff00", warn: "#ffff00", error: "#ff0000", info: "#0000ff" };
 
 const noop = () => {};
@@ -22,7 +21,6 @@ async function run(line: string, over: Partial<CliIO> = {}) {
     isRoot: true,
     registry,
     makeLogger,
-    profilesDir,
     version: "1.0.0",
     theme,
     out: (l) => out.push(l),
@@ -77,7 +75,7 @@ describe("help", () => {
     expect(text).toMatch(/! demo wipe/);
     expect(text).not.toMatch(/! demo greet/);
     const root = (await run("--help")).text;
-    expect(root).toContain("plano apply");
+    expect(root).toContain("modules");
     expect(root).toContain("demo login");
     expect(root).toContain("no-entry"); // load errors are listed, not fatal
   });
@@ -137,13 +135,11 @@ describe("destructive, secrets and root", () => {
     expect(none.code).toBe(2);
     expect(none.text).toContain("--token");
   });
-  test("module commands and plano apply need root; read-only core commands do not", async () => {
+  test("module commands need root; read-only core commands do not", async () => {
     const r = await run("demo greet bob", { isRoot: false });
     expect(r.code).toBe(1);
     expect(r.text).toContain("rode com sudo");
-    expect((await run("plano apply --yes", { isRoot: false })).text).toContain("rode com sudo");
     expect((await run("modules", { isRoot: false })).code).toBe(0);
-    expect((await run("plano", { isRoot: false })).code).toBe(0);
   });
 });
 
@@ -152,45 +148,6 @@ describe("core commands", () => {
     const { text } = await run("modules");
     expect(text).toContain("demo 1.0.0 carregado");
     expect(text).toContain('[!] no-entry erro: manifest inválido: campo "entry" ausente');
-  });
-  test("conformidade prints per-capability lines and a summary; --strict exits 1 on pending", async () => {
-    const r = await run("conformidade");
-    expect(r.code).toBe(0);
-    expect(r.out).toContain("[✓] fine: em ordem");
-    expect(r.out).toContain("[✗] cap-fixture.a: pendente");
-    expect(r.out.at(-1)).toBe("[i] 1 ok, 1 avisos, 3 erros");
-    expect((await run("conformidade --strict")).code).toBe(1);
-    expect((await run("conformidade --strict", { env: { PVX_PROFILE: "clean" } })).code).toBe(0);
-  });
-  test("conformidade: forced unknown profile is a usage error; no profile is a warning", async () => {
-    const bad = await run("conformidade", { env: { PVX_PROFILE: "nope" } });
-    expect(bad.code).toBe(2);
-    expect(bad.text).toContain("main");
-    const none = await run("conformidade", { profilesDir: "/nonexistent" });
-    expect(none.code).toBe(0);
-    expect(none.text).toContain("nenhum perfil");
-  });
-  test("plano lists steps and manual items", async () => {
-    const { out } = await run("plano");
-    expect(out.slice(0, 3)).toEqual(["1. cap-fixture fix-a para cap-fixture.a", "2. cap-fixture fix-b para cap-fixture.b", "3. cap-fixture fix-c para cap-fixture.c"]);
-    expect(out.at(-1)).toBe("[!] manual: manual: sem fix");
-  });
-  test("plano apply --yes stops at the first error; steps after it never run", async () => {
-    const r = await run("plano apply --yes");
-    expect(r.code).toBe(1);
-    expect(r.text).toContain("a aplicado");
-    expect(r.text).toContain("b falhou");
-    expect(r.text).not.toContain("c aplicado");
-    expect(r.text).toContain("parou em `cap-fixture fix-b`");
-  });
-  test("plano apply without TTY requires --yes; with TTY confirms per step (s apply, p skip, n stop)", async () => {
-    expect((await run("plano apply")).code).toBe(2);
-    const answers = ["s", "p", "n"];
-    const r = await run("plano apply", { isTTY: true, ask: async () => answers.shift()! });
-    expect(r.code).toBe(0);
-    expect(r.text).toContain("a aplicado");
-    expect(r.text).not.toContain("b falhou");
-    expect(r.text).not.toContain("c aplicado");
   });
   test("logs shows what a command logged", async () => {
     const real = (name: string): Logger => {

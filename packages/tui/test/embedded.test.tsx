@@ -38,7 +38,7 @@ async function mount(registry: Registry, cols = 120, rows = 40) {
   const makeLogger = (name: string) => createLogger(logsDir(), name);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: LABEL, theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, version: LABEL, theme }, argv),
   });
   const tabs = <Tabs store={store} registry={registry} nav={createTabsNav()} version={LABEL} now={() => 1_700_000_000_000} sampler={{ sample: () => snap(8) }} />;
   h = await renderTui(<App root={{ id: "tabs", scope: "menu" as const, element: tabs }} logger={makeLogger("core")} onExit={() => {}} statePath={tuiStatePath()} />, { cols, rows });

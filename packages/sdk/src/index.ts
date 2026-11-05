@@ -47,7 +47,7 @@ export interface ModuleDef {
 export interface Roles {
   /** Query that returns the open notes (`{ at, text, signature? }[]`, newest first), for the login banner. */
   notesState?: string;
-  /** Command that adds a note: `<line> <text> [--assinatura <name>]`. Início's `+ nova nota` form is built from its `args`; `conformidade ignorar` records its reason with it. */
+  /** Command that adds a note: `<line> <text> [--assinatura <name>]`. Início's `+ nova nota` form is built from its `args`. */
   addNote?: string;
   /** Command that removes a note: `<line> <n>`, where `n` is the number the `home.notes` slot gives. Should be `destructive`, so the TUI asks first. */
   removeNote?: string;
@@ -58,7 +58,7 @@ export interface CommandDef {
   /** Human title of the command's form (pt-BR, e.g. "Criar o usuário no UOE"). Without it the host falls back to the command line. */
   title?: string;
   args?: ArgSpec[];
-  /** Marked with ! and confirmed in the plan. */
+  /** Marked with ! and confirmed before it runs. */
   destructive?: boolean;
   /** What the TUI's confirmation dialog of a `destructive` command says. The default asks `rodar <comando>?` with `[ cancelar ]  [ confirmar ]`; a command that knows better names its action (`remover nota` / `manter`). */
   confirm?: Omit<ConfirmOptions, "destructive">;
@@ -353,7 +353,7 @@ export interface ReadCtx {
 export type ModuleQuery = (this: ReadCtx, name: string, ...args: unknown[]) => unknown | Promise<unknown>;
 
 export interface CapabilityDef {
-  /** "module.name", stable; key of profiles. */
+  /** "module.name", stable. */
   id: string;
   title: string;
   goal: string;
@@ -655,8 +655,6 @@ export interface PageDef {
   keys?: KeySpec[];
   /** Also a tab in the tab bar, after the core tabs (sorted by `order`, then label). */
   tab?: boolean | { label: string; order?: number };
-  /** What the host may open without naming a module: the page with role `plan` is where the plan is shown. */
-  role?: "plan";
 }
 
 export interface KeySpec {
@@ -775,52 +773,6 @@ export type Component<P> = (props: P & { key?: string | number }) => unknown;
 export interface CommandRun {
   exit: number;
   lines: OutLine[];
-}
-
-/** One line of the `conformidade` result. */
-export interface ConformityResult {
-  level: Level;
-  /** `<capability title>: <proof text>`. */
-  text: string;
-  /** Command that fixes it, when there is one. */
-  fix?: string;
-}
-/** One step of the convergence plan, in the order it must run. */
-export interface ConformityStep {
-  cmd: string;
-  /** Capability ids the step serves. */
-  for: string[];
-  /** Added only because an earlier step affects its target. */
-  implicit: boolean;
-  reason?: string;
-  /** Never applied without an explicit yes. */
-  optIn?: boolean;
-}
-export type StepAnswer = "yes" | "skip" | "stop";
-export interface StepOutcome {
-  step: ConformityStep;
-  status: "ok" | "error" | "skipped";
-  code?: number;
-}
-
-/** The host's cached conformity: the same data the Início panel shows. */
-export interface Conformity {
-  /** Title of the applicable profile. */
-  profile?: string;
-  /** Set when there is nothing to list (no applicable profile): show it as is. */
-  message?: string;
-  results: ConformityResult[];
-  plan: { steps: ConformityStep[]; /** Pending items with no `fix`. */ manual: string[] };
-  /** When the cache was filled (ms); undefined until the first check. */
-  checkedAt?: number;
-  running: boolean;
-  /** Re-evaluates (results and plan together); a no-op while running. */
-  refresh(): void;
-  /**
-   * Applies the plan as ordinary commands through the session (scrollback, history, log). A frozen copy of the steps runs
-   * in order: `confirm` is asked before each one; stops at the first error or at "stop".
-   */
-  apply(confirm: (step: ConformityStep) => StepAnswer | Promise<StepAnswer>): Promise<StepOutcome[]>;
 }
 
 /** A column of `List`: `width` is fixed (never shrinks), `grow` takes a share of what is left but never more than its content, neither sizes to the content. No column passes 60 cells: the rest is cut with `…`, and extra room stays blank at the right of the table. */
@@ -1081,6 +1033,12 @@ export interface SdkUi {
    */
   Notice: Component<Kids & { level: NoticeLevel; action?: NoticeAction }>;
   /**
+   * A multiline text box: a border with the `title` in it, `rows` lines tall (default 5), the text wraps. `focused` gives the accent border and the keyboard
+   * (arrows, enter, backspace edit the text; the page's own keys still run first). `initial` is the starting text; after that the box keeps its text.
+   * `onChange` gets the whole text on every edit. `onPress` is a mouse down inside it (focus it there). Inside a `Fields` form use the `area` field instead.
+   */
+  TextArea: Component<{ title?: string; initial?: string; rows?: number; placeholder?: string; focused?: boolean; onChange?: (text: string) => void; onPress?: () => void }>;
+  /**
    * An editable form (no box: a header line, one row per field with a visible input cell, the focused field's `help` under the form, then the buttons):
    * `area` (multiline), `line` (one line), `toggle` (checkbox), `secret` (masked line), `choice` (radio) and
    * `multi` (checkbox list) fields, then the buttons
@@ -1288,8 +1246,6 @@ export interface SdkUi {
    * A job that does not exist prints `job inexistente` there. Outside the tabs (a test double) the line still runs and nothing switches.
    */
   useJobLog(): (name: string) => void;
-  /** The host's conformity cache (profile results and plan). Read-only: it never runs by itself; call `refresh()`. */
-  useConformity(): Conformity;
   /**
    * Spatial focus between sibling panels. Give each navigable `Panel` `panelRef={p.ref(id)}`; `p.pick(current, dir)`
    * returns the id of the nearest panel on screen in that direction (by where they are drawn, so it follows the layout), or undefined.

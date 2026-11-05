@@ -14,26 +14,26 @@ CLI e TUI de sysadmin em Bun/TypeScript com módulos (OpenTUI + React). Versão 
 
 ## Comandos
 
-- `bun dev`: roda com `PVX_HOME=.dev/pvx` (o `bun --watch` precisa enxergar os usermodules).
+- `bun dev`: roda com `PVX_HOME=.dev/pvx` e `PVX_DEV=1` (sem sudo, só no código-fonte) (o `bun --watch` precisa enxergar os usermodules).
 - `bun run typecheck`: `tsc --noEmit`.
 - `bun test`: tudo; um arquivo: `bun test packages/tui/test/menu.test.tsx`.
 - `bun run build:<alvo>` (`linux-amd64`, `linux-arm64`, `darwin-arm64`, `windows-amd64`): chama `scripts/build.sh`. `bun run release`: `scripts/release.sh`.
 
 ## Mapa do repo
 
-- `packages/core`: registry, loader, executor, stores, CLI, motor de perfis e plano.
+- `packages/core`: registry, loader, executor, stores e CLI.
 - `packages/tui`: shell, sessão, palette, páginas, `theme.ts` e `theme-context.tsx`.
 - `packages/sdk`: só tipos do contrato do módulo; `README.md` é a referência para autores.
-- `packages/builtin`: módulos oficiais (`conformidade`, `motd`, `notas`), escritos como usermodules.
+- `packages/builtin`: módulos oficiais (`motd`, `notas`), escritos como usermodules.
 - `packages/testing` (`@pvx/testing`): `renderTui`, `renderPage`, `runCommand`, `runSession`, `useFixtureModules`.
-- `apps/pvx`: ponto de entrada (CLI com argumentos, senão TUI). `templates/`: modelo de módulo. `profiles/`: perfis de conformidade.
+- `apps/pvx`: ponto de entrada (CLI com argumentos, senão TUI). `templates/`: modelo de módulo.
 - Testes: `packages/*/test` e `test/` (raiz). `bunfig.toml` pré-carrega `test/setup.ts`: `PVX_HOME` num tmpdir por teste e `PVX_CATALOG_URL` numa porta recusada (nenhum teste toca o registry real).
 
 ## Invariantes
 
 - O host nunca nomeia um módulo (`test/boundary.test.ts`). `process.exit` só em `apps/pvx/src/index.ts`.
 - Módulos importam só tipos do SDK (`import type`), imports relativos no resto, JSX clássico (`@jsxRuntime classic`).
-- Comandos que exigem root falham sem root (`requiresRoot` em `packages/core/src/cli/run.ts`). Exceção: no Windows `isRoot` é sempre verdadeiro (`hostIsRoot` em `packages/core/src/host/root.ts`).
+- Comandos que exigem root falham sem root (`requiresRoot` em `packages/core/src/cli/run.ts`). Exceção: no Windows `isRoot` é sempre verdadeiro (`hostIsRoot` em `packages/core/src/host/root.ts`); e `PVX_DEV=1` (do `bun dev`) vale só rodando o código-fonte, nunca num binário compilado.
 - Blocos `<!-- test -->` em `packages/sdk/README.md` são módulos completos: carregados pelo loader real e verificados pelo `tsc` (`test/sdk-readme.test.ts`).
 - Cores só por tokens do tema (`theme.ts`, `theme-context.tsx`); nunca hex em componente.
 - A revisão de confiança nunca mostra código-fonte (`packages/tui/test/modules.test.tsx`). Nenhuma variável de ambiente contorna a confiança.
@@ -43,7 +43,7 @@ CLI e TUI de sysadmin em Bun/TypeScript com módulos (OpenTUI + React). Versão 
 
 - UI e docs em pt-BR; código, comentários e commits em inglês. Frases curtas, sem exclamação.
 - Erro diz a causa e o próximo passo. Ação no imperativo (`aplicar`), resultado no passado (`regras reaplicadas`).
-- Termos fixos, sem sinônimos: sucesso, aviso, erro; módulo, capacidade, prova, perfil, plano, nota, central, técnico, sessão, bloco. Rastro de execução: scrollback, log e audit (não existe "diário").
+- Termos fixos, sem sinônimos: sucesso, aviso, erro; módulo, capacidade, prova, nota, central, técnico, sessão, bloco. Rastro de execução: scrollback, log e audit (não existe "diário").
 - Commit: título convencional + bullets curtos + última linha `(generated with claude)`.
 
 ## Ao mudar comportamento

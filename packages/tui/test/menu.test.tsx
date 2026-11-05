@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { activeFrames } from "./frame-helpers.ts";
-import { RGBA, TextAttributes } from "@opentui/core";
 import { join } from "node:path";
 import { createLogger, createRegistry, loadModules, loadTuiState, logsDir, pvxHome, runCapture, type Registry } from "@pvx/core";
 import { renderTui, type TuiHarness } from "../../testing/src/index.ts";
@@ -33,15 +32,23 @@ async function mount(opts: { isRoot?: boolean; cols?: number; rows?: number; mod
   const isRoot = opts.isRoot ?? true;
   const store = createSessionStore({
     registry, makeLogger, isRoot, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const root = { id: "menu", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(
     <App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={join(pvxHome(), "s.json")} palette={{ session: store, registry }} />,
     { cols: opts.cols, rows: opts.rows },
   );
-  if (opts.modules) await h.press("TAB"), await h.press("ARROW_DOWN"); // Módulos, content focused
+  if (opts.modules) {
+    await h.press("TAB"), await h.press("ARROW_DOWN"); // Módulos, content focused on the first dashed card
+    await settle(h);
+    await gotoCard(h, "bad-range"); // past the two action cards: the first module card
+  }
   return { t: h, store };
+}
+/** Waits for the module rows to load (the "lendo os módulos…" status row is gone). */
+async function settle(t: TuiHarness) {
+  for (let i = 0; i < 100 && t.frame().includes("lendo os módulos"); i++) (await Bun.sleep(20), await t.flush());
 }
 /** Opens the drill-down (commands and pages) of a module card, with its direct shortcut. */
 async function drill(t: TuiHarness, id: string, dir: "ARROW_RIGHT" | "ARROW_LEFT" = "ARROW_RIGHT") {
@@ -194,8 +201,8 @@ test("tabs: tab and shift+tab cycle; the content of the new tab shows at once", 
   const { t } = await mount();
   expect(activeFrames(t)).toEqual(["1"]);
   await t.press("TAB");
-  expect(t.frame()).toContain("instalados");
-    await t.press("TAB"); // Logs
+  expect(t.frame()).toContain("adicionar por URL");
+  await t.press("TAB"); // Logs
   await t.press("TAB");
   expect(t.frame()).toContain("tab completa"); // Comando
   await t.press("TAB", { shift: true });
@@ -212,10 +219,13 @@ test("tabs: up on the first row focuses the bar, right switches at once, down en
   await t.press("ARROW_UP");
   expect(t.frame()).toContain("tab próxima aba");
   await t.press("ARROW_RIGHT");
-  expect(t.frame()).toContain("instalados");
+  await settle(t);
+  expect(t.frame()).toContain("adicionar por URL");
   expect(t.frame()).toContain("● carregado");
   expect(selectedName(t)).toBeUndefined(); // the bar has the focus
-  await t.press("ARROW_DOWN"); // first card (bad-range: sorted)
+  await t.press("ARROW_DOWN"); // first card: the dashed "abrir o catálogo"
+  expect(detail(t)).toContain("módulos que o pvx indica"); // the detail strip of the first action card
+  await gotoCard(t, "bad-range"); // first module card (sorted)
   expect(selectedName(t)).toBe("bad-range");
   expect(t.frame()).toContain("↑↓←→ cartão");
   await t.press("ARROW_UP");
@@ -245,17 +255,18 @@ test("tabs: each tab keeps its state; a failed module in Módulos opens its log"
 test("Módulos: the bar hides the selection and the first row sits fully below the bar", async () => {
   const { t } = await mount({ cols: 80, rows: 24 });
   await t.press("TAB");
+  await settle(t);
   await t.press("ARROW_DOWN");
-  expect(selectedName(t)).toBeDefined();
+  expect(detail(t)).toContain("módulos que o pvx indica");
   await t.press("ARROW_UP");
   expect(selectedName(t)).toBeUndefined(); // bar focused: no accent border
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Módulos");
-  expect(lines[1]).toMatch(/^ ─+ $/); // the rule under the bar
-  expect(lines[2]).toContain("instalados"); // the switch right under the bar, not clipped
-  expect(lines[3]).toContain("╭"); // and the first row of cards under it
+  expect(lines[1]).toMatch(/^ [─┴]+ $/); // the rule under the bar (a tee under the clock separator)
+  expect(lines[2]).toContain("╭"); // the first row of cards sits right under the rule, nothing in between
+  expect(t.frame()).not.toMatch(/instalados \d/); // no chip row
   await t.press("ARROW_DOWN");
-  expect(selectedName(t)).toBeDefined();
+  expect(detail(t)).toContain("módulos que o pvx indica");
 });
 
 test("tabs: Módulos shows the load error count and the bar fits 80 columns", async () => {
@@ -364,11 +375,12 @@ test("footer follows focus: bar focused shows the tab-bar shortcuts in every tab
   expectScope("home");
   await t.press("ARROW_UP");
   await t.press("TAB"); // Módulos, bar still focused
-  expect(t.frame()).toContain("instalados");
+  expect(t.frame()).toContain("adicionar por URL");
   expectScope("tabs");
   await t.press("RETURN");
   expectScope("modules"); // the Módulos cards
-  expect(selectedName(t)).toBeDefined();
+  await settle(t);
+  await gotoCard(t, "bad-range");
   await t.press("ARROW_UP");
   await t.press("ARROW_UP");
     await t.press("TAB"); // Logs: has lines to select, enter goes in
@@ -382,7 +394,8 @@ test("every tab content and pushed screen uses the same title convention", async
   expect(t.frame().split("\n")[2]).toMatch(/^\s+1\s+\[/); // row 0 is the bar, row 1 the rule, then the content (the first core, labeled from 1): no frame, no repeated title
   await t.press("ARROW_UP");
   await t.press("TAB");
-  expect(t.frame().split("\n")[2]).toMatch(/^\s+instalados \d+\s+catálogo/); // the filter chips: Módulos has cards, not a panel
+  await settle(t);
+  expect(t.frame().split("\n")[2]).toMatch(/^\s*╭╌/); // Módulos has cards, not a panel: the dashed action cards start right under the rule
 });
 
 /** The help is fully visible at 80x24: title, first row, last row (the hint), and no row cut by the frame. */
@@ -399,7 +412,7 @@ const seeHelp = (t: TuiHarness, scope: Scope) => {
 test("? help fits 80x24 from every main context and esc returns to the same focus", async () => {
   const m = await mount({ cols: 80, rows: 24, modules: true });
   const t = m.t;
-  for (let i = 0; i < 100 && !t.frame().split("\n")[7]?.includes("1.0.0"); i++) (await Bun.sleep(50), await t.flush()); // the card rows load async (listModules): compare frames only after the first row shows its version
+  await settle(t); // the card rows load async (listModules): compare frames only after they are in
   const check = async (scope: Scope, footerKey: string) => {
     const before = t.frame();
     await t.press("?");
@@ -411,13 +424,13 @@ test("? help fits 80x24 from every main context and esc returns to the same focu
     expect(t.frame().split("\n").filter((l) => l.trim()).at(-1)).toContain(footerKey);
   };
   await check("modules", "? ajuda"); // Módulos cards
+  await t.press("ARROW_UP"); // bad-range -> the action card above it
   await t.press("ARROW_UP"); // first row -> bar
-  await t.press("ARROW_UP"); // the chips -> bar
   await check("tabs", "↓/enter entra na aba");
   await t.press("TAB", { shift: true });
   await check("tabs", "↓/enter entra na aba"); // bar on Início
   await t.press("ARROW_DOWN");
-  await check("home", "r verifica");
+  await check("home", "r atualiza");
   await t.type("/demo greet ana"); // `/` goes to Comando
   await t.press("RETURN");
   await t.flush();
@@ -506,16 +519,18 @@ test("ctrl+k opens the palette from the cards view, with the bar focused or not,
   expect(t.frame()).toContain("ctrl+f favorito");
   expect(t.frame()).not.toContain("ver o log");
   await t.press("ESCAPE");
-  expect(t.frame()).toContain("instalados");
+  expect(t.frame()).toContain("adicionar por URL");
 });
 
 test("mouse: hover moves the selection, click opens the menu; hover selects an item, click runs it, a click outside closes", async () => {
   const { t } = await mount({ cols: 120, rows: 30, modules: true });
   const { x, y } = selectedCorners(t)[0]!;
   const w = 38; // card width at 120 columns
-  await t.hover(x + w + 1 + 4, y + 1); // the second card
+  const bx = x - 2 * (w + 1) + 4; // broken-entry: first card of the next row, below the dashed cards
+  const by = y + 6 + 1;
+  await t.hover(bx, by);
   expect(selectedName(t)).toBe("broken-entry");
-  await t.click(x + w + 1 + 4, y + 1); // click opens its menu
+  await t.click(bx, by); // click opens its menu
   const rowOf = (s: string) => t.frame().split("\n").findIndex((l) => l.includes(s));
   expect(rowOf("ver o log")).toBeGreaterThan(0);
   const at = (s: string) => t.frame().split("\n")[rowOf(s)]!.indexOf(s) + 1;
@@ -524,26 +539,27 @@ test("mouse: hover moves the selection, click opens the menu; hover selects an i
   expect(t.frame().split("\n").filter((l) => l.includes("»")).length).toBe(1);
   await t.click(2, 25); // outside the menu: closes it
   expect(t.frame()).not.toContain("ver o log");
-  await t.click(x + w + 1 + 4, y + 1);
+  await t.click(bx, by);
   await t.click(at("ver o log"), rowOf("ver o log")); // click runs: the module's log
   expect(t.frame()).toContain("log broken-entry");
 });
 
-test("mouse: the segments switch the view; the dashed cards are clickable", async () => {
+test("mouse: the dashed cards are clickable; the catalog opens from its card and c or esc return", async () => {
   const { t } = await mount({ cols: 120, rows: 30, modules: true });
-  const row1 = () => t.frame().split("\n")[2]!; // row 1 is the rule under the bar
-  await t.click(row1().indexOf("catálogo") + 2, 2);
-  expect(footerLine(t)).toContain("c instalados");
-  await t.click(row1().indexOf("instalados") + 2, 2);
-  expect(footerLine(t)).toContain("c catálogo");
-  for (let i = 0; i < 12; i++) await t.press("ARROW_RIGHT"); // the dashed cards, last row
-  const lines = t.frame().split("\n");
-  const y = lines.findIndex((l) => l.includes("abrir o catálogo"));
-  await t.click(lines[y]!.indexOf("abrir o catálogo") + 2, y);
+  const click = async (text: string) => {
+    const lines = t.frame().split("\n");
+    const y = lines.findIndex((l) => l.includes(text));
+    await t.click(lines[y]!.indexOf(text) + 2, y);
+  };
+  await click("abrir o catálogo");
   expect(footerLine(t)).toContain("c instalados"); // the catalog view
-  await t.click(row1().indexOf("instalados") + 2, 2);
-  const ys = t.frame().split("\n").findIndex((l) => l.includes("adicionar por URL"));
-  await t.click(t.frame().split("\n")[ys]!.indexOf("adicionar por URL") + 2, ys);
+  expect(footerLine(t)).toContain("esc volta");
+  await t.press("c");
+  expect(footerLine(t)).toContain("c catálogo"); // back on the installed list
+  await click("abrir o catálogo");
+  await t.press("ESCAPE");
+  expect(footerLine(t)).toContain("c catálogo");
+  await click("adicionar por URL");
   expect(t.frame()).toContain("somente leitura"); // this mount has no host deps; with them the box opens
 });
 
@@ -566,7 +582,6 @@ test("the selected card stays visible when the tab bar has the focus: muted bord
   expect(selectedCorners(t)).toHaveLength(1);
   const at = selectedCorners(t)[0]!;
   await t.press("ARROW_UP"); // bar focused
-  await t.press("ARROW_UP"); // the chips, then the bar
   expect(selectedCorners(t)).toHaveLength(0); // no accent
   expect(subtleCorners(t)).toEqual([at]); // same card, muted border
   expect(detail(t)).toContain(name);
@@ -581,57 +596,46 @@ test("with the tab bar focused hovering a card does not move the selection; a cl
   const first = selectedName(t)!;
   const at = selectedCorners(t)[0]!;
   await t.press("ARROW_UP"); // bar focused
-  await t.press("ARROW_UP"); // the chips, then the bar
-  await t.hover(at.x + w + 1 + 4, at.y + 1); // the second card
+  const bx = at.x - 2 * (w + 1) + 4; // broken-entry: first card of the next row
+  const by = at.y + 6 + 1;
+  await t.hover(bx, by);
   expect(subtleCorners(t)).toEqual([at]);
   expect(detail(t)).toContain(first);
-  await t.click(at.x + w + 1 + 4, at.y + 1);
+  await t.click(bx, by);
   expect(t.frame()).toContain("ver o log"); // its menu opened, as before
   await t.press("ESCAPE");
   expect(selectedName(t)).toBe("broken-entry"); // accent border: the focus moved into the grid
 });
 
-// ---- The filter chips of Módulos: the same primitive and behaviour as the chips of Logs ----
+// ---- The Módulos grid: action cards first, catalog as a view ----
 
-const chipRow = (t: TuiHarness) => t.frame().split("\n")[2]!;
-const chipSpan = (t: TuiHarness, text: string) => t.spans().lines[2]!.spans.find((span) => span.text.includes(text))!;
-
-test.each([[80, 24], [120, 40]] as const)("Módulos chips at %ix%i: instalados and catálogo as filter chips, no `c alterna` hint, the chosen one filled", async (cols, rows) => {
-  const { t } = await mount({ cols, rows, modules: true });
-  expect(chipRow(t)).toMatch(/^\s+instalados \d+\s+catálogo/);
-  expect(chipRow(t)).not.toContain("alterna");
-  for (const l of t.frame().split("\n")) expect(l.length).toBeLessThanOrEqual(cols);
-  expect(chipSpan(t, "instalados").bg.equals(RGBA.fromHex(tokens.accent))).toBe(true); // chosen: filled
-  expect(chipSpan(t, "catálogo").bg.equals(RGBA.fromHex(tokens.panel))).toBe(true);
+test.each([[80, 24], [120, 40]] as const)("Módulos at %ix%i: the two dashed action cards come first, no chip row", async (cols, rows) => {
+  const { t } = await mount({ cols, rows });
+  await t.press("TAB");
+  await settle(t);
+  const lines = t.frame().split("\n");
+  expect(lines[2]).toContain("╭╌"); // the grid starts right under the rule
+  expect(lines[4]!.indexOf("abrir o catálogo")).toBeGreaterThan(-1);
+  expect(lines[4]!.indexOf("abrir o catálogo")).toBeLessThan(lines[4]!.indexOf("adicionar por URL")); // the catalog card comes first
+  expect(t.frame()).not.toMatch(/instalados \d/); // no chip row
+  for (const l of lines) expect(l.length).toBeLessThanOrEqual(cols);
 });
 
-test("↑ from the first row of cards focuses the chip row, ←→ move, enter chooses, ↓ goes back to the cards, ↑↑ reaches the bar", async () => {
+test("the catalog opens from the action card; c and esc go back to the installed list, up on the first row reaches the bar", async () => {
   const { t } = await mount({ cols: 120, rows: 40, modules: true });
-  expect(footerLine(t)).toContain("↑↓←→ cartão");
+  expect(footerLine(t)).toContain("c catálogo");
+  await t.press("c");
+  expect(footerLine(t)).toContain("c instalados");
+  expect(footerLine(t)).toContain("esc volta");
+  expect(t.frame()).toContain("catálogo · fonte:");
+  await t.press("c");
+  expect(footerLine(t)).toContain("c catálogo");
+  expect(t.frame()).not.toContain("catálogo · fonte:");
+  await t.press("c");
+  await t.press("ESCAPE"); // esc goes back to the list, not to the bar
+  expect(footerLine(t)).toContain("c catálogo");
+  expect(t.frame()).toContain("adicionar por URL");
+  await t.press("c");
   await t.press("ARROW_UP");
-  expect(footerLine(t)).toContain("←→ filtro");
-  expect(footerLine(t)).toContain("↓ cartões");
-  expect(chipSpan(t, "instalados").attributes & TextAttributes.UNDERLINE).toBeGreaterThan(0); // the keyboard is on it
-  expect(selectedCorners(t)).toHaveLength(0); // the cards have no focus
-  await t.press("ARROW_RIGHT");
-  expect(chipSpan(t, "catálogo").attributes & TextAttributes.UNDERLINE).toBeGreaterThan(0);
-  expect(chipSpan(t, "instalados").bg.equals(RGBA.fromHex(tokens.accent))).toBe(true); // moving does not choose
-  await t.press("RETURN");
-  expect(chipSpan(t, "catálogo").bg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
-  expect(chipSpan(t, "instalados").bg.equals(RGBA.fromHex(tokens.panel))).toBe(true);
-  await t.press("c"); // the shortcut still toggles
-  expect(chipSpan(t, "instalados").bg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
-  await t.press("ARROW_DOWN");
-  expect(footerLine(t)).toContain("cartão");
-  expect(selectedCorners(t)).toHaveLength(1);
-  await t.press("ARROW_UP");
-  await t.press("ARROW_UP");
-  expect(footerLine(t)).toContain("troca aba");
-});
-
-test("a click on a chip chooses it", async () => {
-  const { t } = await mount({ cols: 120, rows: 40, modules: true });
-  const x = chipRow(t).indexOf("catálogo") + 2;
-  await t.click(x, 2);
-  expect(chipSpan(t, "catálogo").bg.equals(RGBA.fromHex(tokens.accent))).toBe(true);
+  expect(footerLine(t)).toContain("troca aba"); // up on the first row: the bar
 });

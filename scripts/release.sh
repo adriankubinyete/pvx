@@ -22,9 +22,6 @@ bun install --os='*' --cpu='*'
 for t in $targets; do
   PVX_SKIP_DEPS=1 sh scripts/build.sh "$t"
 done
-echo "Perfis embutidos (revise antes de publicar):"
-if [ -n "${PVX_PROFILES_SRC:-}" ]; then ls "$PVX_PROFILES_SRC"/*.json 2>/dev/null; else git ls-files 'profiles/*.json'; fi | sed 's/^/  /'
-
 # Neither the nightly mark nor a dev build's modules may reach a release artifact (spec: release is never "nightly").
 for t in $targets; do
   sh scripts/check-artifact.sh "$dist/pvx-$t.tar.gz"

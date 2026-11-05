@@ -31,7 +31,7 @@ export function SettingRow({ id, label, on, current, lit, onOver, onOut, onPress
   return (
     <box id={`sistema:${id}`} flexShrink={0} flexDirection="row" backgroundColor={on ? c.selected : lit ? c.panel : undefined}
       onMouseOver={() => onOver(id)} onMouseOut={() => onOut(id)} onMouseDown={() => onPress(id)}>
-      <text wrapMode="none" flexShrink={0}>
+      <text wrapMode="none" flexShrink={0} selectable={false}>
         {cursor}
         <span fg={on || lit || current ? c.text : c.dim}>{label.padEnd(SETTING_LABEL_W)}</span>
       </text>
@@ -62,7 +62,28 @@ export function ChoiceCells({ options, value, on, room, onChoose, onHover }: { o
         const look = buttonLook(label, { primary: true, lit: on }, c);
         return (
           <box key={option} flexShrink={0} onMouseDown={() => onChoose(option)} onMouseOver={() => onHover?.(option)} onMouseOut={() => onHover?.(undefined)}>
-            {option === value ? <LookText look={look} /> : <text wrapMode="none" fg={c.text}>{label}</text>}
+            {option === value ? <LookText look={look} /> : <text wrapMode="none" fg={c.text} selectable={false}>{label}</text>}
+          </box>
+        );
+      })}
+    </box>
+  );
+}
+
+/** The choices of a row as a radio list, one per line: `(•) Escuro`, then `( ) Claro`. The chosen one is bold (accent while the row has the cursor). A click chooses. */
+export function RadioCells({ options, value, on, onChoose, onHover }: { options: Options; value: string; on: boolean; onChoose: (value: string) => void; /** The mouse is over an option (or left them all): the page previews it. */ onHover?: (value: string | undefined) => void }) {
+  const { c, g } = useTheme();
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      {options.map(([option, label]) => {
+        const chosen = option === value;
+        const mark = `(${chosen ? g.radioOn : " "}) `;
+        return (
+          <box key={option} flexShrink={0} onMouseDown={() => onChoose(option)} onMouseOver={() => onHover?.(option)} onMouseOut={() => onHover?.(undefined)}>
+            <text wrapMode="none" selectable={false}>
+              <span fg={chosen && on ? c.accent : c.text}>{mark}</span>
+              <span fg={chosen && on ? c.accent : c.text}>{chosen ? <b>{label}</b> : label}</span>
+            </text>
           </box>
         );
       })}
@@ -105,7 +126,7 @@ export function SwatchCells({ options, value, cursor, colors, onChoose, onHover 
         const dot = <span fg={color}>{glyph}</span>;
         return (
           <box key={option} flexShrink={0} onMouseOver={() => (over.enter(option), onHover?.(option))} onMouseOut={() => (over.leave(option), onHover?.(undefined))} onMouseDown={() => onChoose(option)}>
-            <text wrapMode="none" bg={lit ? c.panel : undefined}>
+            <text wrapMode="none" bg={lit ? c.panel : undefined} selectable={false}>
               {chosen ? <><span fg={c.text}>(</span>{dot}<span fg={c.text}>{") "}</span><span fg={c.text}><b>{label}</b></span></> : lit ? <u>{dot}</u> : dot}
             </text>
           </box>

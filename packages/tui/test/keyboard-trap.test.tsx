@@ -43,7 +43,7 @@ async function mount(fields: unknown[], { inside = true }: { inside?: boolean } 
   const makeLogger = (name: string) => createLogger(logsDir(), name);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env: {}, isRoot: true, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const nav = createTabsNav();
   nav.active = "page:trap.main";

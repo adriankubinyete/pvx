@@ -18,7 +18,7 @@ async function mount(cols = 120, rows = 40, env: Record<string, string> = {}) {
   const makeLogger = (n: string) => createLogger(logsDir(), n);
   const store = createSessionStore({
     registry, makeLogger, isRoot: true, historyPath: join(pvxHome(), "tui-history"),
-    core: (argv) => runCapture({ env, isRoot: true, registry, makeLogger, profilesDir: join(pvxHome(), "profiles"), version: "0.1.0", theme }, argv),
+    core: (argv) => runCapture({ env, isRoot: true, registry, makeLogger, version: "0.1.0", theme }, argv),
   });
   const root = { id: "tabs", scope: "menu" as const, element: <Tabs store={store} registry={registry} nav={createTabsNav()} version="0.1.0" now={() => 1_700_000_000_000} /> };
   h = await renderTui(<App root={root} logger={makeLogger("core")} onExit={() => {}} statePath={tuiStatePath()} />, { cols, rows });
@@ -40,7 +40,7 @@ test("tab order: Início, Módulos, then Logs, Comando, Sistema closing the bar"
 });
 
 test("Sistema renders its three sections and the footer at 80x24 and 120x40, each row inside the frame", async () => {
-  const top = ["1 Pvx", "versão", "atualização", "[ atualizar ]", "[ verificar ]", "plataforma", "dados", "desinstalar", "sudo pvx uninstall", "2 Aparência", "tema", "[ Escuro ]", "Personalizado", "acento", "símbolos", "enter escolhe", "1-3 seção"];
+  const top = ["1 Pvx", "versão", "atualização", "[ atualizar ]", "[ verificar ]", "plataforma", "dados", "[ desinstalar ]", "2 Aparência", "tema", "(•) Escuro", "Personalizado", "acento", "símbolos", "enter escolhe", "1-3 seção"];
   const rest = ["moldura", "resultado", "prévia", "3 Avançado", "aba Tarefas", "[ ] mostrar"];
   const wide = await mount(120, 40);
   for (const l of wide.frame().split("\n")) expect(l.length).toBeLessThanOrEqual(120);
@@ -83,12 +83,12 @@ async function goTo(t: TuiHarness, label: string) {
 
 test("the cursor goes through the rows of every section; ↓ on the last wraps to the first; ↑ on the first goes to the bar", async () => {
   const t = await mount();
-  const order = ["atualização", "tema", "acento", "símbolos", "moldura", "resultado", "aba Tarefas"];
+  const order = ["[ atualizar ]", "tema", "acento", "símbolos", "moldura", "resultado", "aba Tarefas"];
   for (const label of order) {
     expect(rowOf(t, label), label).toContain("»");
     await t.press("ARROW_DOWN");
   }
-  expect(rowOf(t, "atualização")).toContain("»"); // wrapped
+  expect(rowOf(t, "[ atualizar ]")).toContain("»"); // wrapped
   await t.press("ARROW_UP");
   expect(t.frame()).toContain("troca aba");
 });
@@ -102,7 +102,7 @@ test("the numbers jump to the first row of a section and the active section carr
   expect(rowOf(t, "aba Tarefas")).toContain("»");
   expect(rowOf(t, "3 Avançado")).toContain("▌");
   await t.press("1");
-  expect(rowOf(t, "atualização")).toContain("»");
+  expect(rowOf(t, "[ atualizar ]")).toContain("»");
 });
 
 test("switching the theme re-renders: the background colour changes and the choice is saved", async () => {
@@ -110,7 +110,7 @@ test("switching the theme re-renders: the background colour changes and the choi
   await goTo(t, "tema");
   const before = bgAt(t);
   await t.press("ARROW_RIGHT"); // Claro
-  expect(rowOf(t, "tema")).toContain("[ Claro ]");
+  expect(t.frame()).toContain("(•) Claro");
   expect(bgAt(t).equals(before)).toBe(false);
   t.destroy();
   await new Promise((r) => setTimeout(r, 20));
@@ -121,7 +121,7 @@ test("Terminal theme uses the terminal's own colours (no truecolor background)",
   const t = await mount();
   await goTo(t, "tema");
   for (let i = 0; i < 3; i++) await t.press("ARROW_RIGHT");
-  expect(rowOf(t, "tema")).toContain("[ Terminal ]");
+  expect(t.frame()).toContain("(•) Terminal");
   expect(bgAt(t).intent).toBe("default");
 });
 
@@ -187,7 +187,7 @@ test("Avançado: the Tarefas tab checkbox starts off, enter and space toggle it,
 async function chooseCustom(t: TuiHarness) {
   await goTo(t, "tema");
   for (let i = 0; i < 4; i++) await t.press("ARROW_RIGHT");
-  expect(rowOf(t, "tema")).toContain("[ Personalizado ]");
+  expect(t.frame()).toContain("(•) Personalizado");
 }
 
 const TOKENS = ["bg", "panel", "selected", "border", "text", "dim", "accent", "ok", "warn", "error", "info", "thirdParty", "ip"];
@@ -349,7 +349,7 @@ test("mouse: a click on a choice picks it and saves; a click on the checkbox tog
   const claro = spotOf(t, "Claro");
   await t.click(claro.x + 1, claro.y);
   expect(t.frame()).not.toContain("troca aba"); // the click also moved the keyboard into the tab
-  expect(rowOf(t, "tema")).toContain("[ Claro ]");
+  expect(t.frame()).toContain("(•) Claro");
   const box = spotOf(t, "[ ] mostrar");
   await t.click(box.x + 1, box.y);
   expect(rowOf(t, "aba Tarefas")).toContain("[x] mostrar");
@@ -375,10 +375,11 @@ test("bar focused: the selection stays muted with a › (never the » or the acc
   await t.press("ARROW_UP");
   await t.press("ARROW_UP");
   expect(t.frame()).toContain("troca aba");
-  expect(rowOf(t, "atualização")).toContain("› atualização");
+  const buttons = rowOf(t, "[ atualizar ]");
+  expect(buttons).toContain("›");
   expect(cursorRows(t)).toEqual([]);
-  const update = spotOf(t, "atualização");
-  expect(cellAt(t, update.x - 2, update.y).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+  const update = spotOf(t, "[ atualizar ]");
+  expect(cellAt(t, buttons.indexOf("›"), update.y).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
 });
 
 test("bar focused: hovering a row tints it (panel background, dim ›) and keeps the selection; leaving clears it", async () => {
@@ -426,14 +427,36 @@ function stubReleases() {
 
 const FAKE_BINARY = () => join(pvxHome(), "pvx-fake-binary");
 
-test("pvx section: the version, the platform, the data dir and the uninstall command as a dim hint", async () => {
+test("pvx section: the version, the platform and the data dir are plain lines; desinstalar is a button, not a hint", async () => {
   const t = await mount();
   const f = t.frame();
-  for (const s of ["versão        0.1.0", `${process.platform}/${process.arch} · rodando pelo bun`, "dados", "carregados", "desinstalar   sudo pvx uninstall"]) expect(f, s).toContain(s);
-  expect(f).not.toContain("[ desinstalar ]"); // a hint only: no button
+  for (const s of ["versão        0.1.0", `${process.platform}/${process.arch} · rodando pelo bun`, "dados", "carregados", "[ desinstalar ]"]) expect(f, s).toContain(s);
+  expect(f).not.toContain("sudo pvx uninstall"); // no command text that means nothing
   expect(f).not.toContain("embutidos"); // only a dev build has them
-  const hint = spotOf(t, "sudo pvx uninstall");
-  expect(cellAt(t, hint.x, hint.y).fg.equals(RGBA.fromHex(tokens.dim))).toBe(true);
+});
+
+test("pvx section: desinstalar asks first and does nothing when kept; from source it has no binary to remove", async () => {
+  const source = await mount();
+  await source.press("ARROW_RIGHT"); // verificar -> desinstalar
+  await source.press("RETURN");
+  await new Promise((r) => setTimeout(r, 50));
+  expect(source.frame()).toContain("não há binário para desinstalar");
+  expect(lastStore!.blocks.find((b) => b.line === "uninstall")).toBeUndefined();
+  source.destroy();
+  await Bun.write(FAKE_BINARY(), "binary");
+  process.env.PVX_SELF_PATH = FAKE_BINARY();
+  try {
+    const t = await mount(120, 40, { PVX_SELF_PATH: FAKE_BINARY() });
+    await t.press("ARROW_RIGHT");
+    await t.press("RETURN");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(t.frame()).toContain("desinstalar o pvx?");
+    await t.press("ESCAPE"); // the safe answer
+    await new Promise((r) => setTimeout(r, 50));
+    expect(lastStore!.blocks.find((b) => b.line === "uninstall")).toBeUndefined();
+  } finally {
+    delete process.env.PVX_SELF_PATH;
+  }
 });
 
 test("pvx section: verificar shows a spinner, then the available version; running from source disables atualizar", async () => {
@@ -492,8 +515,46 @@ test("pvx section: `u` updates from anywhere on the page, and a click on [ verif
   expect(t.frame()).toContain("consulta da última release falhou");
 });
 
-test("Sistema at 250x40 keeps every row within the content width, the preview included", async () => {
+test("Sistema at 250x40 uses the whole terminal width, the preview at its right edge", async () => {
   const t = await mount(250, 40);
-  const widest = Math.max(...t.frame().split("\n").slice(2).map((line) => line.trimEnd().length));
-  expect(widest).toBeLessThanOrEqual(CONTENT_MAX_W + 2);
+  const lines = t.frame().split("\n").slice(2);
+  const widest = Math.max(...lines.map((line) => line.trimEnd().length));
+  expect(widest).toBeGreaterThan(CONTENT_MAX_W + 40); // far past the old 110-cell cap
+  expect(widest).toBeLessThanOrEqual(250);
+  expect(lines.find((l) => l.includes("prévia"))!.indexOf("prévia")).toBeGreaterThan(150); // the preview moved right with the width
+});
+
+test("the sample sits in its own frame titled `prévia`, separate from the options, even with no frame at all", async () => {
+  const t = await mount(120, 40);
+  const frame = t.frame();
+  const title = frame.split("\n").find((l) => l.includes("prévia"))!;
+  expect(title).toMatch(/╭.*prévia/);
+  expect(title).not.toContain("só visual");
+  t.destroy();
+  const quiet = await mount(120, 40);
+  await quiet.press("ARROW_DOWN"); // down to the options and pick `moldura: nenhuma`
+  expect(quiet.frame()).toContain("╭");
+});
+
+test("the sample's frame follows the `moldura` option: rounded, ascii and none look different", async () => {
+  const t = await mount(120, 40);
+  const quadroRows = () => rowsOf(t).filter((l) => l.includes("quadro"));
+  expect(rowsOf(t).some((l) => l.includes("╭") && l.includes("──"))).toBe(true);
+  await goTo(t, "moldura");
+  await t.press("ARROW_RIGHT"); // simples
+  await t.press("ARROW_RIGHT"); // ascii
+  expect(rowsOf(t).some((l) => /\+-+\+/.test(l.slice(60)))).toBe(true);
+  await t.press("ARROW_RIGHT"); // nenhuma
+  expect(rowsOf(t).filter((l) => /\+-+\+/.test(l.slice(60)))).toHaveLength(0);
+  expect(quadroRows().length).toBeGreaterThan(0);
+});
+
+test("the pvx section reads as information, with the actions in a row of their own below it", async () => {
+  const t = await mount();
+  const lines = rowsOf(t);
+  const row = (text: string) => lines.findIndex((l, i) => i > 1 && l.includes(text));
+  expect(row("versão")).toBeLessThan(row("atualização"));
+  expect(row("dados")).toBeLessThan(row("[ atualizar ]")); // the buttons close the section
+  expect(lines[row("atualização")]).not.toContain("["); // the status line has no button
+  expect(lines[row("[ atualizar ]")]).toContain("»"); // and the cursor starts on the buttons, never on an info line
 });

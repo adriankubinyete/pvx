@@ -6,9 +6,6 @@ import { builtin } from "../../../packages/builtin/index.ts";
 import { ask, askSecret } from "./prompt.ts";
 import { BUILD_ID, VERSION, VERSION_LABEL } from "./version.ts";
 
-// Dev layout; the compiled binary carries the profiles embedded and loadProfiles prefers them.
-const PROFILES_DIR = join(import.meta.dir, "../../../profiles");
-
 /** Logging is best effort: an unwritable PVX_HOME must not break read-only commands. */
 const makeLogger = (name: string): Logger => {
   const real = createLogger(logsDir(), name);
@@ -40,7 +37,6 @@ async function main(): Promise<number> {
     isRoot: hostIsRoot(),
     registry,
     makeLogger,
-    profilesDir: PROFILES_DIR,
     version: VERSION_LABEL,
     build: BUILD_ID,
     theme,

@@ -84,7 +84,10 @@ function TabBar({ nav, tabs, active, version, now, onPick }: { nav: TabsNav; tab
   nav.barFrom = from;
   const used = (from > 0 ? 1 : 0) + (to < tabs.length ? 1 : 0) + widths.slice(from, to).reduce((a, b) => a + b, 0);
   const form = pickForm(cols - 2 - used - tag.length - BAR_SEPARATOR_W);
+  const tail = BAR_SEPARATOR_W + clockCost(form) + tag.length;
+  const separatorAt = Math.max(0, cols - 2 - tail + 1); // the column of the `│` (after its leading space)
   return (
+    <>
     <box height={1} flexShrink={0} overflow="hidden" flexDirection="row" justifyContent="space-between">
       <box flexDirection="row" flexShrink={0}>
         {from > 0 ? <text fg={c.dim} flexShrink={0}>{g.moreLeft}</text> : null}
@@ -99,14 +102,19 @@ function TabBar({ nav, tabs, active, version, now, onPick }: { nav: TabsNav; tab
         <text fg={c.dim} wrapMode="none" flexShrink={0}>{tag}</text>
       </box>
     </box>
+    <BarRule joinAt={separatorAt} />
+    </>
   );
 }
 
-/** The thin line under the bar: it separates the bar from the page. */
-function BarRule() {
+/** The thin line under the bar: it separates the bar from the page. `joinAt` is the column of the bar's `│`, which the rule meets with a `┴`. */
+function BarRule({ joinAt }: { joinAt: number }) {
   const { c, g } = useTheme();
   const { cols } = useLayout();
-  return <text fg={c.border} wrapMode="none" flexShrink={0}>{g.hline.repeat(Math.max(0, cols - 2))}</text>;
+  const length = Math.max(0, cols - 2);
+  const left = Math.min(joinAt, length);
+  const right = Math.max(0, length - left - 1);
+  return <text fg={c.border} wrapMode="none" flexShrink={0}>{`${g.hline.repeat(left)}${left < length ? g.teeUp : ""}${g.hline.repeat(right)}`}</text>;
 }
 
 /**
@@ -114,7 +122,7 @@ function BarRule() {
  * for completing); with the bar focused, left/right switch and down enters the tab. The tab handler is `base`, so
  * content that consumes a key (a form's `tab`) wins.
  */
-export function Tabs({ store, registry, nav, version, profile, modules, now = Date.now, logsMs, sampler, session }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; profile?: string | null; modules?: ModulesDeps; now?: () => number; logsMs?: number; sampler?: MachineSampler; session?: SessionInfo }) {
+export function Tabs({ store, registry, nav, version, modules, now = Date.now, logsMs, sampler, session }: { store: SessionApi; registry: Registry; nav: TabsNav; version: string; modules?: ModulesDeps; now?: () => number; logsMs?: number; sampler?: MachineSampler; session?: SessionInfo }) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const update = (p: Partial<TabsNav>) => (Object.assign(nav, p), bump());
   const nudge = useNudge();
@@ -170,10 +178,9 @@ export function Tabs({ store, registry, nav, version, profile, modules, now = Da
     <TabsProvider value={api}>
       <box flexGrow={1} minHeight={0} flexDirection="column">
         <TabBar nav={nav} tabs={bar} active={active} version={version} now={now} onPick={(id) => update({ active: id, bar: true })} />
-        <BarRule />
         {/* A mouse down anywhere in the content moves the keyboard in; it bubbles up after the clicked element has handled it. */}
         <box flexGrow={1} minHeight={0} flexDirection="column" onMouseDown={api.focusContent}>
-          {active === "inicio" ? <HomeTab store={store} nav={nav} profile={profile} registry={registry} sampler={sampler} session={session} /> : null}
+          {active === "inicio" ? <HomeTab store={store} nav={nav} registry={registry} sampler={sampler} session={session} /> : null}
           {active === "modulos" ? <Menu store={store} registry={registry} nav={nav.menu} updates={nav.updates} /> : null}
           {active === TASKS_TAB ? <TarefasTab store={store} registry={registry} tasks={tasks} now={tasksNow} selected={nav.taskSel} onSelect={(id) => update({ taskSel: id })} /> : null}
           {active === "logs" ? <LogsTab store={store} registry={registry} nav={nav.logs} refreshMs={logsMs} /> : null}

@@ -134,7 +134,7 @@ export default factory;
 
 ## Capacidades
 
-Uma capacidade é uma condição que o módulo sabe provar e, se possível, consertar. O plano de conformidade as avalia.
+Uma capacidade é uma condição que o módulo sabe provar e, se possível, consertar.
 
 | Campo | Significado |
 | --- | --- |
@@ -234,8 +234,8 @@ Sem elas, o Bun transforma o JSX em `import "react/jsx-dev-runtime"` e o módulo
 O que `sdk.ui` oferece:
 
 - **Hooks do React:** `useState`, `useEffect`, `useMemo`, `useRef`.
-- **Componentes:** `Frame` (`title`, `active`, `aside`, `grow`, `shrink`: uma seção desenhada como quadro, com o título na borda de cima; veja Páginas), `Panel` (`title`, `aside`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda, de no máximo 110 células de largura; veja Páginas), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`, `right`), `Crumb` (`parts`), `Chip`, `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ButtonRow`, `ProgressBar`, `CellGrid`, `Loading`, `RunPanel` e `CommandResult` (veja Componentes de fluxo).
-- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem (também quando o nome ou os argumentos mudam: `data` segue com o valor anterior e `loading` vira `true`) e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConformity()` (veja Conformidade na UI); `useConfirm()` (diálogo de confirmação, abaixo); `useJobLog()` (o log inteiro de um job, veja Jobs em segundo plano); `useTheme()` (cores `c` e glifos `g`).
+- **Componentes:** `Frame` (`title`, `active`, `aside`, `grow`, `shrink`: uma seção desenhada como quadro, com o título na borda de cima; veja Páginas), `Panel` (`title`, `aside`, `tone`, `grow`, `shrink`: uma seção com linha de cabeçalho, sem borda, de no máximo 110 células de largura; veja Páginas), `TextArea` (`title`, `initial`, `rows`, `placeholder`, `focused`, `onChange`, `onPress`: caixa de texto de várias linhas com borda; dentro de um `Fields` use o campo `area`), `Text` (`tone`, `bold`), `Row` (`fit`, `gap`, `right`), `Crumb` (`parts`), `Chip`, `Badge`, `Details`, `Meter`, `BarMeter`, `Spark`, `CopyBlock` e `Scroll` (veja Primitivos de apresentação), `KeyHint`, `Table` (`columns`, `rows`), `List` (`items`, `selected` por id, `columns` opcional; veja List em colunas), `Form` (o formulário do `ArgSpec` de um comando do módulo, desenhado por `Fields`), `Spacer`, `Steps` e `LogTail` (veja Jobs em segundo plano), `Notice` (veja Primitivos de apresentação) e `Conversation`, `Button`, `ButtonRow`, `ProgressBar`, `CellGrid`, `Loading`, `RunPanel` e `CommandResult` (veja Componentes de fluxo).
+- **Hooks do host:** `useCommand(linha)` roda um comando **do próprio módulo** pela sessão (aparece no scrollback e no histórico); `useQuery(nome, ...args)` e `useQuery(nome, args, { refreshMs })` (devolve também `refetch()`; roda de novo a cada `refreshMs`, mínimo 500, enquanto a página está montada; os dados antigos ficam até os novos chegarem (também quando o nome ou os argumentos mudam: `data` segue com o valor anterior e `loading` vira `true`) e a página só renderiza de novo se o resultado mudou); `useJob(nome)` e `useRun(nome)` (veja Jobs em segundo plano e Fases com retomada); `useAsync(fn, deps)` e `useCopy()` (veja Componentes de fluxo); `useStore()`; `useRouter()` (`push(página)`, `pop()` entre páginas do módulo); `useKey(teclas, rótulo, handler)` (veja Páginas); `useConfirm()` (diálogo de confirmação, abaixo); `useJobLog()` (o log inteiro de um job, veja Jobs em segundo plano); `useTheme()` (cores `c` e glifos `g`).
 - **Tons:** `ok`, `warn`, `error`, `info` (azul), `accent`, `dim`, `text`, `ip` (rosa, para endereços IP). Nunca escreva cor hex: use os tons.
 
 **List em colunas.** Com `columns` a `List` alinha as células de cada item em colunas, mesmo com textos de tamanhos diferentes. Cada coluna é `{ id, title?, width?, grow?, align? }`: `width` é fixa e nunca encolhe; `grow` divide o que sobra (peso relativo), mas nunca passa do conteúdo da coluna; sem nenhuma das duas a coluna ocupa o tamanho do conteúdo e é a primeira a encolher se faltar espaço. Nenhuma coluna passa de 60 células (`COLUMN_MAX_W`): o excedente é cortado com `…`. A tabela tem a largura das suas colunas: numa tela larga a sobra fica em branco à direita, e a linha selecionada se destaca só até o fim da tabela. `align` é `"left"` (padrão) ou `"right"`. Se alguma coluna tem `title`, aparece uma linha de cabeçalho (dim). O item traz `cells: { [idDaColuna]: texto | { text, tone? } }` (`label` e `detail` são ignorados nesse modo; `tone` e `mark` valem). Célula que não cabe é cortada com `…`. A largura vem da própria lista, então acompanha o redimensionamento.
@@ -450,37 +450,7 @@ export default (sdk: Sdk) => {
 };
 ```
 
-**Conformidade na UI.** `useConformity()` devolve o cache de conformidade do host, o **mesmo** que o painel do Início mostra: `{ profile?, message?, results, plan: { steps, manual }, checkedAt?, running, refresh(), apply(confirm) }`. É só leitura: o hook nunca avalia sozinho (a primeira visita chama `refresh()`; `r` em qualquer tela atualiza o cache de todas). `results` traz `{ level, text, fix? }`; `plan.steps` traz `{ cmd, for, implicit, reason?, optIn? }` na ordem de execução; `message` aparece quando não há perfil aplicável. `apply(confirm)` aplica o plano como comandos comuns pela sessão (scrollback, histórico e log): o host congela uma cópia dos passos, chama `confirm(passo)` antes de cada um (`"yes"`, `"skip"` ou `"stop"`) e para no primeiro erro ou em `"stop"`. O módulo continua dono da tela: ele deve mostrar a lista que congelou, não a viva. O motor (perfis, avaliação, ordenação) é do host; a CLI `pvx conformidade`, `pvx plano` e `pvx plano apply` não mudam.
-
-<!-- test -->
-```tsx
-/** @jsxRuntime classic */
-/** @jsx h */
-/** @jsxFrag Fragment */
-import type { Sdk } from "@pvx/sdk";
-
-export default (sdk: Sdk) => {
-  const { h, Panel, Text, useEffect, useConformity, useKey } = sdk.ui;
-
-  function Resumo() {
-    const c = useConformity();
-    useEffect(() => {
-      if (!c.checkedAt) c.refresh();
-    }, []);
-    useKey("r", "atualiza", c.refresh);
-    return (
-      <Panel>
-        <Text tone="dim">{c.running ? "verificando…" : `${c.results.length} itens, ${c.plan.steps.length} passos`}</Text>
-        {c.results.map((r, i) => <Text key={i} tone={r.level}>{r.text}</Text>)}
-      </Panel>
-    );
-  }
-
-  return { pages: { resumo: { title: "Resumo", render: () => <Resumo />, tab: { label: "Resumo", order: 20 } } } };
-};
-```
-
-**Módulos embutidos.** O pvx traz módulos oficiais dentro do binário (`packages/builtin/<id>/`): são escritos exatamente como um usermodule (manifest, entrada, pragma clássico, só `import type` do SDK), mas confiáveis e sem git. O host os carrega por uma lista estática (`packages/builtin/index.ts`), porque o binário compilado não acha um `import()` de caminho dinâmico. Aparecem com `◆` em Módulos. O `conformidade` é um deles: as abas Conformidade e Plano.
+**Módulos embutidos.** O pvx traz módulos oficiais dentro do binário (`packages/builtin/<id>/`): são escritos exatamente como um usermodule (manifest, entrada, pragma clássico, só `import type` do SDK), mas confiáveis e sem git. O host os carrega por uma lista estática (`packages/builtin/index.ts`), porque o binário compilado não acha um `import()` de caminho dinâmico. Aparecem com `◆` em Módulos. O `notas` e o `motd` são dois deles.
 
 **Widget.** `widgets` mapeia um nome para `{ slot, priority, refreshMs?, data }` e preenche uma região da tela inicial (um *slot*). O núcleo desenha; o módulo só entrega dados, na forma fixa de cada slot:
 
@@ -514,13 +484,12 @@ export default factory;
 
 ## Papéis: o host pede pelo papel, nunca pelo nome do módulo
 
-O host não cita módulo pelo nome (nem `nota`, nem `conformidade`). Quando precisa de algo que um módulo oficial fornece, ele pede por **papel**, e o módulo o declara:
+O host não cita módulo pelo nome (nem `nota`, nem `motd`). Quando precisa de algo que um módulo oficial fornece, ele pede por **papel**, e o módulo o declara:
 
 | Papel | Onde se declara | O que o host faz com ele |
 | --- | --- | --- |
-| `role: "plan"` | `PageDef.role` | A página do plano: hoje a página do módulo `conformidade`, com os painéis resultados e plano. O host a abre como tela empilhada, sem nomear o módulo. |
 | `roles.notesState` | `ModuleDef.roles` | Nome de uma consulta que devolve as notas abertas (`{ at, text, signature? }[]`): o banner de login mostra as três mais novas. |
-| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, o texto e `--assinatura`): o `+ nova nota` do Início monta o formulário padrão a partir dos `args` dele, e `conformidade ignorar` grava o motivo com ele. |
+| `roles.addNote` | `ModuleDef.roles` | Comando que cria nota (`"<id> add"`, o texto e `--assinatura`): o `+ nova nota` do Início monta o formulário padrão a partir dos `args` dele. |
 | `roles.removeNote` | `ModuleDef.roles` | Comando que remove nota (`"<id> remove"`, o número `n` que o slot `home.notes` traz): o `enter` numa nota do Início o roda, e a sessão pergunta antes se ele é `destructive`. |
 
 Cada papel tem um dono só: um segundo módulo que o declare é recusado ("conflito"). Sem dono, a função some em silêncio (sem `addNote`, o Início não oferece `+ nova nota`).

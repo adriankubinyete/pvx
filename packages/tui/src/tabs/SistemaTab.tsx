@@ -1,22 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import type { Registry } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
-import { capContent, useLayout } from "../layout.ts";
+import { useLayout } from "../layout.ts";
 import { useOver } from "../hover.ts";
 import { useNudge } from "../nudge.tsx";
 import { wrap } from "../panelnav.ts";
-import { useScreenScope } from "../router.tsx";
+import { useRouter, useScreenScope } from "../router.tsx";
 import { Panel } from "../sdk-ui/kit.tsx";
+import { SessionModals } from "../session/Modals.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { hexTokensFor, normalizeHex, tokensFor, TOKEN_KEYS, type HexTokens, type ThemeName } from "../theme.ts";
 import type { TuiState } from "@pvx/core";
 import { useTabs } from "./context.ts";
-import { PvxInfo, UpdateStatus, UPDATE_BUTTONS, useUpdateCheck, type UpdateButton } from "./SistemaPvx.tsx";
-import { ChoiceCells, SETTING_LABEL_W, SettingRow, SwatchCells } from "./SistemaRows.tsx";
+import { PvxInfo, UpdateButtons, UPDATE_BUTTONS, useUpdateCheck, type UpdateButton } from "./SistemaPvx.tsx";
+import { ChoiceCells, RadioCells, SETTING_LABEL_W, SettingRow, SwatchCells } from "./SistemaRows.tsx";
 import { BESIDE_COLS, sampleWidth, ThemeSample } from "./ThemeSample.tsx";
 import { FromControls, SOURCES, TokenControls } from "./ThemeTokenRows.tsx";
 import { ACCENT_OPTIONS, choiceAxisOf, CHOICE_AXES, cycle, firstRowOf, isTokenRow, presetColor, rowIds, SECTION_TITLES, SECTIONS, sectionOfKey, sectionOfRow, tokenOfRow, tokenRowId, type RowId, type Section } from "./sistema.ts";
@@ -28,7 +29,7 @@ const GUTTER_W = 2;
 /** Cells of the marker column of a row. */
 const CURSOR_W = 2;
 const TASKS_NOTE = "tarefas em segundo plano de todos os módulos";
-const GAP_TO_SAMPLE_W = 2;
+const GAP_TO_SAMPLE_W = 4;
 
 type Axis = "theme" | "symbols" | "border" | "result" | "accent";
 
@@ -37,6 +38,8 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
   const { c, axes, set } = useTheme();
   const { cols } = useLayout();
   const tabs = useTabs();
+  const router = useRouter();
+  const { pending } = useSyncExternalStore(store.subscribe, store.getSnapshot);
   const nudge = useNudge();
   const focused = tabs?.focused ?? true;
   const customTheme = axes.theme === "custom";
@@ -55,10 +58,10 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
   useScreenScope(edit ? "sistemaedit" : "sistema", 1);
   useEffect(() => void scroll.current?.scrollChildIntoView(`sistema:${row}`), [row]);
 
-  const width = capContent(cols - FRAME_W);
+  const width = cols - FRAME_W; // the whole terminal width
   const hex: HexTokens = hexTokensFor("custom", axes.custom)!;
   const setRow = (id: RowId) => (setWanted(id), edit && id !== row && setEdit(null));
-  const press = (which: UpdateButton) => (setButton(which), which === "update" ? state.update() : void state.verify());
+  const press = (which: UpdateButton) => (setButton(which), which === "update" ? state.update() : which === "uninstall" ? void state.uninstall() : void state.verify());
   const toggleTasks = () => set({ showTasksTab: !axes.showTasksTab });
   const choose = (axis: Axis, value: string) => set({ [axis]: value });
   const chooseAccent = (value: string) => (setSwatch(undefined), choose("accent", value));
@@ -116,7 +119,7 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
     </SettingRow>
   );
   const sectionPanel = (section: Section, body: React.ReactNode) => (
-    <Panel key={section} title={`[${SECTIONS.indexOf(section) + 1}] ${SECTION_TITLES[section]}`} tone={focused && sectionOfRow(row) === section ? "accent" : undefined} onPress={() => setRow(firstRowOf(section))}>
+    <Panel key={section} wide title={`[${SECTIONS.indexOf(section) + 1}] ${SECTION_TITLES[section]}`} tone={focused && sectionOfRow(row) === section ? "accent" : undefined} onPress={() => setRow(firstRowOf(section))}>
       {body}
     </Panel>
   );
@@ -129,7 +132,13 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
 
   const choiceRow = (axisId: "theme" | "symbols" | "border" | "result") => {
     const axis = CHOICE_AXES.find((candidate) => candidate.id === axisId)!;
-    return settingRow(axis.id, axis.label, <ChoiceCells options={axis.options} value={axes[axis.id]} on={focused && row === axis.id} room={choiceRoom} onChoose={(value) => choose(axis.id, value)} onHover={(value) => setHover(value ? { [axis.id]: value } : {})} />);
+    const on = focused && row === axis.id;
+    const onChoose = (value: string) => choose(axis.id, value);
+    const onHover = (value: string | undefined) => setHover(value ? { [axis.id]: value } : {});
+    const controls = axis.id === "theme"
+      ? <RadioCells options={axis.options} value={axes.theme} on={on} onChoose={onChoose} onHover={onHover} />
+      : <ChoiceCells options={axis.options} value={axes[axis.id]} on={on} room={choiceRoom} onChoose={onChoose} onHover={onHover} />;
+    return settingRow(axis.id, axis.label, controls);
   };
   const accentRow = settingRow("accent", "acento", (
     <SwatchCells options={ACCENT_OPTIONS} value={axes.accent} cursor={focused && row === "accent" ? swatch ?? axes.accent : undefined} colors={swatches} onChoose={chooseAccent} onHover={(value) => setHover(value ? { accent: value } : {})} />
@@ -164,7 +173,7 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
       <ThemeSample patch={patch} />
     </>
   );
-  const updateRow = settingRow("update", "atualização", <UpdateStatus state={state} current={focused && row === "update" ? button : undefined} onPress={(which) => (setRow("update"), press(which))} />);
+  const updateRow = settingRow("update", "", <UpdateButtons state={state} current={focused && row === "update" ? button : undefined} onPress={(which) => (setRow("update"), press(which))} />);
   const advanced = settingRow("tasks", "aba Tarefas", (
     <box flexDirection="row" flexShrink={0} onMouseDown={toggleTasks}>
       <text wrapMode="none" flexShrink={0}>
@@ -175,12 +184,15 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
     </box>
   ));
   return (
-    <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
-      <box flexDirection="column" paddingX={1} flexShrink={0}>
-        {sectionPanel("pvx", <PvxInfo facts={state.facts} width={innerWidth} update={updateRow} />)}
-        {sectionPanel("aparencia", appearance)}
-        {sectionPanel("avancado", advanced)}
-      </box>
-    </scrollbox>
+    <box flexGrow={1} minHeight={0} flexDirection="column">
+      <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
+        <box flexDirection="column" paddingX={1} flexShrink={0}>
+          {sectionPanel("pvx", <PvxInfo state={state} width={innerWidth} actions={updateRow} />)}
+          {sectionPanel("aparencia", appearance)}
+          {sectionPanel("avancado", advanced)}
+        </box>
+      </scrollbox>
+      {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}
+    </box>
   );
 }

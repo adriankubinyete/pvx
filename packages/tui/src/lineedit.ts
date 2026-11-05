@@ -43,15 +43,19 @@ export function editLine({ text, cursor }: Line, k: EditKey): Edit | undefined {
   if (k.paste !== undefined) return insertPaste({ text, cursor }, k.paste);
   const cs = [...text];
   const set = (c: string[], at: number): Edit => ({ text: c.join(""), cursor: at });
+  const deleteWord = (): Edit => {
+    let i = cursor;
+    while (i > 0 && cs[i - 1] === " ") i--;
+    while (i > 0 && cs[i - 1] !== " ") i--;
+    return set([...cs.slice(0, i), ...cs.slice(cursor)], i);
+  };
+  // Terminals send a modified backspace for Option/Alt+Backspace (a word) and Ctrl+H or Ctrl+Backspace (a character).
+  if (k.name === "backspace" && k.meta) return deleteWord();
   if (k.ctrl && !k.meta) {
     if (k.name === "a") return { text, cursor: 0 };
     if (k.name === "e") return { text, cursor: cs.length };
-    if (k.name === "w") {
-      let i = cursor;
-      while (i > 0 && cs[i - 1] === " ") i--;
-      while (i > 0 && cs[i - 1] !== " ") i--;
-      return set([...cs.slice(0, i), ...cs.slice(cursor)], i);
-    }
+    if (k.name === "w") return deleteWord();
+    if (k.name === "h" || k.name === "backspace") return cursor > 0 ? set(cs.filter((_, i) => i !== cursor - 1), cursor - 1) : { text, cursor };
     return undefined;
   }
   if (k.meta) return undefined;

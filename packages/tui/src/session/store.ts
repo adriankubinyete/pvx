@@ -113,7 +113,7 @@ export interface SessionOpts {
   isRoot: boolean;
   /** `ctx.session` of the commands the store runs. Default: the real host session (tests hand a fixed one). */
   session?: SessionInfo;
-  /** Runs the core commands (`plano`, `logs`...) that are not in the registry. */
+  /** Runs the core commands (`logs`, `modules`...) that are not in the registry. */
   core?: (argv: string[]) => Promise<{ exit: number; lines: CoreLine[] }>;
   /** Limit of a `!cmd` host shell command. Default 5 minutes. */
   shellTimeoutMs?: number;

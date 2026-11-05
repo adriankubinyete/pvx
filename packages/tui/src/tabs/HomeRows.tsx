@@ -1,7 +1,7 @@
 import { Button } from "../sdk-ui/button.tsx";
 import { toneColor } from "../sdk-ui/tones.ts";
 import { useTheme } from "../theme-context.tsx";
-import { truncate, type HomeAction, type HomeRow } from "./home-rows.ts";
+import { truncate, type HomeRow } from "./home-rows.ts";
 
 /** Cells of the marker column of a row (`»`, the hover `›` or blank) and the blank that follows the result marker. */
 const CURSOR_W = 2;
@@ -9,9 +9,6 @@ const CURSOR_W = 2;
 const BUTTON_GAP_W = 2;
 /** The two brackets and the two spaces of `[ label ]`. */
 const BUTTON_CHROME_W = 4;
-/** Cells of the buttons line before the first button: under the text of the rows. */
-const ACTIONS_INDENT_W = 4;
-const ACTIONS_GAP_W = 3;
 
 /** Where the columns of a section's rows end: the text (with its marker and note) and the button after it. */
 export interface RowColumns {
@@ -86,26 +83,5 @@ export function HomeRowView({ row, on, lit, columns, idPrefix, onOver, onOut, on
       </box>
       {row.button ? <box marginLeft={BUTTON_GAP_W} flexShrink={0}><Button label={row.button} focused={false} onPress={() => onPick(row)} /></box> : null}
     </box>
-  );
-}
-
-interface ActionsProps {
-  buttons: { action: HomeAction; label: string }[];
-  /** The button the keyboard is on, when the cursor is on the actions row. */
-  current?: HomeAction;
-  onPress: (action: HomeAction) => void;
-}
-
-/** The section's own buttons side by side, after a blank row (UI.md: one blank row between content and buttons). */
-export function ActionsLine({ buttons, current, onPress }: ActionsProps) {
-  return (
-    <>
-      <text wrapMode="none" flexShrink={0}> </text>
-      <box flexDirection="row" columnGap={ACTIONS_GAP_W} paddingLeft={ACTIONS_INDENT_W} flexShrink={0}>
-        {buttons.map(({ action, label }) => (
-          <Button key={action} label={label} primary={action === "plan"} focused={current === action} onPress={() => onPress(action)} />
-        ))}
-      </box>
-    </>
   );
 }

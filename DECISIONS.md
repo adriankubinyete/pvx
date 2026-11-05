@@ -87,6 +87,10 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 - Colar funciona em todo campo de texto: o `KeyRouter` entrega o paste com colchetes só a quem registra `paste: true`; uma linha, sem escapes, controles nem quebras (juntado, não recusado); segredo mascarado e nunca ecoado → [Colar em todo campo](#2026-10-15--colar-em-todo-campo)
 - Só o botão em foco vem cheio (acento, ou `error` no perigoso); `[ rótulo ]` sempre; uma linha em branco entre o conteúdo e os botões; `sdk.ui.CommandResult` (`Erro` ou `Concluído`) → [Botões: só o foco enche; CommandResult](#2026-10-15--botões-só-o-foco-enche-commandresult)
 
+### Escopo do produto
+
+- Sem conformidade e sem plano: nem comandos `conformidade`, `plano` e `plano apply`, nem perfis, nem deriva, nem ignorar → [Remove conformidade e plano](#2026-11-05--remove-conformidade-e-plano)
+
 ### SDK e módulos
 
 - `sdk.ui` injetado; o módulo nunca importa React → [Injeção de UI: `sdk.ui` injetado (opção b)](#2026-10-09--injeção-de-ui-sdkui-injetado-opção-b)
@@ -1722,3 +1726,91 @@ Uma linha por decisão em vigor. "(em parte)" marca entradas cujo **Status** diz
 **Motivo:** o título na borda dá ao bloco de dados um contorno claro sem gastar uma linha de cabeçalho com espaço em branco; a borda em acento mostra onde está o foco.
 
 **Limite:** a calha `▌` não existe no quadro; com largura fracionária (duas colunas de 58,5 células) o vão entre dois quadros pode ter 4 células. Testes: `packages/tui/test/frame.test.tsx`, `home.test.tsx`, o `test/page.test.ts` do firewall.
+
+## 2026-11-05 — Remove conformidade e plano
+
+**Status:** vigente. Substitui, no que toca a conformidade, o plano e os perfis, todas as entradas anteriores sobre eles (Fase 2, 6B, 8 e as do Início).
+
+**Decisão:** o pvx não avalia a central contra um perfil nem aplica um plano de correção.
+
+- Saem do núcleo: `packages/core/src/plan`, os comandos `conformidade`, `conformidade ignorar`, `plano` e `plano apply`, `profilesDir`, `PVX_PROFILE`, a pasta `profiles/` e o embutir de perfis no build.
+- Saem do journal: a deriva (`conformity.jsonl`) e os ignorados (`ignores.json`); o banner de login perde a seção do checklist e o nome do perfil e mostra só as notas.
+- Sai o módulo embutido `conformidade` (as abas Conformidade e Plano).
+- SDK: saem `useConformity`, os tipos `Conformity*`, `StepAnswer`, `StepOutcome` e `PageDef.role` (o papel `plan`).
+- Início: a seção `1 Atenção` fica só com os itens dos módulos (`home.attention`, `home.chips`), a memória e os avisos do host; não há botão de plano nem de verificação, e `r` só atualiza os widgets.
+
+**Motivo:** ambos não seguem a ideia do dono para o projeto.
+
+**Limite:** as capacidades (`capabilities`, `prove`, `fix`) continuam no contrato do módulo, mas nada no host as avalia; decidir se saem também.
+
+## 2026-11-05 — Card segue os símbolos ASCII
+
+**Status:** vigente.
+
+**Decisão:** o card desenha o ponto de estado (`●`, `○`) e o marcador de seleção (`›`) com os glifos do eixo `símbolos` (`active`, `inactive`, `query`). Em ASCII viram `*`, `o` e `>`.
+
+O eixo `moldura` ganha a opção `ascii` (`+` nos cantos, `-` e `|` nos lados e nas réguas). Ela é independente de `símbolos`: `símbolos: ascii` troca só os símbolos (`+ ! x i`, pontos, marcadores) e mantém as linhas e molduras do eixo `moldura`. Os glifos de linha (`corners`, `rule`, `hline`, `sepBar`, `gutter`) vêm do eixo `moldura` (`glyphsFor` em `theme.ts`).
+
+**Motivo:** no modo ASCII o card da aba Módulos ainda mostrava `●` e `›` em unicode.
+
+**Limite:** o texto do detalhe do card (`✗`, `↓`, `⚠`) e a legenda `◆`/`◇` do `keymap.ts` seguem fixos em unicode. Teste: `packages/tui/test/card.test.tsx`.
+
+## 2026-11-05 — `bun dev` roda sem sudo
+
+**Status:** vigente. Abre uma exceção estreita em "Root estrito".
+
+**Decisão:** `hostIsRoot()` é verdadeiro com `PVX_DEV=1` quando o pvx roda o código-fonte (`bun`); o script `bun dev` define a variável.
+
+**Motivo:** em `bun dev` não dava para gravar uma nota: o comando exige root e o `.dev/pvx` é do usuário. Um bypass por `PVX_HOME` gravável foi recusado antes porque abre a porta nas centrais.
+
+**Limite:** um binário compilado ignora `PVX_DEV` (checagem de `Bun.main`), então nenhuma variável de ambiente abre a porta numa central. Teste: `packages/core/test/host/root.test.ts`.
+
+## 2026-11-05 — `sdk.ui.TextArea`
+
+**Status:** vigente.
+
+**Decisão:** o SDK ganha o primitivo `TextArea`: caixa de texto de várias linhas, com borda e título (`title`, `initial`, `rows`, `placeholder`, `focused`, `onChange`, `onPress`). O campo `area` de `Fields` passa a desenhar a mesma caixa.
+
+**Motivo:** texto longo, como uma nota, não cabe numa linha; antes só `Fields` tinha a caixa, presa ao formulário.
+
+**Limite:** o argumento `Nota` do `nota add` continua de uma linha; ligar o `TextArea` a ele precisa de um `multiline` no `ArgSpec` e de a lista de notas mostrar várias linhas. O cursor começa no fim do texto inicial. Teste: `packages/tui/test/textarea.test.tsx`.
+
+## 2026-11-05 — Módulos: ações primeiro, sem fileira de filtro
+
+**Status:** vigente. Substitui a fileira `instalados`/`catálogo` da aba Módulos.
+
+**Decisão:** a aba Módulos tem uma grade só. Os cartões de ação `abrir o catálogo` e `adicionar por URL` são os dois primeiros, nessa ordem; os módulos instalados vêm depois. A fileira de chips sai. O catálogo abre pelo cartão (ou `c`) e `esc` ou `c` voltam aos instalados; uma linha apagada com a fonte aparece só no catálogo.
+
+**Motivo:** com muitos módulos a grade fica longa e os cartões de ação, no fim, iam para baixo da tela.
+
+**Limite:** `↑` na primeira linha ainda vai para a barra de abas. O escopo `modulechips` do keymap deixou de existir.
+
+## 2026-11-05 — Sistema: prévia em moldura própria, tema em lista radio, sem seleção por mouse
+
+**Status:** vigente.
+
+**Decisão:** a prévia do tema fica num quadro apagado com o título `prévia`, sempre desenhado (mesmo com a moldura `nenhuma`) e no tema real, para não parecer parte da página; o espaço entre as opções e a prévia é de 4 células. A escolha de `tema` é uma lista radio, uma opção por linha (`(•) Escuro`); `←→` mudam e `↑↓` andam entre as linhas, como antes. A prévia ganha um `quadro` que mostra a opção `moldura` (arredondada, simples, ascii, nenhuma). Os textos de botões e de opções do Sistema não são selecionáveis pelo mouse (`selectable={false}`).
+
+**Motivo:** a prévia foi confundida várias vezes com algo clicável; o clique do mouse selecionava pedaços do texto e invertia as cores ao sair; `moldura: nenhuma` não mudava nada à vista.
+
+**Limite:** o clique do mouse ainda seleciona texto fora desses controles.
+
+## 2026-11-05 — Sistema: seção pvx informativa, ações em fileira e botão desinstalar
+
+**Status:** vigente.
+
+**Decisão:** a seção `1 pvx` mostra linhas só de leitura (versão, atualização, plataforma, dados, embutidos), sem cursor, sem hover e sem seleção, e fecha com uma fileira de botões `[ atualizar ] [ verificar ] [ desinstalar ]`, a única linha da seção com o cursor. `desinstalar` pede confirmação (`desinstalar o pvx?`, com `manter` como resposta segura) e roda `uninstall` pela sessão; fica desligado, com um aviso, quando o pvx roda do código-fonte. A dica `sudo pvx uninstall` saiu.
+
+**Motivo:** os botões espalhados por linhas de informação confundiam o que era clicável; a dica de desinstalar não fazia nada.
+
+**Limite:** o botão roda `uninstall` sem `--purge`: os dados em `PVX_HOME` ficam. A aba Sistema passou a montar os diálogos da sessão (`SessionModals`).
+
+## 2026-11-05 — Início e Sistema usam a largura toda; a régua encontra o `│` do relógio
+
+**Status:** vigente. Muda, para Início e Sistema, o teto de 110 células (CONTENT_MAX_W).
+
+**Decisão:** as seções do Início (`Frame`) e do Sistema (`Panel`) ocupam toda a largura do terminal (`wide` em `Panel` e `Frame`, uso só do host); as outras telas mantêm o teto. A régua sob a barra de abas encontra o `│` que separa as abas do relógio com um `┴` (`+` com moldura ascii; glifo `teeUp`, da família das linhas).
+
+**Motivo:** em terminal largo o conteúdo ficava preso à esquerda; o `│` da barra e a régua abaixo ficavam sem ligação.
+
+**Limite:** a prévia do Sistema acompanha a largura (36%, mínimo 36 células). Teste: `clock.test.tsx`, `sistema.test.tsx`, `home.test.tsx`.

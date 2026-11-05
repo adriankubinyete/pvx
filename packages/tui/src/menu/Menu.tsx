@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Loading } from "../sdk-ui/flow.tsx";
 import type { OutLine } from "@pvx/sdk";
 import { addModule, catalogHas, isModuleUrl, resolveModuleRef, removeModule, setEnabled, updateLines, updateModule, type Catalog, type Pending as UpdatePending, type Registry, type Review, type UpdateCheck } from "@pvx/core";
 import { matchKey } from "../keymap.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
-import { FilterChips } from "../sdk-ui/filter-chips.tsx";
 import { CONTENT_MAX_W, useLayout } from "../layout.ts";
 import { useNudge } from "../nudge.tsx";
 import { deliveredTail, reloadAndReport } from "../modules/actions.ts";
@@ -33,9 +32,6 @@ export interface MenuNav {
   catalog: boolean;
 }
 export const createMenuNav = (): MenuNav => ({ path: [], sel: {}, catalog: false });
-
-/** The two chips above the cards. */
-type ChipId = "installed" | "catalog";
 
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5);
 const source = (c: Catalog) => `fonte: ${c.source}${c.fetchedAt ? ` · ${hhmm(c.fetchedAt)}` : ""}`;
@@ -70,7 +66,6 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const [catalog, setCatalog] = useState(nav.catalog);
   const [cat, setCat] = useState<Catalog | null>(null);
   const [actions, setActions] = useState<string | null>(null);
-  const [chipFocus, setChipFocus] = useState<ChipId | null>(null); // the keyboard is on the chip row (the chip it is on), not on the cards
   const deps = useModulesDeps();
   const nudge = useNudge();
   nav.path = path;
@@ -92,12 +87,14 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const ids = new Set(root.map((i) => i.id.slice(2)));
   const listed = cat ? cat.modules.filter((m) => !ids.has(m.id)) : [];
   const installed = useMemo(() => moduleCards(root, registry, rows, hiddenTabs, hiddenWidgets), [root, registry, rev, rows, hiddenTabs, hiddenWidgets]);
-  const cards = catalog ? catalogCards(listed) : [...installed, ...actionCards(cat ? listed.length : undefined)];
+  const cards = catalog ? catalogCards(listed) : [...actionCards(cat ? listed.length : undefined), ...installed];
+  const cardsNow = useRef(cards);
+  cardsNow.current = cards;
   const items = itemsAt(root, path); // the drill-down rows of one module
   const level = catalog ? "catalogo" : path.join("/");
   const curCard = cards.find((x) => x.id === sel[level]) ?? cards[0];
   const atRoot = view.kind === "list" && !path.length;
-  useScreenScope(!atRoot ? "menu" : chipFocus ? "modulechips" : catalog ? "catalog" : "modules", atRoot ? 1 : 0);
+  useScreenScope(!atRoot ? "menu" : catalog ? "catalog" : "modules", atRoot ? 1 : 0);
 
   const runLine = (line: string, secrets?: Record<string, string>) => {
     void store.run(line, { secrets });
@@ -206,9 +203,11 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
       return { exit: x.ok ? 0 : 1, lines: [x.ok ? { kind: "success", text: x.text } : { kind: "error", text: x.error }] };
     }, true);
     if (r.exit !== 0) return showResult(r.id);
-    const mods = cards.filter((x) => x.kind === "module");
-    const i = mods.findIndex((x) => x.id === `m:${id}`);
-    const next = mods[i + 1] ?? mods[i - 1]; // the module card that takes its place
+    const before = cards.filter((x) => x.kind === "module"); // the order the key press saw
+    const left = new Set(cardsNow.current.filter((x) => x.kind === "module").map((x) => x.id)); // what is still there after the removal
+    left.delete(`m:${id}`);
+    const i = before.findIndex((x) => x.id === `m:${id}`);
+    const next = before.slice(i + 1).find((x) => left.has(x.id)) ?? before.slice(0, i).reverse().find((x) => left.has(x.id)); // the nearest module card that is still there
     land(next?.id);
     nudge(`${id} removido`, "ok");
   };
@@ -254,18 +253,9 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   };
   const select = (id: string) => setSel((s) => (s[level] === id ? s : { ...s, [level]: id }));
 
-  /** The keys of the chip row: `←→` move between the chips, `enter` chooses, `↓` goes back to the cards, `↑` and `esc` to the tab bar. */
-  const chipKey = (k: RoutedKey, on: ChipId): boolean | undefined => {
-    if (k.name === "left" || k.name === "right") return setChipFocus(on === "installed" ? "catalog" : "installed"), true;
-    if (matchKey(k, "enter")) return setCatalog(on === "catalog"), true;
-    if (k.name === "down") return setChipFocus(null), true;
-    if (k.name === "up" || k.name === "escape") return setChipFocus(null), tabs?.focusBar(), true;
-    if (k.sequence === "c") return setCatalog(!catalog), true;
-  };
-
   useKeys((k) => {
     if (view.kind !== "list" || tabs?.focused === false) return;
-    if (chipFocus && !path.length) return chipKey(k, chipFocus);
+    if (k.name === "escape" && catalog && !path.length) return setCatalog(false), true; // back from the catalog to the installed modules
     if (k.name === "escape" && path.length) return setPath(path.slice(0, -1)), true;
     if (k.sequence === "/") return tabs?.goto("comando"), true;
     if (path.length) return;
@@ -283,8 +273,9 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
   const helpW = cols - 2 - 4 - LABEL_W - 2;
   const empty = !catalog ? undefined : !cat ? <Loading label="carregando o catálogo…" /> : cat.modules.length ? `todos os módulos do catálogo já estão instalados · ${source(cat)}` : `catálogo vazio · ${source(cat)}`;
   const tone: Record<Tone, string> = { ok: c.ok, warn: c.warn, error: c.error, info: c.info, dim: c.dim };
+  /** The line above the cards, only when it has something to say: work in flight, the modules being read, or the catalog and where it came from. */
+  const status = working ? <Loading label={`${working}…`} /> : !catalog && !loaded ? <Loading label="lendo os módulos…" /> : catalog && cat ? <text fg={c.dim} wrapMode="none">{`catálogo · ${source(cat)} · esc volta`}</text> : null; // the empty state of the grid shows the catalog loading
   const open = actions ? cards.find((x) => x.id === actions) : undefined;
-  const chips = [{ id: "installed", label: `instalados ${installed.length}` }, { id: "catalog", label: `catálogo${cat ? ` ${listed.length}` : ""}` }];
   return (
     <box flexGrow={1} minHeight={0} flexDirection="row">
       {view.kind === "form" ? <MenuForm item={view.item} onRun={runLine} onBack={back} /> : null}
@@ -296,11 +287,8 @@ export function Menu({ store, registry, nav, updates = [] }: { store: SessionApi
       ) : null}
       {view.kind === "list" && !path.length ? (
         <box flexGrow={1} minHeight={0} flexDirection="column">
-          <box flexShrink={0} paddingX={1} flexDirection="row" justifyContent="space-between" maxWidth={CONTENT_MAX_W}>
-            <FilterChips chips={chips} selected={catalog ? "catalog" : "installed"} cursor={chipFocus && (tabs?.focused ?? true) ? chipFocus : undefined} onSelect={(id) => setCatalog(id === "catalog")} />
-            {working ? <Loading label={`${working}…`} /> : !catalog && !loaded ? <Loading label="lendo os módulos…" /> : catalog && cat ? <text fg={c.dim} wrapMode="none">{source(cat)}</text> : null}
-          </box>
-          <CardGrid cards={cards} sel={sel[level]} onSel={select} onActivate={activateCard} onTop={() => setChipFocus(catalog ? "catalog" : "installed")} focused={(tabs?.focused ?? true) && !open && !chipFocus} empty={empty} />
+          {status ? <box flexShrink={0} paddingX={1} maxWidth={CONTENT_MAX_W}>{status}</box> : null}
+          <CardGrid cards={cards} sel={sel[level]} onSel={select} onActivate={activateCard} onTop={tabs?.focusBar} focused={(tabs?.focused ?? true) && !open} empty={empty} />
           <Detail card={curCard} tone={tone} />
         </box>
       ) : null}

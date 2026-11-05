@@ -1,33 +1,31 @@
 import { useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
-import { createMachineSampler, hostSession, pageWithRole, type MachineSampler, type Registry } from "@pvx/core";
+import { createMachineSampler, hostSession, type MachineSampler, type Registry } from "@pvx/core";
 import type { HomeNote, SessionInfo } from "@pvx/sdk";
 import { matchKey } from "../keymap.ts";
 import { useOver } from "../hover.ts";
 import { useKeys, type RoutedKey } from "../keys.tsx";
 import { useNudge } from "../nudge.tsx";
 import { panelStep, usePanelNav, wrap } from "../panelnav.ts";
-import { capContent, useLayout } from "../layout.ts";
+import { useLayout } from "../layout.ts";
 import { useRouter, useScreenScope } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import { loadFavorites } from "../palette/favorites.ts";
-import { Loading } from "../sdk-ui/flow.tsx";
 import { usePages } from "../sdk-ui/host.tsx";
 import { Frame, headerParts } from "../sdk-ui/kit.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
-import { conformityOf, conformityView } from "./conformity.ts";
 import { MachineBlock } from "./HomeMachine.tsx";
-import { ActionsLine, HomeRowView, rowColumns } from "./HomeRows.tsx";
+import { HomeRowView, rowColumns } from "./HomeRows.tsx";
 import { NoteComposer, outcomeOfRun } from "./HomeNote.tsx";
-import { actionButtons, ACTIONS_ROW_ID, activityRows, activitySummary, attentionRows, chipRows, ignoredTexts, memoryRows, NEW_NOTE_ROW_ID, NEW_NOTE_TEXT, noteRows, notesSummary, unverifiedRow, upToDateText, VERIFY_ROW_ID, type HomeAction, type HomeRow } from "./home-rows.ts";
-import { parseConformity, slotItems, syncHost, type Att, type Chip } from "./home.ts";
+import { activityRows, activitySummary, attentionRows, chipRows, memoryRows, NEW_NOTE_ROW_ID, NEW_NOTE_TEXT, noteRows, notesSummary, upToDateText, type HomeRow } from "./home-rows.ts";
+import { slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
 /** Section ids, in the order they are drawn; `notas` exists only while there is something to show or a module to write notes. */
-export type HomePanel = "conformidade" | "notas" | "atividade";
-const SECTION_TITLES: Record<HomePanel, string> = { conformidade: "atenção", notas: "notas", atividade: "atividade" };
+export type HomePanel = "atencao" | "notas" | "atividade";
+const SECTION_TITLES: Record<HomePanel, string> = { atencao: "atenção", notas: "notas", atividade: "atividade" };
 
 /** Which section has the cursor and the selected row of each; lives in `TabsNav` (the tab unmounts on a switch). */
 export interface HomeNav {
@@ -35,16 +33,12 @@ export interface HomeNav {
   /** On the rows of the section (the selection shows) instead of on the section as a whole. */
   inside: boolean;
   sel: Record<string, string>;
-  /** The button of the actions row the cursor is on. */
-  action: HomeAction;
 }
-export const createHomeNav = (): HomeNav => ({ panel: "conformidade", inside: false, sel: {}, action: "verify" });
+export const createHomeNav = (): HomeNav => ({ panel: "atencao", inside: false, sel: {} });
 
 const SAMPLE_MS = 2000;
 /** Columns the frame and the page padding take from the terminal width (two on each side). */
 const FRAME_W = 4;
-/** The widest the core bars and the facts of the machine get: what they have at 120 columns (four bars across). A wider terminal does not stretch them. */
-const MACHINE_MAX_W = 120 - FRAME_W;
 /** Columns a section's Frame takes inside the content width: two borders and two cells of padding. */
 const GUTTER_W = 4;
 /** Cells of `   + nova nota`. */
@@ -53,18 +47,14 @@ let shared: MachineSampler | undefined;
 
 type RowsBySection = Record<HomePanel, HomeRow[]>;
 
-/** Everything Início reads from the host: machine samples, the conformity cache, the slots and the session. */
+/** Everything Início reads from the host: machine samples, the slots and the session. */
 interface HomeData {
   rows: RowsBySection;
   sections: readonly HomePanel[];
   upToDate?: string;
-  ignored: string[];
-  done?: ReturnType<typeof parseConformity>;
-  running: boolean;
-  planSteps: number;
 }
 
-export function HomeTab({ store, nav, profile, registry, sampler, session = hostSession }: { store: SessionApi; nav: TabsNav; profile?: string | null; registry: Registry; sampler?: MachineSampler; session?: SessionInfo }) {
+export function HomeTab({ store, nav, registry, sampler, session = hostSession }: { store: SessionApi; nav: TabsNav; registry: Registry; sampler?: MachineSampler; session?: SessionInfo }) {
   const slots = registry.slots;
   const { c, g, axes, result } = useTheme();
   const hidden = useMemo(() => new Set(axes.hiddenWidgets), [axes.hiddenWidgets]);
@@ -96,41 +86,32 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   }, [slots]);
   const favorites = useMemo(() => loadFavorites(), []);
 
-  const conf = conformityOf(store); // the cache module pages read too
-  const snap = useSyncExternalStore(conf.subscribe, conf.getSnapshot);
-  const done = snap.conformidade ? parseConformity(snap.conformidade) : undefined;
-  syncHost(slots, done, registry.warnings); // the profile's items and the load avisos go through the same slots the modules use
+  syncHost(slots, registry.warnings); // the load avisos go through the same slots the modules use
 
   // The notes come from the `home.notes` slot and go through the commands of the `addNote` and `removeNote` roles: Início names no module.
   const addNote = registry.roles.get("addNote")?.name;
   const removeNote = registry.roles.get("removeNote")?.name;
   const canCompose = addNote !== undefined && registry.commands.has(addNote);
-  const planPage = pageWithRole(registry, "plan");
-  const planSteps = conformityView(snap).plan.steps.length;
-  const buttons = actionButtons(planSteps, Boolean(planPage), Boolean(snap.conformidade));
 
   const attention = slotItems<Att>(slots, "home.attention", hidden);
   const notes = slotItems<HomeNote>(slots, "home.notes", hidden);
-  const checked = Boolean(snap.conformidade);
   const chips = slotItems<Chip>(slots, "home.chips", hidden);
-  const notices = [...attentionRows(attention, slots.broken("home.attention", hidden)), ...chipRows(chips, slots.broken("home.chips", hidden)), ...memoryRows(sample.mem), ...(checked || snap.running ? [] : [unverifiedRow()])];
+  const notices = [...attentionRows(attention, slots.broken("home.attention", hidden)), ...chipRows(chips, slots.broken("home.chips", hidden)), ...memoryRows(sample.mem)];
   const rows: RowsBySection = {
-    conformidade: [...notices, ...(checked ? [{ id: ACTIONS_ROW_ID, text: "" }] : [])],
+    atencao: notices,
     notas: noteRows(notes, canCompose, removeNote),
     atividade: activityRows(history, blocks, favorites, now, g),
   };
-  const sections: readonly HomePanel[] = rows.notas.length ? ["conformidade", "notas", "atividade"] : ["conformidade", "atividade"];
+  const sections: readonly HomePanel[] = rows.notas.length ? ["atencao", "notas", "atividade"] : ["atencao", "atividade"];
   const data: HomeData = {
-    rows, sections, done, planSteps, running: snap.running,
+    rows, sections,
     upToDate: upToDateText(slotItems<Att>(slots, "home.configured", hidden).length),
-    ignored: ignoredTexts(done),
   };
 
   const section = sections.includes(nav.home.panel) ? nav.home.panel : sections[0]!; // the notes section can go away
   const current = (panel: HomePanel) => rows[panel].find((row) => row.id === nav.home.sel[panel]) ?? rows[panel][0];
   const select = (panel: HomePanel, id: string) => (nav.home.sel[panel] = id, nav.home.panel = panel, nav.home.inside = true, bump());
-  const refresh = () => (conf.refresh(), void slots.refresh());
-  const goPlan = () => planPage && void store.run(`#${planPage.key}`);
+  const refresh = () => void slots.refresh();
   /** `enter` on a note: its command runs, and the session asks first (the command is destructive). */
   const removeNoteRow = async (row: HomeRow) => {
     if (!row.remove) return;
@@ -144,15 +125,8 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     nav.draft = row.use;
     tabs?.goto("comando");
   };
-  const press = (action: HomeAction) => {
-    nav.home.action = action;
-    if (action === "plan") goPlan();
-    else refresh();
-  };
   const act = (panel: HomePanel, row?: HomeRow) => {
     if (!row) return;
-    if (row.id === ACTIONS_ROW_ID) return press(nav.home.action);
-    if (row.id === VERIFY_ROW_ID) return refresh();
     if (panel === "notas") return row.id === NEW_NOTE_ROW_ID ? setComposing(true) : void removeNoteRow(row);
     useCommand(row);
   };
@@ -194,8 +168,6 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
 
   useKeys((key) => {
     if (!focused || composing) return;
-    const direction = arrowOf(key);
-    if (direction && onActionsRow(section, nav, current(section)) && switchAction(direction, nav, buttons, bump)) return true;
     const step = stepOf(key, section, nav, panels, rows);
     if (step) return applyStep(step);
     return shortcut(key);
@@ -220,15 +192,14 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     if (jump && !key.ctrl) return nav.home.panel = jump, nav.home.inside = false, bump(), true;
     if (matchKey(key, "n") && canCompose) return setComposing(true), true;
     if (matchKey(key, "esc")) return tabs?.focusBar(), true; // one level up: the section, then the bar
-    if (matchKey(key, "p") && planPage && planSteps > 0) return goPlan(), true;
     if (matchKey(key, "r")) return refresh(), true;
     if (key.sequence === "/") return tabs?.goto("comando"), true;
   };
 
-  const width = capContent(cols - FRAME_W);
+  const width = cols - FRAME_W; // the whole terminal width
   const sectionRows = (panel: HomePanel) => {
     const active = focused && nav.home.panel === panel;
-    const list = rows[panel].filter((row) => row.id !== ACTIONS_ROW_ID);
+    const list = rows[panel];
     const columns = rowColumns(list, width - GUTTER_W, { c, result });
     return (
       <>
@@ -243,7 +214,7 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
   const sectionActive = (panel: HomePanel) => focused && nav.home.panel === panel;
   const frame = (panel: HomePanel, children: React.ReactNode, aside?: string) => (
     <box key={panel} id={`home:${panel}`} flexShrink={0}>
-      <Frame panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} active={sectionActive(panel)} aside={aside}>
+      <Frame wide panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} active={sectionActive(panel)} aside={aside}>
         {children}
       </Frame>
     </box>
@@ -251,12 +222,8 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
 
   const attentionBody = (
     <>
-      {data.running ? <Loading label="verificando a conformidade…" /> : null}
-      {!data.running && done?.message ? <text fg={c.dim} flexShrink={0} wrapMode="none">{`  ${done.message}`}</text> : null}
-      {!data.running && !done?.message ? sectionRows("conformidade") : null}
-      {!data.running && done && !done.message && data.upToDate ? <UpToDate text={data.upToDate} /> : null}
-      {!data.running && !done?.message ? data.ignored.map((text) => <text key={text} fg={c.dim} flexShrink={0} wrapMode="none">{`    ${g.inactive} ${text}`}</text>) : null}
-      {checked ? <ActionsLine buttons={buttons} current={focused && nav.home.panel === "conformidade" && nav.home.inside && current("conformidade")?.id === ACTIONS_ROW_ID ? nav.home.action : undefined} onPress={(action) => { rowHit.current = true; select("conformidade", ACTIONS_ROW_ID); press(action); }} /> : null}
+      {sectionRows("atencao")}
+      {data.upToDate ? <UpToDate text={data.upToDate} /> : null}
     </>
   );
 
@@ -279,16 +246,16 @@ export function HomeTab({ store, nav, profile, registry, sampler, session = host
     atividade: <text wrapMode="none" fg={c.dim} onMouseDown={() => openSection("atividade")}>{activitySummary(rows.atividade, summaryRoom)}</text>,
   };
   const noteCount = rows.notas.filter((row) => !row.action).length;
-  const asides: Partial<Record<HomePanel, string>> = { conformidade: profile ? `perfil: ${profile}` : "sem perfil", notas: String(noteCount) };
+  const asides: Partial<Record<HomePanel, string>> = { notas: String(noteCount) };
 
   if (composing) return <NoteComposer store={store} registry={registry} line={addNote!} onClose={() => setComposing(false)} onSaved={() => void slots.refresh()} />;
   return (
     <>
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
         <box flexDirection="column" paddingX={1} flexShrink={0}>
-          <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={Math.min(cols - FRAME_W, MACHINE_MAX_W)} />
+          <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={width} />
           {sections.map((panel) => {
-            if (panel === "conformidade") return frame(panel, attentionBody, asides[panel]);
+            if (panel === "atencao") return frame(panel, attentionBody, asides[panel]);
             if (!expanded(panel)) return frame(panel, summaries[panel], asides[panel]);
             return frame(panel, sectionRows(panel), asides[panel]);
           })}
@@ -316,19 +283,6 @@ type ArrowKey = "left" | "right" | "up" | "down";
 function arrowOf(key: RoutedKey): ArrowKey | undefined {
   if (key.name === "left" || key.name === "right" || key.name === "up" || key.name === "down") return key.name;
   return undefined;
-}
-
-function onActionsRow(section: HomePanel, nav: TabsNav, row?: HomeRow): boolean {
-  return section === "conformidade" && nav.home.inside && row?.id === ACTIONS_ROW_ID;
-}
-
-/** `←` and `→` on the actions row choose the button; they never leave the row. */
-function switchAction(direction: ArrowKey, nav: TabsNav, buttons: { action: HomeAction }[], redraw: () => void): boolean {
-  if (direction !== "left" && direction !== "right") return false;
-  const index = Math.max(0, buttons.findIndex((button) => button.action === nav.home.action));
-  nav.home.action = buttons[wrap(index, direction === "left" ? -1 : 1, buttons.length)]!.action;
-  redraw();
-  return true;
 }
 
 /** The two-level focus rule (panelnav) for one key; undefined when the key is not an arrow, enter or esc. */

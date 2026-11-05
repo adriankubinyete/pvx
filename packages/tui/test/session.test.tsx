@@ -268,7 +268,6 @@ test("parity: the same line gives the same output lines through the CLI and the 
     isRoot: true,
     registry,
     makeLogger: (n) => createLogger(logsDir(), n),
-    profilesDir: join(pvxHome(), "profiles"),
     version: "1.0.0",
     theme,
     out: (l) => out.push(l),

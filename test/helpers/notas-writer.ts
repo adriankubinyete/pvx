@@ -10,8 +10,7 @@ let bad = 0;
 for (let i = 0; i < n; i++) {
   const exit = await runCli({
     argv: ["nota", "add", "--assinatura", tag, `nota ${tag} ${i} ${"x".repeat(200)}`],
-    env: process.env, isTTY: false, isRoot: true, registry, makeLogger: (m) => createLogger(logsDir(), m),
-    profilesDir: "", version: "0.1.0", theme, out: () => {},
+    env: process.env, isTTY: false, isRoot: true, registry, makeLogger: (m) => createLogger(logsDir(), m), version: "0.1.0", theme, out: () => {},
   });
   if (exit !== 0) bad++;
 }

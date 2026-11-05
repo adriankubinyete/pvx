@@ -125,13 +125,13 @@ export function catalogCards(entries: readonly CatalogEntry[]): Card[] {
   }));
 }
 
-/** The two dashed cards that close the installed grid. `available`: modules the catalog lists and are not installed; undefined while it is unknown. */
+/** The two dashed cards that open the grid: the catalog first, then add by URL. `available`: modules the catalog lists and are not installed; undefined while it is unknown. */
 export function actionCards(available: number | undefined): Card[] {
   const base = { chips: [], tabHidden: false, widgets: false, widgetsHidden: false };
   const note = (text: string) => ({ parts: [{ text }] });
   return [
-    { ...base, detail: note("clona o repositório e abre a revisão de confiança antes de importar"), id: "act:add", kind: "add", name: "adicionar por URL", key: "a", sub: "usuario/repo ou link git", line2: { text: "" } },
     { ...base, detail: note("módulos que o pvx indica e ainda não estão instalados"), id: "act:catalog", kind: "open", name: "abrir o catálogo", key: "c", sub: available === undefined ? "catálogo indisponível" : plural(available, "módulo disponível", "módulos disponíveis"), line2: { text: "" } },
+    { ...base, detail: note("clona o repositório e abre a revisão de confiança antes de importar"), id: "act:add", kind: "add", name: "adicionar por URL", key: "a", sub: "usuario/repo ou link git", line2: { text: "" } },
   ];
 }
 
