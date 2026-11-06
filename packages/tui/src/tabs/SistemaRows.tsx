@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import type { Line } from "../lineedit.ts";
+import { LineText } from "../LineText.tsx";
 import { buttonLook, LookText } from "../sdk-ui/button.tsx";
 import { useOver } from "../hover.ts";
 import { useTheme } from "../theme-context.tsx";
@@ -70,8 +72,8 @@ export function ChoiceCells({ options, value, on, room, onChoose, onHover }: { o
   );
 }
 
-/** The choices of a row as a radio list, one per line: `(•) Escuro`, then `( ) Claro`. The chosen one is bold (accent while the row has the cursor). A click chooses. */
-export function RadioCells({ options, value, on, onChoose, onHover }: { options: Options; value: string; on: boolean; onChoose: (value: string) => void; /** The mouse is over an option (or left them all): the page previews it. */ onHover?: (value: string | undefined) => void }) {
+/** The choices of a row as a radio list, one per line: `(•) Escuro`, then `( ) Claro`. The chosen one is bold (accent while the row has the cursor). With the list open (`cursor`) the option under the keyboard has a `»` before it. A click chooses. */
+export function RadioCells({ options, value, cursor, on, onChoose, onHover }: { options: Options; value: string; /** The option the keyboard is on while the list is open: marked with `»`, not chosen until enter. */ cursor?: string; on: boolean; onChoose: (value: string) => void; /** The mouse is over an option (or left them all): the page previews it. */ onHover?: (value: string | undefined) => void }) {
   const { c, g } = useTheme();
   return (
     <box flexDirection="column" flexShrink={0}>
@@ -81,6 +83,7 @@ export function RadioCells({ options, value, on, onChoose, onHover }: { options:
         return (
           <box key={option} flexShrink={0} onMouseDown={() => onChoose(option)} onMouseOver={() => onHover?.(option)} onMouseOut={() => onHover?.(undefined)}>
             <text wrapMode="none" selectable={false}>
+              <span fg={c.accent}>{cursor === option ? `${g.cursor} ` : "  "}</span>
               <span fg={chosen && on ? c.accent : c.text}>{mark}</span>
               <span fg={chosen && on ? c.accent : c.text}>{chosen ? <b>{label}</b> : label}</span>
             </text>
@@ -132,6 +135,17 @@ export function SwatchCells({ options, value, cursor, colors, onChoose, onHover 
           </box>
         );
       })}
+    </box>
+  );
+}
+
+/** The control of the "gif do Início" row: the path in use (or a dim `nenhum`), clickable; while it is edited, a text cell. */
+export function GifControls({ path, edit, width, hot, onOverValue, onOutValue, onPressValue }: { path: string; edit: Line | null; width: number; hot: boolean; onOverValue: () => void; onOutValue: () => void; onPressValue: () => void }) {
+  const { c } = useTheme();
+  const shown = path === "" ? <span fg={c.dim}>nenhum</span> : <span fg={c.text}>{hot ? <u>{path}</u> : path}</span>;
+  return (
+    <box flexShrink={0} onMouseOver={onOverValue} onMouseOut={onOutValue} onMouseDown={onPressValue}>
+      <text wrapMode="none" selectable={false}>{edit ? <LineText line={edit} focused width={width} /> : shown}</text>
     </box>
   );
 }

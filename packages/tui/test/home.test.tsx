@@ -354,20 +354,22 @@ test("no memory row while the memory has room", async () => {
   expect(t.frame()).not.toContain("memória em");
 });
 
-test("Notas and Atividade are one line each until enter opens them, and stay selectable when empty", async () => {
+test("Notas and Atividade are always open: their rows show without enter, which only moves the cursor into them", async () => {
   saveFavorites(["demo greet"]);
   const { t, store } = await mount({ cols: 120, rows: 40 });
   await store.run("demo remember");
   await t.flush();
   const top = lines(t).findIndex((l) => l.includes("2 Atividade"));
-  expect(lines(t)[top + 1]).toMatch(/│ demo greet · .*demo remember/); // the recent activity in one line
+  expect(lines(t)[top + 1]).toMatch(/★ demo greet/); // one row per command, not one line for all
+  expect(lines(t)[top + 2]).toMatch(/demo remember/);
   expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1);
+  expect(t.frame()).not.toMatch(/» ★ demo greet/); // no row cursor until the section is entered
   await t.press("2");
-  await t.press("RETURN"); // opens: the rows
-  expect(lines(t).filter((l) => l.includes("demo greet")).length).toBeGreaterThan(0);
+  await t.press("RETURN"); // goes inside: the cursor is on the first row
   expect(t.frame()).toMatch(/» ★ demo greet/);
-  await t.press("ESCAPE"); // back to one line
-  expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1);
+  expect(lines(t).filter((l) => l.includes("demo greet"))).toHaveLength(1); // the same rows, nothing opened or closed
+  await t.press("ESCAPE");
+  expect(t.frame()).not.toMatch(/» ★ demo greet/);
 });
 
 // The machine block never moves between refreshes: two very different samples give the same line count and the same columns.
@@ -395,20 +397,66 @@ for (const cols of [80, 120]) {
   });
 }
 
-// The three sections are Frames: the title and aside sit in the top border, every frame has a closed box, and the frames fill the terminal width.
-test.each([[80, 24], [120, 40], [250, 40]] as const)("Início sections are Frames at %ix%i", async (cols, rows) => {
+// The sections are borderless Panels (a header, a gutter when active): stacked with a blank row between them, side by side from 140 columns.
+test.each([[80, 24], [120, 40]] as const)("Início sections are stacked Panels with a blank row between, at %ix%i", async (cols, rows) => {
   const { t } = await mount({ cols, rows });
   const all = lines(t);
-  const tops = all.filter((l) => l.includes("╭─ "));
-  expect(tops.length).toBeGreaterThanOrEqual(2);
-  expect(tops[0]).toMatch(/╭─ 1 Atenção ─+╮/);
-  const bottoms = all.filter((l) => l.includes("╰"));
-  expect(bottoms).toHaveLength(tops.length);
-  for (const top of tops) expect(top.trimEnd().length).toBeLessThanOrEqual(cols);
-  if (cols > CONTENT_MAX_W + 2) expect(tops[0]!.trimEnd().length).toBeGreaterThan(CONTENT_MAX_W + 2); // wide terminals are used, not capped
+  expect(all.some((l) => /[╭╮╰╯]/.test(l))).toBe(false); // no frame
+  const heads = [/ 1 Atenção/, / 2 (Notas|Atividade)/].map((pattern) => all.findIndex((l, i) => i > 1 && pattern.test(l)));
+  expect(heads[0]).toBeGreaterThan(1);
+  expect(heads[1]).toBeGreaterThan(heads[0]!);
+  const between = all.slice(heads[0]! + 1, heads[1]!);
+  expect(between[between.length - 1]!.trim()).toBe(""); // the blank row above the next section
+  for (const l of all) expect(l.length).toBeLessThanOrEqual(cols);
   expect(activeFrames(t)).toEqual(["1"]);
   await t.press("ARROW_DOWN");
   expect(activeFrames(t)).toEqual(["2"]);
+});
+
+test.each([[120, 40], [160, 40], [250, 40]] as const)("Início sections are a reading column: stacked, at the left, never wider than 100 cells, at %ix%i", async (cols, rows) => {
+  const { t } = await mount({ cols, rows });
+  const all = lines(t);
+  const first = all.findIndex((l, i) => i > 8 && / 1 Atenção/.test(l));
+  const second = all.findIndex((l, i) => i > first && / 2 (Notas|Atividade)/.test(l));
+  expect(second).toBeGreaterThan(first); // stacked: the second header is on a row of its own
+  expect(all[first]!.includes(" 2 Atividade") || all[first]!.includes(" 2 Notas")).toBe(false); // and not beside the first
+  for (const l of all.slice(first)) expect(l.trimEnd().length).toBeLessThanOrEqual(2 + 100); // the content starts at column 2
+  expect(all[first]!.indexOf("1 Atenção")).toBeLessThan(8); // at the left
+});
+
+test.each([[80, 40], [120, 40], [160, 40], [250, 40]] as const)("the logo is fixed text (PHONEVOX), centered, between the machine block and the sections, at %ix%i", async (cols, rows) => {
+  const textW = 70;
+  const { t } = await mount({ cols, rows });
+  const all = lines(t);
+  const sign = all.map((l, i) => [l, i] as const).filter(([l]) => l.includes("██"));
+  expect(sign).toHaveLength(5);
+  const [first, last] = [sign[0]![1], sign[4]![1]];
+  expect(last - first).toBe(4); // five consecutive rows
+  const dsk = all.findIndex((l) => l.includes("dsk["));
+  const attention = all.findIndex((l, i) => i > last && / 1 Atenção/.test(l));
+  expect(first).toBeGreaterThan(dsk); // under the stats of the machine
+  expect(attention).toBeGreaterThan(last); // and above the first section
+  for (const [l] of sign) expect(l.length).toBeLessThanOrEqual(cols);
+  const start = all[first]!.indexOf("██");
+  const expected = 2 + Math.floor((cols - 4 - textW) / 2); // the content starts at column 2 and is `cols - 4` wide
+  expect(Math.abs(start - expected)).toBeLessThanOrEqual(1);
+  const inkEnd = Math.max(...sign.map(([l]) => l.lastIndexOf("█"))) + 1;
+  expect(inkEnd - start).toBe(textW); // the same 70 cells at every width
+});
+
+test("the logo does not move: no timer, the same frame a moment later", async () => {
+  const { t } = await mount({ cols: 160, rows: 40 });
+  const signRows = () => lines(t).filter((l) => l.includes("██")).join("\n");
+  const before = signRows();
+  await Bun.sleep(300);
+  await t.flush();
+  expect(signRows()).toBe(before);
+});
+
+test("a GIF chosen in Sistema takes the right end of the sign row; none is shown by default", async () => {
+  const { t } = await mount({ cols: 160, rows: 40 });
+  const rowsWithInk = lines(t).filter((l) => l.includes("██"));
+  expect(rowsWithInk).toHaveLength(5); // only the sign: no picture beside it
 });
 
 test("the machine block (cores, memory, facts) stretches with the terminal width, not past the old 120-cell cap", async () => {
@@ -417,4 +465,24 @@ test("the machine block (cores, memory, facts) stretches with the terminal width
   expect(memRow).toBeDefined();
   const factRows = lines(wide.t).slice(0, 12).filter((l) => l.includes("ligado"));
   expect(factRows[0]!.indexOf("ligado")).toBeGreaterThan(100); // the facts moved to the right half of the wide page
+});
+
+test.each([[80, 40], [120, 40], [250, 40]] as const)("decorative rules run along the middle row of the logo to both edges of the page, at %ix%i", async (cols, rows) => {
+  const { t } = await mount({ cols, rows });
+  const all = lines(t);
+  const ink = all.map((l, i) => [l, i] as const).filter(([l]) => l.includes("██"));
+  const middle = ink[2]![0];
+  const start = middle.indexOf("█");
+  const end = middle.lastIndexOf("█");
+  const left = middle.slice(0, start);
+  const right = middle.slice(end + 1);
+  expect(left).toContain("─");
+  expect(right).toContain("─");
+  expect(left.trim()).toMatch(/^─+$/); // nothing but the rule at the left
+  expect(right.trim()).toMatch(/^─+$/); // and at the right
+  expect(left.endsWith("  ")).toBe(true); // a gap before the letters
+  expect(right.startsWith("  ")).toBe(true); // and after them
+  expect(left.indexOf("─")).toBe(2); // the left rule begins at the left edge of the content...
+  expect(middle.lastIndexOf("─")).toBe(cols - 3); // ...and the right one ends at its right edge
+  for (const i of [0, 1, 3, 4]) expect(ink[i]![0].includes("─")).toBe(false); // the other rows have no rule
 });

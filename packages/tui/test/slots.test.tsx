@@ -79,7 +79,7 @@ test.each([[80, 40], [230, 40]] as const)("the notices of the modules are rows o
   const { t } = await mount({ cols, rows });
   const lines = t.frame().split("\n");
   expect(lines[0]).toContain("Início");
-  const header = lines.findIndex((l) => l.includes("╭─ 1 Atenção"));
+  const header = lines.findIndex((l) => /^\s*(▌ )?\s*1 Atenção/.test(l));
   const notice = lines.findIndex((l) => l.includes("[i] demo: tudo certo"));
   expect(header).toBeGreaterThan(-1);
   expect(notice).toBeGreaterThan(header); // under the header, as a row with the glyph of its level

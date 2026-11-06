@@ -12,14 +12,15 @@ import { useRouter, useScreenScope } from "../router.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import { loadFavorites } from "../palette/favorites.ts";
 import { usePages } from "../sdk-ui/host.tsx";
-import { Frame, headerParts } from "../sdk-ui/kit.tsx";
+import { Panel } from "../sdk-ui/kit.tsx";
 import type { SessionApi } from "../session/store.ts";
 import { useTheme } from "../theme-context.tsx";
 import { useTabs } from "./context.ts";
+import { HomeLogo } from "./HomeLogo.tsx";
 import { MachineBlock } from "./HomeMachine.tsx";
 import { HomeRowView, rowColumns } from "./HomeRows.tsx";
 import { NoteComposer, outcomeOfRun } from "./HomeNote.tsx";
-import { activityRows, activitySummary, attentionRows, chipRows, memoryRows, NEW_NOTE_ROW_ID, NEW_NOTE_TEXT, noteRows, notesSummary, upToDateText, type HomeRow } from "./home-rows.ts";
+import { activityRows, attentionRows, chipRows, memoryRows, NEW_NOTE_ROW_ID, noteRows, upToDateText, type HomeRow } from "./home-rows.ts";
 import { slotItems, syncHost, type Att, type Chip } from "./home.ts";
 import type { TabsNav } from "./Tabs.tsx";
 
@@ -39,10 +40,10 @@ export const createHomeNav = (): HomeNav => ({ panel: "atencao", inside: false, 
 const SAMPLE_MS = 2000;
 /** Columns the frame and the page padding take from the terminal width (two on each side). */
 const FRAME_W = 4;
-/** Columns a section's Frame takes inside the content width: two borders and two cells of padding. */
-const GUTTER_W = 4;
-/** Cells of `   + nova nota`. */
-const NEW_NOTE_W = 14;
+/** Columns a section's gutter takes: the `▌` and its padding. */
+const GUTTER_W = 2;
+/** The width of the sections: a reading column, so no line is stretched across a wide terminal. */
+const READ_W = 100;
 let shared: MachineSampler | undefined;
 
 type RowsBySection = Record<HomePanel, HomeRow[]>;
@@ -197,10 +198,11 @@ export function HomeTab({ store, nav, registry, sampler, session = hostSession }
   };
 
   const width = cols - FRAME_W; // the whole terminal width
+  const sectionW = Math.min(width, READ_W); // the cells the sections get
   const sectionRows = (panel: HomePanel) => {
     const active = focused && nav.home.panel === panel;
     const list = rows[panel];
-    const columns = rowColumns(list, width - GUTTER_W, { c, result });
+    const columns = rowColumns(list, sectionW - GUTTER_W, { c, result });
     return (
       <>
         {list.map((row) => (
@@ -210,13 +212,13 @@ export function HomeTab({ store, nav, registry, sampler, session = hostSession }
       </>
     );
   };
-  const sectionTitle = (panel: HomePanel) => `${sections.indexOf(panel) + 1} ${headerParts(SECTION_TITLES[panel], "").label}`;
+  const sectionTitle = (panel: HomePanel) => `[${sections.indexOf(panel) + 1}] ${SECTION_TITLES[panel]}`;
   const sectionActive = (panel: HomePanel) => focused && nav.home.panel === panel;
   const frame = (panel: HomePanel, children: React.ReactNode, aside?: string) => (
     <box key={panel} id={`home:${panel}`} flexShrink={0}>
-      <Frame wide panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} active={sectionActive(panel)} aside={aside}>
+      <Panel wide panelRef={panels.ref(panel) as never} onPress={pressSection(panel)} title={sectionTitle(panel)} tone={sectionActive(panel) ? "accent" : undefined} aside={aside}>
         {children}
-      </Frame>
+      </Panel>
     </box>
   );
 
@@ -227,24 +229,13 @@ export function HomeTab({ store, nav, registry, sampler, session = hostSession }
     </>
   );
 
-  /** Notas and Atividade are one line until enter opens them (and while they are open they list their rows). */
-  const expanded = (panel: HomePanel) => nav.home.panel === panel && nav.home.inside;
-  const openSection = (panel: HomePanel) => {
-    rowHit.current = true;
-    nav.home.panel = panel;
-    nav.home.inside = rows[panel].length > 0;
-    bump();
-  };
-  const summaryRoom = Math.max(10, width - GUTTER_W - (canCompose ? NEW_NOTE_W : 0));
-  const summaries: Record<"notas" | "atividade", React.ReactNode> = {
-    notas: (
-      <text wrapMode="none" onMouseDown={() => openSection("notas")}>
-        <span fg={c.dim}>{notesSummary(rows.notas, summaryRoom)}</span>
-        {canCompose ? <span fg={c.accent}>{`   ${NEW_NOTE_TEXT}`}</span> : null}
-      </text>
-    ),
-    atividade: <text wrapMode="none" fg={c.dim} onMouseDown={() => openSection("atividade")}>{activitySummary(rows.atividade, summaryRoom)}</text>,
-  };
+  /** The rows of Notas and Atividade, always open; `nenhuma` when a section has nothing. */
+  const openRows = (panel: HomePanel) => (
+    <>
+      {rows[panel].some((row) => !row.action) ? null : <text wrapMode="none" flexShrink={0} fg={c.dim}>{"  nenhuma"}</text>}
+      {sectionRows(panel)}
+    </>
+  );
   const noteCount = rows.notas.filter((row) => !row.action).length;
   const asides: Partial<Record<HomePanel, string>> = { notas: String(noteCount) };
 
@@ -254,11 +245,10 @@ export function HomeTab({ store, nav, registry, sampler, session = hostSession }
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
         <box flexDirection="column" paddingX={1} flexShrink={0}>
           <MachineBlock machine={sample} product={slots.read("home.product", hidden) as string | undefined} sessionIp={sessionIp} width={width} />
-          {sections.map((panel) => {
-            if (panel === "atencao") return frame(panel, attentionBody, asides[panel]);
-            if (!expanded(panel)) return frame(panel, summaries[panel], asides[panel]);
-            return frame(panel, sectionRows(panel), asides[panel]);
-          })}
+          <HomeLogo cols={cols} width={width} />
+          <box flexDirection="column" width={sectionW} flexShrink={0}>
+            {sections.map((panel) => frame(panel, panel === "atencao" ? attentionBody : openRows(panel), asides[panel]))}
+          </box>
         </box>
       </scrollbox>
       {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}

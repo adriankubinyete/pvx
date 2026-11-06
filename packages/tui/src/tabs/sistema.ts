@@ -17,17 +17,17 @@ export const isTokenRow = (id: string): id is `token:${TokenKey}` => id.startsWi
 export const tokenOfRow = (id: `token:${TokenKey}`): TokenKey => id.slice("token:".length) as TokenKey;
 
 /** The rows the cursor stops on. */
-export type RowId = "update" | "theme" | "accent" | "symbols" | "border" | "result" | "from" | "tasks" | `token:${TokenKey}`;
+export type RowId = "update" | "theme" | "accent" | "symbols" | "border" | "result" | "from" | "tasks" | "gif" | `token:${TokenKey}`;
 
 /** The rows of the page, in the order they are drawn. With the custom theme the options of a preset (accent, symbols, frame, result) give way to the editor: "começar de" and one row per color. */
 export function rowIds(customTheme: boolean): RowId[] {
   const appearance: RowId[] = customTheme ? ["from", ...TOKEN_KEYS.map(tokenRowId)] : ["accent", "symbols", "border", "result"];
-  return ["update", "theme", ...appearance, "tasks"];
+  return ["update", "theme", ...appearance, "tasks", "gif"];
 }
 
 export function sectionOfRow(id: RowId): Section {
   if (id === "update") return "pvx";
-  if (id === "tasks") return "avancado";
+  if (id === "tasks" || id === "gif") return "avancado";
   return "aparencia";
 }
 

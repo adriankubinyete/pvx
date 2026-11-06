@@ -115,21 +115,3 @@ export function truncate(text: string, width: number): string {
   if (cells.length <= width) return text;
   return `${cells.slice(0, Math.max(0, width - 1)).join("")}…`;
 }
-
-const p2 = (n: number) => String(n).padStart(2, "0");
-
-/** The one line of the activity: `17:20 alfa confirm · 17:19 alfa ip accept 1.1.1.1`, cut to `width`; `nenhuma` when nothing ran. */
-export function activitySummary(rows: readonly HomeRow[], width: number): string {
-  if (!rows.length) return "nenhuma";
-  const parts = rows.map((row) => {
-    const time = row.at === undefined ? "" : `${p2(new Date(row.at).getHours())}:${p2(new Date(row.at).getMinutes())} `;
-    return `${time}${row.text}`;
-  });
-  return truncate(parts.join(" · "), width);
-}
-
-/** The one line of the notes: the latest one, or `nenhuma`. */
-export function notesSummary(rows: readonly HomeRow[], width: number): string {
-  const first = rows.find((row) => !row.action);
-  return first ? truncate(first.text, width) : "nenhuma";
-}

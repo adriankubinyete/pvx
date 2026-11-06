@@ -1,7 +1,7 @@
 import type { KeyEvent } from "@opentui/core";
 import { paletteShortcuts } from "./palette/shortcuts.ts";
 
-export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "tasks" | "logs" | "logsearch" | "session" | "shell" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
+export type Scope = "global" | "menu" | "home" | "homein" | "tabs" | "sistema" | "sistemaedit" | "sistematema" | "sistemalista" | "tasks" | "logs" | "logsearch" | "session" | "shell" | "block" | "palette" | "form" | "result" | "log" | "modules" | "catalog" | "actions" | "add" | "review" | "files" | "search" | "modal" | `page:${string}`;
 
 export interface Shortcut {
   /** Display text, also the spec for `matchKey`: `ctrl+k`, `esc`, `?`, `L`, `enter`. */
@@ -85,6 +85,9 @@ const base: readonly Shortcut[] = [
   { keys: "1-3", label: "seção", scope: "sistema", footer: true },
   { keys: "↑↓", label: "move", scope: "sistema" },
   { keys: "esc", label: "abas", scope: "sistema", footer: true },
+  { keys: "↑↓", label: "opção", scope: "sistemalista", footer: true },
+  { keys: "enter", label: "aplica", scope: "sistemalista", footer: true },
+  { keys: "esc", label: "volta", scope: "sistemalista", footer: true },
   { keys: "↑↓", label: "move", scope: "sistematema", footer: true },
   { keys: "enter", label: "edita", scope: "sistematema", footer: true },
   { keys: "←→", label: "começar de", scope: "sistematema", footer: true },

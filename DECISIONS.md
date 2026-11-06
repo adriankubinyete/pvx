@@ -1814,3 +1814,73 @@ O eixo `moldura` ganha a opção `ascii` (`+` nos cantos, `-` e `|` nos lados e 
 **Motivo:** em terminal largo o conteúdo ficava preso à esquerda; o `│` da barra e a régua abaixo ficavam sem ligação.
 
 **Limite:** a prévia do Sistema acompanha a largura (36%, mínimo 36 células). Teste: `clock.test.tsx`, `sistema.test.tsx`, `home.test.tsx`.
+
+## 2026-11-06 — Sistema: a lista de temas se abre com enter
+
+**Status:** vigente. Muda a escolha do `tema`, que antes se aplicava com `←→`.
+
+**Decisão:** na linha `tema`, `enter` leva o cursor para dentro da lista radio. Lá `↑↓` movem o cursor (marcado com `»`, parando nas pontas) e a prévia mostra a opção sob ele, mas nada é aplicado; `enter` aplica e fecha, `esc` fecha sem mudar. O rodapé passa a `↑↓ opção · enter aplica · esc volta` (escopo `sistemalista`). `→` na linha também abre a lista (como `enter`); `←` só avisa como abrir. O clique numa opção aplica, como antes.
+
+**Motivo:** a lista vertical não combinava com `←→`, e aplicar só de passar pela opção trocava o tema sem o técnico ter escolhido.
+
+**Limite:** as outras linhas de escolha (símbolos, moldura, resultado) seguem aplicando com `←→`.
+
+## 2026-11-06 — Início: seções sem moldura, em colunas, e a logo
+
+**Status:** vigente. Substitui os quadros (`Frame`) das três seções do Início; o bloco da máquina (núcleos, memória, disco, fatos, rede) não mudou.
+
+**Decisão:** Atenção, Notas e Atividade voltam a ser seções com cabeçalho e calha (`Panel`, sem moldura). Abaixo de 140 colunas ficam empilhadas, com uma linha em branco entre elas; a partir de 140, lado a lado em colunas iguais, com 4 células de vão (`←→` passam de uma a outra, pela posição). A logo (cinco linhas de blocos, na cor de destaque) fecha a página. As setas e o número de cada seção seguem como estavam.
+
+**Motivo:** os quadros colados, esticados na largura toda e com pouco texto dentro ficavam pesados.
+
+**Limite:** a logo é estática. O OpenTUI decodifica GIF, mas desenha só uma imagem parada: animar exigiria extrair os quadros e trocar a imagem num timer. Teste com o GIF do dono: lido (320×293, 10 quadros) e desenhado em `blocks`, sem animação.
+
+## 2026-11-06 — OpenTUI 0.8.2 e imagens animadas (GIF)
+
+**Status:** vigente para o OpenTUI e o decodificador. Nenhum GIF faz parte do produto: o mecanismo existe para o dono testar imagens, e o GIF usado para provar a técnica foi retirado do repositório (os testes usam `packages/tui/test/fixtures/clip.gif`, de 32×32).
+
+**Decisão:** o pvx passa a usar `@opentui/core` e `@opentui/react` `0.8.2` (eram `0.5.17`). Para animar um GIF, ele é embutido (lido do caminho escolhido), decodificado uma vez com `gifuct-js` 2.1.2 (MIT, fixado) em quadros RGBA completos (`gif-frames.ts`, com os métodos de descarte do GIF) e trocado num timer com o atraso de cada quadro (`HomeClip.tsx`); o desenho é o `ImageRenderable`. O GIF não vem com o pvx: ele só aparece se o técnico escolher um arquivo em Sistema, Avançado, `gif do Início` (`enter` edita, cola-se ou arrasta-se o caminho; o arquivo é lido e validado antes de ser guardado; vazio remove). Escolhido, ocupa cerca de 30% da largura do terminal (de 26 a 70 células) ao lado da logo, a partir de 108 colunas. O estado guarda o caminho em `homeGif`.
+
+**Motivo:** o OpenTUI decodifica GIF como uma imagem só e não anima. O `VideoRenderable` da `0.8` toca só MP4 (H.264), sem canal alfa: o fundo transparente do GIF virava branco. Com quadros RGBA o desenho em `blocks` respeita o alfa e o fundo transparente mostra a página. O custo é alto: cada quadro troca a imagem inteira e re-renderiza a faixa, então o GIF fica pesado em terminais grandes; por isso é opcional.
+
+**Limite:** a `0.8` mudou o padrão de `flexShrink` do `<text>` (agora encolhe): um texto solto numa coluna que encolhe pode sumir; use `flexShrink={0}`. O `scrollTo` nativo falha em um scrollbox ainda sem layout: `scrollSafely` (follow.ts) engole a falha. Testes que esperavam o conteúdo logo após a tela abrir passaram a esperar o conteúdo. O GIF é 1 bit de alfa (cada pixel é opaco ou transparente), então as bordas suavizadas do original ficam serrilhadas; o desenho em `blocks` dá meia célula por pixel (granulado), e kitty ou sixel só onde o terminal suporta. O timer roda só com o Início montado.
+
+## 2026-11-06 — A logo entre as estatísticas e as seções
+
+**Status:** vigente. Muda a posição da logo (antes no fim do Início).
+
+**Decisão:** a logo PHONEVOX fica entre o bloco da máquina (núcleos, memória, fatos) e as seções, centralizada na largura da página, com uma linha em branco acima. O bloco da máquina não mudou.
+
+**Motivo:** pedido do dono: a logo marca a divisão entre o que a máquina diz e o que o técnico trabalha.
+
+**Limite:** a logo tem 70 células: cabe a partir de 80 colunas. Um GIF escolhido em Sistema fica ao lado dela e o par é centralizado.
+
+## 2026-11-06 — A logo digita sozinha (typewriter)
+
+**Status:** vigente.
+
+**Decisão:** a logo é animada como uma máquina de escrever (`logo-frames.ts`, `TypedLogo` em `HomeLogo.tsx`). Ela começa escrita, com o cursor piscando (3 vezes); depois as letras são apagadas do fim para o começo, há uma espera com o cursor piscando na linha vazia, e as letras são digitadas de novo, uma a uma; e o ciclo recomeça. O cursor é um bloco de 2 células (a espessura de um traço da logo) logo depois da última letra; a caixa reserva 3 células de cada lado para ele, então a logo não anda e continua centralizada.
+
+**Motivo:** pedido do dono; dá vida à tela sem competir com os dados.
+
+**Limite:** o passo é estado só do `TypedLogo`: a cada tick redesenham só as cinco linhas, e o timer existe só com o Início montado. Os tempos (piscada 500 ms, apagar 80 ms, digitar 140 ms) são constantes em `logo-frames.ts`.
+
+## 2026-11-06 — A logo vira um letreiro que rola
+
+**Status:** vigente. Substitui o typewriter como a logo do Início; o typewriter fica no código, sem uso.
+
+**Decisão:** a logo é um letreiro de ônibus (`marquee.ts`, `Marquee` em `HomeLogo.tsx`): cópias do texto "PHONEVOX GROUP TECHNOLOGY" (e não só da logo), 14 células de vão entre elas, rolando uma célula para a esquerda a cada 70 ms pela largura toda da página, sem parar. Fica entre o bloco da máquina e as seções, na cor de destaque, e começa com a logo na ponta esquerda. O estado é só o deslocamento, dentro do `Marquee`: a cada passo redesenham só as cinco linhas; o timer existe só com o Início montado. O GIF escolhido em Sistema, se houver, ocupa a ponta direita da linha e o letreiro fica com o resto. `TypedLogo` e `logo-frames.ts` (a animação de digitar) continuam no código para uso futuro.
+
+**Motivo:** pedido do dono, que mudou de ideia sobre o typewriter.
+
+**Limite:** o letreiro redesenha cinco linhas largas cerca de 14 vezes por segundo; em terminais muito largos, e por SSH, isso é tráfego constante. A velocidade é `MARQUEE_STEP_MS`, o vão `MARQUEE_GAP_W`. As letras vêm de uma fonte de blocos (`logo-font.ts`: cinco linhas, sete células, traço de duas); G, R, U, T, C, L e Y foram desenhadas no mesmo estilo das de PHONEVOX, que saem idênticas ao desenho original. O texto tem 215 células, então uma volta do letreiro leva uns 16 segundos.
+
+## 2026-11-06 — A logo é fixa: só PHONEVOX
+
+**Status:** vigente. Substitui o letreiro rolando (que fica no código, sem uso) como a logo do Início.
+
+**Decisão:** o Início mostra a palavra PHONEVOX em letras de bloco (70 células), fixa e centralizada na largura da página, entre o bloco da máquina e as seções (`FixedLogo` em `HomeLogo.tsx`). Não há timer: nada redesenha. O `Marquee` (letreiro, com o texto "PHONEVOX GROUP TECHNOLOGY"), o `TypedLogo` (typewriter) e a fonte de blocos de `logo-font.ts` continuam no código para uso futuro. Um GIF escolhido em Sistema, se houver, ocupa a ponta direita da linha e a logo é centralizada no resto.
+
+**Motivo:** o letreiro ficou lento na máquina de produção, que é fraca. "PHONEVOX GROUP" (120 células) não cabe em terminal pequeno.
+
+**Limite:** a logo some se o espaço for menor que 70 células (o mínimo do pvx, 80 colunas, deixa 76).

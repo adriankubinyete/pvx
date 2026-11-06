@@ -49,19 +49,20 @@ const lines = (t: TuiHarness) => t.frame().split("\n");
 test("Início has a Notas section that says `nenhuma` and offers `+ nova nota`", async () => {
   const { t } = await mount();
   expect(t.frame()).toContain("2 Notas");
-  expect(t.frame()).toMatch(/│ nenhuma\s+\+ nova nota/);
+  expect(t.frame()).toContain("nenhuma");
+  expect(t.frame()).toContain("+ nova nota"); // the action is a row of its own, under `nenhuma`
   expect(registry.pages.has("nota.notas")).toBe(false); // no separate page any more
 });
 
-test("the notes show as `dd/mm  texto  — assinatura`, newest first, and the first one is on the collapsed line", async () => {
+test("the notes show as `dd/mm  texto  — assinatura`, newest first, one row each", async () => {
   note("a1a1a1", "token trocado", { at: "2026-10-14T10:00:00.000", signature: "Carlos" });
   note("b2b2b2", "solta, sem assinatura", { at: "2026-10-15T10:00:00.000" });
   const { t } = await mount();
-  expect(t.frame()).toMatch(/│ 15\/10  solta, sem assinatura\s+\+ nova nota/);
+  expect(lines(t).filter((line) => /\d\d\/\d\d  /.test(line))).toHaveLength(2); // both are shown, open, before any key
   await openNotesSection(t);
   const rows = lines(t).filter((line) => /\d\d\/\d\d  /.test(line));
-  expect(rows[0]).toMatch(/15\/10  solta, sem assinatura\s*│/);
-  expect(rows[1]).toMatch(/14\/10  token trocado  — Carlos\s*│/);
+  expect(rows[0]).toMatch(/15\/10  solta, sem assinatura\s*$/);
+  expect(rows[1]).toMatch(/14\/10  token trocado  — Carlos\s*$/);
   expect(t.frame()).toContain("+ nova nota");
 });
 

@@ -113,7 +113,7 @@ test("a shrinkable Panel gives up height instead of pushing the footer off the s
     <ThemeProvider>
       <box flexDirection="column" height={6}>
         <Panel title="p" shrink={shrink}>{body}</Panel>
-        <text>rodapé</text>
+        <text flexShrink={0}>rodapé</text>
       </box>
     </ThemeProvider>
   );

@@ -44,3 +44,12 @@ test("the Tarefas tab is off by default, round-trips, and anything but true coun
   });
   withFile(JSON.stringify({ showTasksTab: "sim" }), (p) => expect(loadTuiState(p).showTasksTab).toBe(false));
 });
+
+test("the Início GIF is a path: empty by default, round-trips, and a non-string counts as empty", () => {
+  expect(defaultTuiState().homeGif).toBe("");
+  withFile("{}", (p) => {
+    saveTuiState({ ...defaultTuiState(), homeGif: "/tmp/a b.gif" }, p);
+    expect(loadTuiState(p).homeGif).toBe("/tmp/a b.gif");
+  });
+  withFile(JSON.stringify({ homeGif: 7 }), (p) => expect(loadTuiState(p).homeGif).toBe(""));
+});

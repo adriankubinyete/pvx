@@ -9,6 +9,7 @@ import { useOver } from "../hover.ts";
 import { useNudge } from "../nudge.tsx";
 import { wrap } from "../panelnav.ts";
 import { useRouter, useScreenScope } from "../router.tsx";
+import { existsSync, readFileSync } from "node:fs";
 import { Panel } from "../sdk-ui/kit.tsx";
 import { SessionModals } from "../session/Modals.tsx";
 import type { SessionApi } from "../session/store.ts";
@@ -16,8 +17,10 @@ import { useTheme } from "../theme-context.tsx";
 import { hexTokensFor, normalizeHex, tokensFor, TOKEN_KEYS, type HexTokens, type ThemeName } from "../theme.ts";
 import type { TuiState } from "@pvx/core";
 import { useTabs } from "./context.ts";
+import { decodeGif } from "./gif-frames.ts";
+import { cleanGifPath } from "./gif-path.ts";
 import { PvxInfo, UpdateButtons, UPDATE_BUTTONS, useUpdateCheck, type UpdateButton } from "./SistemaPvx.tsx";
-import { ChoiceCells, RadioCells, SETTING_LABEL_W, SettingRow, SwatchCells } from "./SistemaRows.tsx";
+import { ChoiceCells, GifControls, RadioCells, SETTING_LABEL_W, SettingRow, SwatchCells } from "./SistemaRows.tsx";
 import { BESIDE_COLS, sampleWidth, ThemeSample } from "./ThemeSample.tsx";
 import { FromControls, SOURCES, TokenControls } from "./ThemeTokenRows.tsx";
 import { ACCENT_OPTIONS, choiceAxisOf, CHOICE_AXES, cycle, firstRowOf, isTokenRow, presetColor, rowIds, SECTION_TITLES, SECTIONS, sectionOfKey, sectionOfRow, tokenOfRow, tokenRowId, type RowId, type Section } from "./sistema.ts";
@@ -49,13 +52,16 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
   const [button, setButton] = useState<UpdateButton>("verify");
   const [swatch, setSwatch] = useState<string | undefined>(undefined); // the accent swatch the keyboard is on, until enter chooses it
   const [from, setFrom] = useState("dark");
+  const [listOpen, setListOpen] = useState(false); // the theme list has the keyboard: ↑↓ choose the option under the cursor, enter applies
+  const [themeCursor, setThemeCursor] = useState<string>("dark");
   const [edit, setEdit] = useState<Line | null>(null); // the hex being typed
   const [hover, setHover] = useState<Partial<TuiState>>({}); // the option the mouse is over, previewed
   const state = useUpdateCheck(store, registry, version);
   const rows = useOver(); // the row under the mouse
   const parts = useOver(); // the color value under the mouse
   const scroll = useRef<ScrollBoxRenderable>(null);
-  useScreenScope(edit ? "sistemaedit" : "sistema", 1);
+  const inList = listOpen && row === "theme"; // moving to another row (the mouse) closes it
+  useScreenScope(edit ? "sistemaedit" : inList ? "sistemalista" : "sistema", 1);
   useEffect(() => void scroll.current?.scrollChildIntoView(`sistema:${row}`), [row]);
 
   const width = cols - FRAME_W; // the whole terminal width
@@ -65,7 +71,23 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
   const toggleTasks = () => set({ showTasksTab: !axes.showTasksTab });
   const choose = (axis: Axis, value: string) => set({ [axis]: value });
   const chooseAccent = (value: string) => (setSwatch(undefined), choose("accent", value));
+  /** The GIF typed on the `gif` row: empty removes it; anything else must be a readable GIF. */
+  const applyGif = () => {
+    const path = cleanGifPath(edit!.text);
+    if (path !== "") {
+      if (!existsSync(path)) return nudge("arquivo não encontrado");
+      try {
+        decodeGif(new Uint8Array(readFileSync(path)));
+      } catch (e) {
+        return nudge(`não é um gif que eu consiga ler: ${(e as Error).message}`);
+      }
+    }
+    set({ homeGif: path });
+    setEdit(null);
+    nudge(path === "" ? "gif removido" : "gif aplicado", "ok");
+  };
   const applyEdit = () => {
+    if (row === "gif") return applyGif();
     const value = normalizeHex(edit!.text);
     if (!value) return nudge("hex inválido: use #rrggbb");
     if (isTokenRow(row)) set({ custom: { ...axes.custom, [tokenOfRow(row)]: value } });
@@ -74,17 +96,34 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
   /** `delta` steps the value of a row; the rows with nothing to step ignore it. */
   const step = (delta: number) => {
     const axis = choiceAxisOf(row);
+    if (row === "theme") return delta > 0 ? openList() : nudge("→ ou enter abre a lista de temas"); // → goes in, like enter
     if (axis) return choose(axis.id, cycle(axis.options, axes[axis.id], delta));
     if (row === "accent") return setSwatch(cycle(ACCENT_OPTIONS, swatch ?? axes.accent, delta));
     if (row === "from") return setFrom(cycle(SOURCES, from, delta));
     if (row === "update") return setButton(UPDATE_BUTTONS[wrap(UPDATE_BUTTONS.indexOf(button), delta, UPDATE_BUTTONS.length)]!);
-    nudge(isTokenRow(row) ? "enter edita o valor" : "nada para escolher");
+    nudge(isTokenRow(row) || row === "gif" ? "enter edita o valor" : "nada para escolher");
+  };
+  const openList = () => (setThemeCursor(axes.theme), setListOpen(true));
+  const themeOptions = CHOICE_AXES.find((candidate) => candidate.id === "theme")!.options;
+  /** ↑↓ inside the theme list: the cursor moves, nothing is applied until enter. It stops at the ends. */
+  const moveInList = (delta: number) => {
+    const index = themeOptions.findIndex(([option]) => option === themeCursor) + delta;
+    if (index >= 0 && index < themeOptions.length) setThemeCursor(themeOptions[index]![0]);
+  };
+  const keysInList = (key: RoutedKey) => {
+    if (key.name === "up") return moveInList(-1), true;
+    if (key.name === "down") return moveInList(1), true;
+    if (matchKey(key, "enter")) return choose("theme", themeCursor), setListOpen(false), true;
+    if (matchKey(key, "esc")) return setListOpen(false), true;
+    return true; // the list owns the keyboard: the other keys do nothing
   };
   const activate = () => {
+    if (row === "theme") return openList();
     if (row === "update") return press(button);
     if (row === "tasks") return toggleTasks();
     if (row === "accent") return chooseAccent(swatch ?? axes.accent);
     if (row === "from") return set({ custom: { ...hexTokensFor(from as ThemeName)! } });
+    if (row === "gif") return setEdit(lineOf(axes.homeGif));
     if (isTokenRow(row)) return setEdit(lineOf(hex[tokenOfRow(row)]));
     step(1);
   };
@@ -109,7 +148,7 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
     if (matchKey(key, "u")) return state.update(), true;
     if (matchKey(key, "esc")) return tabs?.focusBar(), true;
   };
-  useKeys((key) => (!focused ? undefined : edit ? keysWhileEditing(key) : onKey(key)), { paste: true });
+  useKeys((key) => (!focused ? undefined : edit ? keysWhileEditing(key) : inList ? keysInList(key) : onKey(key)), { paste: true });
 
   const pick = (id: string) => setRow(id as RowId);
   const hoverRow = (id: string) => (rows.enter(id), focused && !edit && pick(id));
@@ -136,7 +175,7 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
     const onChoose = (value: string) => choose(axis.id, value);
     const onHover = (value: string | undefined) => setHover(value ? { [axis.id]: value } : {});
     const controls = axis.id === "theme"
-      ? <RadioCells options={axis.options} value={axes.theme} on={on} onChoose={onChoose} onHover={onHover} />
+      ? <RadioCells options={axis.options} value={axes.theme} cursor={inList ? themeCursor : undefined} on={on} onChoose={(value) => (setListOpen(false), onChoose(value))} onHover={onHover} />
       : <ChoiceCells options={axis.options} value={axes[axis.id]} on={on} room={choiceRoom} onChoose={onChoose} onHover={onHover} />;
     return settingRow(axis.id, axis.label, controls);
   };
@@ -158,7 +197,7 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
     const typed = edit && isTokenRow(row) ? normalizeHex(edit.text) : null;
     return typed && isTokenRow(row) ? { custom: { ...axes.custom, [tokenOfRow(row)]: typed } } : {};
   };
-  const keyboardPatch: Partial<TuiState> = row === "accent" && swatch ? { accent: swatch } : {};
+  const keyboardPatch: Partial<TuiState> = row === "accent" && swatch ? { accent: swatch } : inList ? { theme: themeCursor as ThemeName } : {};
   const patch = { ...keyboardPatch, ...typedPatch(), ...hover };
 
   const appearanceRows = <>{choiceRow("theme")}{options}</>;
@@ -183,13 +222,17 @@ export function SistemaTab({ store, registry, version }: { store: SessionApi; re
       </text>
     </box>
   ));
+  const gifRow = settingRow("gif", "gif do Início", (
+    <GifControls path={axes.homeGif} edit={row === "gif" ? edit : null} width={Math.max(20, innerWidth - CURSOR_W - SETTING_LABEL_W - 2)} hot={parts.over === "gif"}
+      onOverValue={() => parts.enter("gif")} onOutValue={() => parts.leave("gif")} onPressValue={() => (setRow("gif"), !edit && setEdit(lineOf(axes.homeGif)))} />
+  ));
   return (
     <box flexGrow={1} minHeight={0} flexDirection="column">
       <scrollbox ref={scroll} flexGrow={1} minHeight={0} focused={false}>
         <box flexDirection="column" paddingX={1} flexShrink={0}>
           {sectionPanel("pvx", <PvxInfo state={state} width={innerWidth} actions={updateRow} />)}
           {sectionPanel("aparencia", appearance)}
-          {sectionPanel("avancado", advanced)}
+          {sectionPanel("avancado", <>{advanced}{gifRow}</>)}
         </box>
       </scrollbox>
       {router.scope === "palette" ? null : <SessionModals store={store} pending={pending} />}

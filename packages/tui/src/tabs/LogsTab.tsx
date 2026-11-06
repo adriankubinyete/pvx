@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ScrollBoxRenderable } from "@opentui/core";
 import { jobOfEntry, listTasks, type LogLevel, type Registry } from "@pvx/core";
-import { followProps } from "../follow.ts";
+import { followProps, scrollSafely } from "../follow.ts";
 import { matchKey } from "../keymap.ts";
 import { editLine, lineOf, type Line } from "../lineedit.ts";
 import { LineText } from "../LineText.tsx";
@@ -59,7 +59,7 @@ export function LogsTab({ store, registry, nav, refreshMs }: { store: SessionApi
   const rows = useMemo(() => groupByDay(lines, Date.now()), [lines]);
 
   useEffect(() => {
-    if (live) scroll.current?.scrollTo(scroll.current.scrollHeight);
+    if (live) scrollSafely(() => scroll.current?.scrollTo(scroll.current.scrollHeight));
     else if (currentLine) scroll.current?.scrollChildIntoView(`log:${currentLine.id}`);
   }, [currentLine?.id, live, opened]);
 

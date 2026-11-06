@@ -18,10 +18,12 @@ export interface TuiState {
   hiddenWidgets: string[];
   /** The Tarefas tab (background jobs of every module) is shown. Off by default. */
   showTasksTab: boolean;
+  /** Path of the GIF the technician chose to show beside the logo on Início; empty is none. */
+  homeGif: string;
 }
 
 export function defaultTuiState(): TuiState {
-  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {}, hiddenTabs: [], hiddenWidgets: [], showTasksTab: false };
+  return { theme: "dark", accent: "tema", symbols: "unicode", border: "rounded", result: "bracket", custom: {}, hiddenTabs: [], hiddenWidgets: [], showTasksTab: false, homeGif: "" };
 }
 
 export function tuiStatePath(): string {
@@ -40,6 +42,7 @@ export function loadTuiState(path = tuiStatePath()): TuiState {
       hiddenTabs: strings(raw?.hiddenTabs),
       hiddenWidgets: strings(raw?.hiddenWidgets),
       showTasksTab: raw?.showTasksTab === true,
+      homeGif: typeof raw?.homeGif === "string" ? raw.homeGif : d.homeGif,
       theme: pick("theme", ["dark", "light", "contrast", "terminal", "custom"]),
       accent: typeof raw?.accent === "string" ? raw.accent : d.accent,
       symbols: pick("symbols", ["unicode", "ascii"]),

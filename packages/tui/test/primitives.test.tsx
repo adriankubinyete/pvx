@@ -382,8 +382,9 @@ for (const cols of [80, 120]) {
     // the date goes first when the tabs leave no room for it (80 columns), then the time
     expect(bar).toMatch(cols === 80 ? / │ 13:39:04 · pvx 0\.1\.2 dev \+3 *$/ : / │ qui 15\/10 13:39:04 · pvx 0\.1\.2 dev \+3 *$/);
     expect(bar!.match(/│/g)).toHaveLength(1);
-    expect(rule!.trim()).toBe("─".repeat(cols - 2));
-    expect(spanOf(h, "─".repeat(cols - 2)).fg.equals(color(tokens.border))).toBe(true);
+    expect(rule!.trim().replace("┴", "─")).toBe("─".repeat(cols - 2));
+    expect(rule![bar!.indexOf("│")]).toBe("┴"); // the rule meets the separator of the bar
+    expect(spanOf(h, rule!.trim().slice(0, 10)).fg.equals(color(tokens.border))).toBe(true);
     expect([...bar!].length).toBeLessThanOrEqual(cols);
   });
 }

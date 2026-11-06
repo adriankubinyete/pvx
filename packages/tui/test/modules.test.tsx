@@ -336,7 +336,7 @@ test("slow reads show a spinner and text, never a frozen screen: the catalog and
   t.destroy();
   const m = await mount();
   await see(m.t, (x) => /ld\s+● carregado/.test(x));
-  expect(m.t.frame()).not.toContain("lendo os módulos…"); // gone once the rows are in
+  await see(m.t, (x) => !x.includes("lendo os módulos…")); // gone once the rows are in
 }, 30_000); // a git clone: slow when the suite runs in parallel
 
 test("d disables and enables live", async () => {
@@ -369,10 +369,11 @@ test("r on a module awaiting trust reviews it; enter opens the menu with revisar
   await see(t, (x) => x.includes("revisão de confiança · aw"));
   await t.press("ESCAPE");
   await see(t, (x) => !x.includes("revisão de confiança"));
+  await see(t, (x) => /aw\s+● aguardando/.test(x)); // the list is back and drawn before the direct key
   await t.press("r");
   await see(t, (x) => x.includes("revisão de confiança · aw"));
   expect(existsSync(marker)).toBe(false);
-});
+}, 30_000); // two reviews on a git clone: slow when the suite runs in parallel
 
 test("a opens the repository box; a short ref clones and opens the review; esc cancels; errors stay inline", async () => {
   const o = origin("sr");
@@ -456,7 +457,7 @@ test("a incompatible module: right then enter installs anyway and the review sho
   await t.press("ARROW_RIGHT");
   expect(fill(t, "[ Instalar mesmo assim ]").equals(safeFill)).toBe(true); // the focus moved to the other button
   await t.press("RETURN");
-  const f = await see(t, (x) => x.includes("revisão de confiança"));
+  const f = await see(t, (x) => /✗ só .*nonexistent-distro.* aqui é /.test(x)); // the review opens first, its rows load after
   expect(f).toMatch(/✗ só .*nonexistent-distro.* aqui é /);
   expect(existsSync(dirOf("inc3"))).toBe(true);
   expect(existsSync(marker)).toBe(false);
@@ -519,7 +520,7 @@ for (const [cols, rows] of [[80, 24], [120, 40]] as const) {
     expect(footer(t)).toContain("enter ações");
     expect(footer(t)).toContain("? ajuda");
     await t.press("r");
-    await see(t, (x) => x.includes("revisão de confiança"));
+    await see(t, (x) => x.includes("revisão de confiança") && x.includes("roda como root")); // the screen opens first, its content loads after
     fit();
     expect(t.frame()).toContain("roda como root");
     expect(footer(t)).toContain("↑↓ arquivo");

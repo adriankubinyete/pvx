@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { RGBA, TextAttributes } from "@opentui/core";
 import { join } from "node:path";
-import { createLogger, createRegistry, loadTuiState, logsDir, pvxHome, runCapture, tuiStatePath } from "@pvx/core";
+import { createLogger, createRegistry, defaultTuiState, loadTuiState, logsDir, pvxHome, runCapture, saveTuiState, tuiStatePath } from "@pvx/core";
 import { expectButtonsReachable, expectNoKeyboardTrap, renderTui, type TuiHarness } from "../../testing/src/index.ts";
 import { CONTENT_MAX_W } from "../src/layout.ts";
 import { App, createSessionStore, createTabsNav, Tabs, theme } from "../src/index.ts";
@@ -83,7 +83,7 @@ async function goTo(t: TuiHarness, label: string) {
 
 test("the cursor goes through the rows of every section; ↓ on the last wraps to the first; ↑ on the first goes to the bar", async () => {
   const t = await mount();
-  const order = ["[ atualizar ]", "tema", "acento", "símbolos", "moldura", "resultado", "aba Tarefas"];
+  const order = ["[ atualizar ]", "tema", "acento", "símbolos", "moldura", "resultado", "aba Tarefas", "gif do Início"];
   for (const label of order) {
     expect(rowOf(t, label), label).toContain("»");
     await t.press("ARROW_DOWN");
@@ -109,7 +109,7 @@ test("switching the theme re-renders: the background colour changes and the choi
   const t = await mount();
   await goTo(t, "tema");
   const before = bgAt(t);
-  await t.press("ARROW_RIGHT"); // Claro
+  await pickTheme(t, 1); // Claro
   expect(t.frame()).toContain("(•) Claro");
   expect(bgAt(t).equals(before)).toBe(false);
   t.destroy();
@@ -120,7 +120,7 @@ test("switching the theme re-renders: the background colour changes and the choi
 test("Terminal theme uses the terminal's own colours (no truecolor background)", async () => {
   const t = await mount();
   await goTo(t, "tema");
-  for (let i = 0; i < 3; i++) await t.press("ARROW_RIGHT");
+  await pickTheme(t, 3);
   expect(t.frame()).toContain("(•) Terminal");
   expect(bgAt(t).intent).toBe("default");
 });
@@ -183,10 +183,16 @@ test("Avançado: the Tarefas tab checkbox starts off, enter and space toggle it,
   expect(loadTuiState(tuiStatePath()).showTasksTab).toBe(true);
 });
 
+/** Opens the theme list (enter), moves the cursor `steps` options (down is positive) and applies the one under it (enter). The cursor is on the `tema` row. */
+async function pickTheme(t: TuiHarness, steps: number) {
+  await t.press("RETURN");
+  for (let i = 0; i < Math.abs(steps); i++) await t.press(steps > 0 ? "ARROW_DOWN" : "ARROW_UP");
+  await t.press("RETURN");
+}
 /** Chooses the Personalizado theme: the editor takes the place of the preset options. The cursor stays on the `tema` row. */
 async function chooseCustom(t: TuiHarness) {
   await goTo(t, "tema");
-  for (let i = 0; i < 4; i++) await t.press("ARROW_RIGHT");
+  await pickTheme(t, 4);
   expect(t.frame()).toContain("(•) Personalizado");
 }
 
@@ -201,7 +207,7 @@ test("Personalizado hides the preset options and shows the editor under `tema`; 
   for (const s of ["acento", "símbolos", "moldura", "resultado"]) expect(t.frame(), s).not.toContain(s);
   expect(cursorRows(t).map((l) => /» (\S+)/.exec(l)![1])).toEqual(["tema"]);
   expect(t.frame()).toContain("prévia"); // the sample stays
-  await t.press("ARROW_LEFT"); // Terminal: a preset again
+  await pickTheme(t, -1); // Terminal: a preset again
   expect(t.frame()).not.toContain("começar de");
   for (const s of ["acento", "símbolos", "moldura", "resultado"]) expect(t.frame(), s).toContain(s);
   expect(cursorRows(t).map((l) => /» (\S+)/.exec(l)![1])).toEqual(["tema"]);
@@ -239,7 +245,7 @@ test("REGRESSION: ↓ walks every editor row in order, and on `border` goes to `
   await t.press("ARROW_UP");
   await t.press("ARROW_UP");
   expect(at()).toEqual(["thirdParty"]);
-});
+}, 15_000); // walks every row of the editor: dozens of key presses, close to the default 5 s under load
 
 test("Personalizado: an edited token applies, an invalid hex is rejected inline with a nudge, it persists", async () => {
   const t = await mount();
@@ -493,7 +499,8 @@ test("pvx section: atualizar runs self-update through the session (a block in th
     await new Promise((r) => setTimeout(r, 400));
     await t.press("ARROW_LEFT"); // atualizar
     await t.press("RETURN");
-    await new Promise((r) => setTimeout(r, 100));
+    const done = () => lastStore!.blocks.find((b) => b.line === "self-update")?.lines.length;
+    for (let i = 0; i < 40 && !done(); i++) await new Promise((r) => setTimeout(r, 50)); // the command runs against a local stub: wait for its lines, not for a fixed time
     const block = lastStore!.blocks.find((b) => b.line === "self-update");
     expect(block).toBeDefined();
     expect(block!.lines.map((l) => l.text).join("\n")).toContain("não tem");
@@ -557,4 +564,77 @@ test("the pvx section reads as information, with the actions in a row of their o
   expect(row("dados")).toBeLessThan(row("[ atualizar ]")); // the buttons close the section
   expect(lines[row("atualização")]).not.toContain("["); // the status line has no button
   expect(lines[row("[ atualizar ]")]).toContain("»"); // and the cursor starts on the buttons, never on an info line
+});
+
+test("the theme list: enter opens it, ↑↓ move a cursor and apply nothing, esc closes it unchanged, enter applies", async () => {
+  const t = await mount();
+  await goTo(t, "tema");
+  const before = bgAt(t);
+  await t.press("RETURN"); // the cursor goes inside the list
+  expect(t.frame()).toContain("enter aplica");
+  await t.press("ARROW_DOWN");
+  await t.press("ARROW_DOWN");
+  const marked = rowsOf(t).find((l) => l.includes("»") && l.includes("Alto contraste"));
+  expect(marked, "the cursor is on the third option").toBeDefined();
+  expect(t.frame()).toContain("(•) Escuro"); // nothing applied yet
+  expect(bgAt(t).equals(before)).toBe(true);
+  await t.press("ESCAPE"); // out of the list, still on the page
+  expect(t.frame()).not.toContain("enter aplica");
+  expect(t.frame()).toContain("(•) Escuro");
+  expect(rowOf(t, "tema")).toContain("»");
+  await t.press("RETURN");
+  await t.press("ARROW_DOWN");
+  await t.press("RETURN"); // applies Claro
+  expect(t.frame()).toContain("(•) Claro");
+  expect(bgAt(t).equals(before)).toBe(false);
+  await t.press("ARROW_LEFT"); // ← on the row opens nothing
+  expect(t.frame()).not.toContain("enter aplica");
+  await t.press("ARROW_RIGHT"); // → goes into the list, like enter
+  expect(t.frame()).toContain("enter aplica");
+  expect(t.frame()).toContain("(•) Claro"); // opening applies nothing
+  await t.press("ESCAPE");
+});
+
+test("gif do Início: a path is checked before it is kept; a dropped (quoted) path applies and is saved", async () => {
+  const gif = join(import.meta.dir, "fixtures/clip.gif");
+  const t = await mount();
+  await goTo(t, "gif do Início");
+  expect(rowOf(t, "gif do Início")).toContain("nenhum");
+  await t.press("RETURN"); // edits the path
+  await t.type("/nao/existe.gif");
+  await t.press("RETURN");
+  expect(t.frame()).toContain("arquivo não encontrado");
+  for (let i = 0; i < "/nao/existe.gif".length; i++) await t.press("BACKSPACE");
+  await t.paste(`'${gif}'`); // a drag from the file manager pastes the path quoted
+  await t.press("RETURN");
+  await t.waitFor(() => rowOf(t, "gif do Início").includes("clip.gif"));
+  t.destroy(); // flushes the saved state
+  await new Promise((r) => setTimeout(r, 20));
+  expect(loadTuiState(tuiStatePath()).homeGif).toBe(gif);
+}, 20_000);
+
+test("gif do Início: emptying the path removes the GIF", async () => {
+  const gif = join(import.meta.dir, "fixtures/clip.gif");
+  saveTuiState({ ...defaultTuiState(), homeGif: gif }, tuiStatePath());
+  const t = await mount();
+  await goTo(t, "gif do Início");
+  expect(rowOf(t, "gif do Início")).toContain("clip.gif");
+  await t.press("RETURN");
+  await t.press("a", { ctrl: true });
+  for (let i = 0; i < gif.length; i++) await t.press("DELETE");
+  await t.press("RETURN");
+  await t.waitFor(() => rowOf(t, "gif do Início").includes("nenhum"));
+  t.destroy();
+  await new Promise((r) => setTimeout(r, 20));
+  expect(loadTuiState(tuiStatePath()).homeGif).toBe("");
+}, 20_000);
+
+test("gif do Início: a file that is not a GIF is refused with the reason", async () => {
+  const t = await mount();
+  await goTo(t, "gif do Início");
+  await t.press("RETURN");
+  await t.paste(join(import.meta.dir, "../../../package.json"));
+  await t.press("RETURN");
+  expect(t.frame()).toContain("não é um gif que eu consiga ler");
+  expect(loadTuiState(tuiStatePath()).homeGif).toBe("");
 });
